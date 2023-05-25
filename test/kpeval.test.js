@@ -11,7 +11,7 @@ import {
   unquote,
 } from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
-import kpobject from "../src/kpobject.js";
+import kpobject, { toJsObject } from "../src/kpobject.js";
 
 test("A null literal evaluates to null", (t) => {
   t.is(kpeval(literal(null)), null);
@@ -147,3 +147,60 @@ test("We can define a function and then call it", (t) => {
     45
   );
 });
+
+test("We can define and call a two-argument function", (t) => {
+  t.is(
+    kpeval(
+      defining(
+        [
+          "funkyTimes",
+          given(
+            { params: ["a", "b"] },
+            calling(name("times"), [
+              calling(name("plus"), [name("a"), literal(2)]),
+              calling(name("plus"), [name("b"), literal(3)]),
+            ])
+          ),
+        ],
+        calling(name("funkyTimes"), [literal(5), literal(3)])
+      )
+    ),
+    42
+  );
+});
+
+test("Function arguments can reference names", (t) => {
+  t.is(
+    kpeval(
+      defining(
+        [
+          "add3",
+          given(
+            { params: ["x"] },
+            calling(name("plus"), [name("x"), literal(3)])
+          ),
+        ],
+        defining(
+          ["meaning", literal(42)],
+          calling(name("add3"), [name("meaning")])
+        )
+      )
+    ),
+    45
+  );
+});
+
+test("Local names don't leak into function calls", (t) => {
+  const result = kpeval(
+    defining(
+      ["leaky", given({}, name("intruder"))],
+      defining(["intruder", literal(42)], calling(name("leaky")))
+    )
+  );
+  t.like(toJsObject(result), {
+    "!!error": "nameNotDefined",
+    name: "intruder",
+  });
+});
+
+// TODO argument validation
