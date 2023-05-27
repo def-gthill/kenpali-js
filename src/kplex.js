@@ -50,7 +50,7 @@ export default function* kplex(code) {
     let [kind, text] = Object.entries(mo.groups).find(([_, value]) => value);
     lastText = text;
     let value = null;
-    let column = mo.index - lineStart;
+    let column = mo.index - lineStart + 1;
 
     if (kind === "NULL") {
       kind = "LITERAL";
@@ -80,6 +80,6 @@ export default function* kplex(code) {
     value: null,
     text: lastText,
     line: lineNum,
-    column: code.length - lineStart,
+    column: code.length - lineStart + 1,
   };
 }
