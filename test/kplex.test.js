@@ -43,6 +43,22 @@ test(`Lexing an array expression produces bracket and comma tokens`, (t) => {
   );
 });
 
+test(`Lexing an object expression produces brace, comma, and colon tokens`, (t) => {
+  assertTokenTypesAre(
+    t,
+    kplex(`{"foo": "bar", "spam": "eggs"}`),
+    "OPEN_BRACE",
+    "LITERAL",
+    "COLON",
+    "LITERAL",
+    "COMMA",
+    "LITERAL",
+    "COLON",
+    "LITERAL",
+    "CLOSE_BRACE"
+  );
+});
+
 function assertTokensAre(t, actual, ...expected) {
   const actualArray = [...actual].slice(0, -1);
   t.is(actualArray.length, expected.length);

@@ -1,4 +1,4 @@
-import { array, literal } from "./kpast.js";
+import { array, literal, object } from "./kpast.js";
 import kplex from "./kplex.js";
 
 export default function kpparse(code) {
@@ -22,18 +22,18 @@ export function kpparseTokens(tokens) {
 }
 
 function parseAll(tokens) {
-  return parseAllOf(
-    [parse, consume("EOF", "unparsedInput")],
-    (...args) => args[0]
-  )(tokens, 0);
+  return parseAllOf([parse, consume("EOF", "unparsedInput")], (x) => x)(
+    tokens,
+    0
+  );
 }
 
 function parse(tokens, start) {
-  return parseAnyOf(parseArray, parseLiteral)(tokens, start);
+  return parseAnyOf(parseArray, parseObject, parseLiteral)(tokens, start);
 }
 
 function parseArray(tokens, start) {
-  return parseAllOf(
+  return parseAllOfFlat(
     [
       consume("OPEN_BRACKET", "expectedArray"),
       parseZeroOrMore(parse, {
@@ -42,8 +42,30 @@ function parseArray(tokens, start) {
       }),
       consume("CLOSE_BRACKET", "unclosedArray"),
     ],
-    (...args) => array(...args[0])
+    array
   )(tokens, start);
+}
+
+function parseObject(tokens, start) {
+  return parseAllOfFlat(
+    [
+      consume("OPEN_BRACE", "expectedObject"),
+      parseZeroOrMore(parseObjectEntry, {
+        terminator: consume("COMMA"),
+        errorIfTerminatorMissing: "missingObjectSeparator",
+      }),
+      consume("CLOSE_BRACE", "unclosedObject"),
+    ],
+    object
+  )(tokens, start);
+}
+
+function parseObjectEntry(tokens, start) {
+  return parseAllOf([
+    parse,
+    consume("COLON", "missingKeyValueSeparator"),
+    parse,
+  ])(tokens, start);
 }
 
 function parseLiteral(tokens, start) {
@@ -131,6 +153,10 @@ function parseAllOf(parsers, converter = (...args) => args) {
     }
     return { ast: converter(...elements), end: index };
   };
+}
+
+function parseAllOfFlat(parsers, converter = (...args) => args) {
+  return parseAllOf(parsers, (...args) => converter(...[].concat([], ...args)));
 }
 
 function parseZeroOrMore(parser, { terminator, errorIfTerminatorMissing }) {

@@ -1,5 +1,5 @@
 import test from "ava";
-import { array, literal } from "../src/kpast.js";
+import { array, literal, object } from "../src/kpast.js";
 import kpparse from "../src/kpparse.js";
 
 const r = String.raw;
@@ -39,7 +39,7 @@ test("Parsing a string with escapes produces a string literal with special chara
   );
 });
 
-test("Parsing array syntax yields an array of literals", (t) => {
+test("Parsing array syntax yields an array", (t) => {
   t.deepEqual(kpparse("[1, 2, 3]"), array(literal(1), literal(2), literal(3)));
 });
 
@@ -50,3 +50,50 @@ test("We can parse an empty array", (t) => {
 test("We can parse a single-element array", (t) => {
   t.deepEqual(kpparse("[1]"), array(literal(1)));
 });
+
+test("We can parse an array of various types", (t) => {
+  t.deepEqual(
+    kpparse(`[null, false, true, -2.5, "foobar", [1, 2, 3]]`),
+    array(
+      literal(null),
+      literal(false),
+      literal(true),
+      literal(-2.5),
+      literal("foobar"),
+      array(literal(1), literal(2), literal(3))
+    )
+  );
+});
+
+test("Parsing object syntax yields an object", (t) => {
+  t.deepEqual(
+    kpparse(`{"foo": "bar", "spam": "eggs"}`),
+    object([literal("foo"), literal("bar")], [literal("spam"), literal("eggs")])
+  );
+});
+
+test("We can parse an object containing various types", (t) => {
+  t.deepEqual(
+    kpparse(
+      `{"null": null, "false": false, "true": true, "number": -2.5, "string": "foobar",
+      "array": [1, 2, 3], "object": {"foo": "bar", "spam": "eggs"}}`
+    ),
+    object(
+      [literal("null"), literal(null)],
+      [literal("false"), literal(false)],
+      [literal("true"), literal(true)],
+      [literal("number"), literal(-2.5)],
+      [literal("string"), literal("foobar")],
+      [literal("array"), array(literal(1), literal(2), literal(3))],
+      [
+        literal("object"),
+        object(
+          [literal("foo"), literal("bar")],
+          [literal("spam"), literal("eggs")]
+        ),
+      ]
+    )
+  );
+});
+
+// TODO expressions as object keys

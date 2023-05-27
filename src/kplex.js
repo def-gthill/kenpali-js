@@ -67,7 +67,7 @@ export default function* kplex(code) {
       kind = "LITERAL";
       value = JSON.parse(lastText);
     } else if (kind === "NEWLINE") {
-      lineStart = mo.end();
+      lineStart = mo.index + text.length;
       lineNum += 1;
       continue;
     } else if (kind === "WHITESPACE") {
