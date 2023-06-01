@@ -59,6 +59,49 @@ test(`Lexing an object expression produces brace, comma, and colon tokens`, (t) 
   );
 });
 
+test("The token objects have the correct line and column numbers", (t) => {
+  t.deepEqual(
+    [...kplex(`"foo" 1 "bar"\n"baz"`)],
+    [
+      {
+        type: "LITERAL",
+        value: "foo",
+        text: `"foo"`,
+        line: 1,
+        column: 1,
+      },
+      {
+        type: "LITERAL",
+        value: 1,
+        text: "1",
+        line: 1,
+        column: 7,
+      },
+      {
+        type: "LITERAL",
+        value: "bar",
+        text: `"bar"`,
+        line: 1,
+        column: 9,
+      },
+      {
+        type: "LITERAL",
+        value: "baz",
+        text: `"baz"`,
+        line: 2,
+        column: 1,
+      },
+      {
+        type: "EOF",
+        value: null,
+        text: "",
+        line: 2,
+        column: 6,
+      },
+    ]
+  );
+});
+
 function assertTokensAre(t, actual, ...expected) {
   const actualArray = [...actual].slice(0, -1);
   t.is(actualArray.length, expected.length);

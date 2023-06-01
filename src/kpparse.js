@@ -1,5 +1,14 @@
-import { array, literal, object } from "./kpast.js";
+import {
+  array,
+  calling,
+  defining,
+  literal,
+  name,
+  object,
+  optional,
+} from "./kpast.js";
 import kplex from "./kplex.js";
+import kpobject, { kpoMap } from "./kpobject.js";
 
 export default function kpparse(code) {
   const tokens = kplex(code);
@@ -22,14 +31,194 @@ export function kpparseTokens(tokens) {
 }
 
 function parseAll(tokens) {
-  return parseAllOf([parse, consume("EOF", "unparsedInput")], (x) => x)(
+  return parseAllOf([parse, consume("EOF", "unparsedInput")], normalize)(
     tokens,
     0
   );
 }
 
+function normalize(ast) {
+  if (Array.isArray(ast)) {
+    return ast.map(normalize);
+  } else if (ast instanceof Map) {
+    return kpoMap(ast, ([key, value]) => [key, normalize(value)]);
+  } else if (ast === null) {
+    return null;
+  } else if (typeof ast === "object") {
+    if ("indexing" in ast) {
+      return calling(name("at"), [normalize(ast.indexing), normalize(ast.at)]);
+    } else if ("group" in ast) {
+      return normalize(ast.group);
+    } else {
+      return Object.fromEntries(
+        Object.entries(ast).map(([key, value]) => [key, normalize(value)])
+      );
+    }
+  } else {
+    return ast;
+  }
+}
+
 function parse(tokens, start) {
-  return parseAnyOf(parseArray, parseObject, parseLiteral)(tokens, start);
+  return parseScope(tokens, start);
+}
+
+function parseScope(tokens, start) {
+  return parseAllOf(
+    [
+      parseZeroOrMore(parseNameDefinition, {
+        terminator: consume("SEMICOLON"),
+        errorIfTerminatorMissing: "missingDefinitionSeparator",
+      }),
+      parsePipeline,
+    ],
+    (definitions, result) =>
+      definitions.length === 0 ? result : defining(...definitions, result)
+  )(tokens, start);
+}
+
+function parseNameDefinition(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("EQUALS", "missingEqualsInDefinition"), parsePipeline],
+    (name, value) => [name.name, value]
+  )(tokens, start);
+}
+
+function parsePipeline(tokens, start) {
+  return parseAllOf(
+    [
+      parseTightPipeline,
+      parseZeroOrMore(
+        parseAllOf([
+          parseAnyOf(
+            parseSingle("PIPE", () => "PIPE"),
+            parseSingle("AT", () => "AT")
+          ),
+          parseTightPipeline,
+        ])
+      ),
+    ],
+    (expression, calls) => {
+      let axis = expression;
+      for (const [op, call] of calls) {
+        if (op === "AT") {
+          axis = { indexing: axis, at: call };
+        } else {
+          if ("calling" in call) {
+            axis = calling(call.calling, [axis, ...call.args], call.kwArgs);
+          } else {
+            axis = calling(call, [axis]);
+          }
+        }
+      }
+      return axis;
+    }
+  )(tokens, start);
+}
+
+function parseTightPipeline(tokens, start) {
+  return parseAllOf(
+    [
+      parseCallable,
+      parseZeroOrMore(parseAnyOf(parsePropertyAccess, parseArgumentList)),
+    ],
+    (expression, calls) => {
+      let axis = expression;
+      for (const call of calls) {
+        if ("access" in call) {
+          axis = { indexing: axis, at: call.access };
+        } else {
+          const [args, kwArgs] = call.arguments;
+          axis = calling(axis, args, kwArgs);
+        }
+      }
+      return axis;
+    }
+  )(tokens, start);
+}
+
+function parsePropertyAccess(tokens, start) {
+  return parseAllOf(
+    [consume("DOT", "expectedPropertyAccess"), parseName],
+    (property) => ({ access: { literal: property.name } })
+  )(tokens, start);
+}
+
+function parseArgumentList(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [
+        consume("OPEN_PAREN", "expectedArguments"),
+        parseZeroOrMore(parsePositionalArgument, {
+          terminator: consume("COMMA"),
+          errorIfTerminatorMissing: "missingArgumentSeparator",
+        }),
+        parseZeroOrMore(parseKeywordArgument, {
+          terminator: consume("COMMA"),
+          errorIfTerminatorMissing: "missingArgumentSeparator",
+        }),
+        consume("CLOSE_PAREN", "unclosedArguments"),
+      ],
+      (args, kwArgs) => ({
+        arguments: [args, kpobject(...kwArgs)],
+      })
+    ),
+    parseAllOf(
+      [
+        consume("OPEN_PAREN", "expectedArguments"),
+        parseZeroOrMore(parseKeywordArgument, {
+          terminator: consume("COMMA"),
+          errorIfTerminatorMissing: "missingArgumentSeparator",
+        }),
+        consume("CLOSE_PAREN", "unclosedArguments"),
+      ],
+      (kwArgs) => ({ arguments: [[], kpobject(...kwArgs)] })
+    )
+  )(tokens, start);
+}
+
+function parsePositionalArgument(tokens, start) {
+  return parseArgument(tokens, start);
+}
+
+function parseKeywordArgument(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("EQUALS", "expectedKeywordArgument"), parseArgument],
+    (name, value) => [name.name, value]
+  )(tokens, start);
+}
+
+function parseArgument(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [parse, consume("QUESTION_MARK", "expectedOptionalArgument")],
+      optional
+    ),
+    parse
+  )(tokens, start);
+}
+
+function parseCallable(tokens, start) {
+  return parseAnyOf(
+    parseGroup,
+    parseArray,
+    parseObject,
+    parseLiteral,
+    parseName
+  )(tokens, start);
+}
+
+function parseGroup(tokens, start) {
+  return parseAllOf(
+    [
+      consume("OPEN_PAREN", "expectedGroup"),
+      parse,
+      consume("CLOSE_PAREN", "unclosedGroup"),
+    ],
+    (expression) => ({
+      group: expression,
+    })
+  )(tokens, start);
 }
 
 function parseArray(tokens, start) {
@@ -70,6 +259,10 @@ function parseObjectEntry(tokens, start) {
 
 function parseLiteral(tokens, start) {
   return parseSingle("LITERAL", (token) => literal(token.value))(tokens, start);
+}
+
+function parseName(tokens, start) {
+  return parseSingle("NAME", (token) => name(token.text))(tokens, start);
 }
 
 function parseSingle(tokenType, converter) {
@@ -159,7 +352,10 @@ function parseAllOfFlat(parsers, converter = (...args) => args) {
   return parseAllOf(parsers, (...args) => converter(...[].concat([], ...args)));
 }
 
-function parseZeroOrMore(parser, { terminator, errorIfTerminatorMissing }) {
+function parseZeroOrMore(
+  parser,
+  { terminator, errorIfTerminatorMissing } = {}
+) {
   return parseRepeatedly(parser, {
     terminator,
     errorIfTerminatorMissing,
@@ -169,7 +365,7 @@ function parseZeroOrMore(parser, { terminator, errorIfTerminatorMissing }) {
 
 function parseRepeatedly(
   parser,
-  { terminator, errorIfTerminatorMissing, minimumCount }
+  { terminator, errorIfTerminatorMissing, minimumCount } = {}
 ) {
   return function (tokens, start) {
     let index = start;

@@ -36,6 +36,10 @@ export function calling(f, args, kwargs = kpobject()) {
   return { calling: f, args, kwargs };
 }
 
+export function optional(expression) {
+  return { optional: expression };
+}
+
 export function quote(expression) {
   return { quote: expression };
 }

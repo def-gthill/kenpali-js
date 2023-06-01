@@ -78,7 +78,7 @@ export default function* kplex(code) {
   yield {
     type: "EOF",
     value: null,
-    text: lastText,
+    text: "",
     line: lineNum,
     column: code.length - lineStart + 1,
   };
