@@ -32,8 +32,15 @@ export function given({ params, kwParams }, result) {
   };
 }
 
-export function calling(f, args, kwargs = kpobject()) {
-  return { calling: f, args, kwargs };
+export function calling(f, args = [], namedArgs = kpobject()) {
+  const result = { calling: f };
+  if (args.length > 0) {
+    result.args = args;
+  }
+  if (namedArgs.size > 0) {
+    result.namedArgs = namedArgs;
+  }
+  return result;
 }
 
 export function optional(expression) {

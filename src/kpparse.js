@@ -149,46 +149,38 @@ function parseArgumentList(tokens, start) {
     parseAllOf(
       [
         consume("OPEN_PAREN", "expectedArguments"),
-        parseZeroOrMore(parsePositionalArgument, {
-          terminator: consume("COMMA"),
-          errorIfTerminatorMissing: "missingArgumentSeparator",
-        }),
-        parseZeroOrMore(parseKeywordArgument, {
+        parseZeroOrMore(parseArgument, {
           terminator: consume("COMMA"),
           errorIfTerminatorMissing: "missingArgumentSeparator",
         }),
         consume("CLOSE_PAREN", "unclosedArguments"),
       ],
-      (args, kwArgs) => ({
-        arguments: [args, kpobject(...kwArgs)],
+      (args) => ({
+        arguments: [
+          args.filter((argument) => !Array.isArray(argument)),
+          kpobject(...args.filter((argument) => Array.isArray(argument))),
+        ],
       })
-    ),
-    parseAllOf(
-      [
-        consume("OPEN_PAREN", "expectedArguments"),
-        parseZeroOrMore(parseKeywordArgument, {
-          terminator: consume("COMMA"),
-          errorIfTerminatorMissing: "missingArgumentSeparator",
-        }),
-        consume("CLOSE_PAREN", "unclosedArguments"),
-      ],
-      (kwArgs) => ({ arguments: [[], kpobject(...kwArgs)] })
     )
   )(tokens, start);
 }
 
-function parsePositionalArgument(tokens, start) {
-  return parseArgument(tokens, start);
+function parseArgument(tokens, start) {
+  return parseAnyOf(parseNamedArgument, parsePositionalArgument)(tokens, start);
 }
 
-function parseKeywordArgument(tokens, start) {
+function parsePositionalArgument(tokens, start) {
+  return parseArgumentValue(tokens, start);
+}
+
+function parseNamedArgument(tokens, start) {
   return parseAllOf(
-    [parseName, consume("EQUALS", "expectedKeywordArgument"), parseArgument],
+    [parseName, consume("COLON", "expectedNamedArgument"), parseArgumentValue],
     (name, value) => [name.name, value]
   )(tokens, start);
 }
 
-function parseArgument(tokens, start) {
+function parseArgumentValue(tokens, start) {
   return parseAnyOf(
     parseAllOf(
       [parse, consume("QUESTION_MARK", "expectedOptionalArgument")],

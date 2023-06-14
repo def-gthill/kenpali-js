@@ -9,7 +9,7 @@ export function kpevalJson(json, names = kpobject()) {
   return kpeval(expression, names);
 }
 
-function toAst(expressionRaw) {
+export function toAst(expressionRaw) {
   if (expressionRaw === null) {
     return null;
   } else if (Array.isArray(expressionRaw)) {
@@ -17,7 +17,7 @@ function toAst(expressionRaw) {
   } else if (typeof expressionRaw === "object") {
     return Object.fromEntries(
       Object.entries(expressionRaw).map(([key, value]) => {
-        if (key === "defining") {
+        if (["defining", "namedArgs"].includes(key)) {
           return [
             key,
             kpoMap(toKpobject(value), ([key, value]) => [key, toAst(value)]),

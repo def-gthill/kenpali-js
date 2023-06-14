@@ -128,7 +128,7 @@ test("We can parse a function call with two positional arguments", (t) => {
 
 test("We can parse a function call with one keyword arguments", (t) => {
   t.deepEqual(
-    kpparse("foo(bar = 1)"),
+    kpparse("foo(bar: 1)"),
     calling(name("foo"), [], kpobject(["bar", literal(1)]))
   );
 });
@@ -152,7 +152,7 @@ test("We can mark a positional argument optional", (t) => {
 
 test("We can mark a keyword argument as optional", (t) => {
   t.deepEqual(
-    kpparse("foo(bar = 1?)"),
+    kpparse("foo(bar: 1?)"),
     calling(name("foo"), [], kpobject(["bar", optional(literal(1))]))
   );
 });

@@ -1,5 +1,6 @@
 import test from "ava";
 import fs from "fs";
+import { toAst } from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
 
 const specPath = "../kenpali/kenpali-code.md";
@@ -12,7 +13,7 @@ test("This implementation follows the Kenpali Code spec", (t) => {
   let match;
   while ((match = regex.exec(spec)) !== null) {
     const [_, description, input, output] = match;
-    const expectedCode = JSON.parse(output);
+    const expectedCode = toAst(JSON.parse(output));
     const actualCode = kpparse(input);
     t.deepEqual(
       actualCode,
