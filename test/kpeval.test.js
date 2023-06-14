@@ -49,6 +49,13 @@ test("An object expression evaluates to a Kenpali object", (t) => {
   );
 });
 
+test("An object expression can have plain strings as keys", (t) => {
+  t.deepEqual(
+    kpeval(object(["foo", literal("bar")], ["spam", literal("eggs")])),
+    kpobject(["foo", "bar"], ["spam", "eggs"])
+  );
+});
+
 // TODO Expressions that evaluate to non-strings can't be keys.
 
 test("A name reference returns the bound value", (t) => {

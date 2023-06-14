@@ -3,6 +3,35 @@ import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMap, kpoMerge, toKpobject } from "./kpobject.js";
 
+export function kpevalJson(json, names = kpobject()) {
+  const expressionRaw = JSON.parse(json);
+  const expression = toAst(expressionRaw);
+  return kpeval(expression, names);
+}
+
+function toAst(expressionRaw) {
+  if (expressionRaw === null) {
+    return null;
+  } else if (Array.isArray(expressionRaw)) {
+    return expressionRaw.map(toAst);
+  } else if (typeof expressionRaw === "object") {
+    return Object.fromEntries(
+      Object.entries(expressionRaw).map(([key, value]) => {
+        if (key === "defining") {
+          return [
+            key,
+            kpoMap(toKpobject(value), ([key, value]) => [key, toAst(value)]),
+          ];
+        } else {
+          return [key, toAst(value)];
+        }
+      })
+    );
+  } else {
+    return expressionRaw;
+  }
+}
+
 export default function kpeval(expression, names = kpobject()) {
   const allNames = kpoMerge(builtins, names);
   return evalWithBuiltins(expression, allNames);
@@ -16,7 +45,7 @@ function evalWithBuiltins(expression, names) {
   } else if ("object" in expression) {
     return kpobject(
       ...expression.object.map(([key, value]) => [
-        kpeval(key, names),
+        typeof key === "string" ? key : kpeval(key, names),
         kpeval(value, names),
       ])
     );

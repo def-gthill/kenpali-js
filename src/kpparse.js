@@ -250,11 +250,16 @@ function parseObject(tokens, start) {
 }
 
 function parseObjectEntry(tokens, start) {
-  return parseAllOf([
-    parse,
-    consume("COLON", "missingKeyValueSeparator"),
-    parse,
-  ])(tokens, start);
+  return parseAllOf(
+    [parse, consume("COLON", "missingKeyValueSeparator"), parse],
+    (key, value) => {
+      if ("name" in key) {
+        return [literal(key.name), value];
+      } else {
+        return [key, value];
+      }
+    }
+  )(tokens, start);
 }
 
 function parseLiteral(tokens, start) {
