@@ -1,7 +1,9 @@
+import fs from "fs";
 import { builtins } from "./builtins.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMap, kpoMerge, toKpobject } from "./kpobject.js";
+import kpparse from "./kpparse.js";
 
 export function kpevalJson(json, names = kpobject()) {
   const expressionRaw = JSON.parse(json);
@@ -33,8 +35,25 @@ export function toAst(expressionRaw) {
 }
 
 export default function kpeval(expression, names = kpobject()) {
-  const allNames = kpoMerge(builtins, names);
-  return evalWithBuiltins(expression, allNames);
+  const namesWithBuiltins = kpoMerge(builtins, names);
+  // const namesWithCore = kpoMerge(
+  //   loadCore(namesWithBuiltins),
+  //   namesWithBuiltins
+  // );
+  const namesWithCore = namesWithBuiltins;
+  return evalWithBuiltins(expression, namesWithCore);
+}
+
+let core = null;
+
+function loadCore(names) {
+  if (!core) {
+    const code = fs.readFileSync("../kenpali/core.kpc", { encoding: "utf-8" });
+    console.log(code);
+    const ast = kpparse(code);
+    console.log(ast);
+  }
+  return core;
 }
 
 function evalWithBuiltins(expression, names) {
@@ -98,7 +117,7 @@ function callOnExpressions(f, args, kwargs, names) {
 function callOnValues(f, args, kwargs) {
   if (f instanceof Map && f.get("!!given")) {
     const paramBindings = kpobject(
-      ...f.get("!!given").params.map((name, i) => [name, args[i]])
+      ...(f.get("!!given").params ?? []).map((name, i) => [name, args[i]])
     );
     return kpeval(f.get("result"), kpoMerge(paramBindings, kwargs));
   } else {

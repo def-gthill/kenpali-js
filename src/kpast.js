@@ -22,14 +22,8 @@ export function defining(...args) {
   return { defining: kpobject(...names), result };
 }
 
-export function given({ params, kwParams }, result) {
-  return {
-    given: {
-      params: params ?? [],
-      kwParams: kwParams ?? [],
-    },
-    result,
-  };
+export function given(params, result) {
+  return { given: params, result };
 }
 
 export function calling(f, args = [], namedArgs = kpobject()) {

@@ -2,6 +2,7 @@ import {
   array,
   calling,
   defining,
+  given,
   literal,
   name,
   object,
@@ -87,14 +88,14 @@ function parseNameDefinition(tokens, start) {
 function parsePipeline(tokens, start) {
   return parseAllOf(
     [
-      parseTightPipeline,
+      parsePipelineElement,
       parseZeroOrMore(
         parseAllOf([
           parseAnyOf(
             parseSingle("PIPE", () => "PIPE"),
             parseSingle("AT", () => "AT")
           ),
-          parseTightPipeline,
+          parsePipelineElement,
         ])
       ),
     ],
@@ -113,6 +114,82 @@ function parsePipeline(tokens, start) {
       }
       return axis;
     }
+  )(tokens, start);
+}
+
+function parsePipelineElement(tokens, start) {
+  return parseAnyOf(parseArrowFunction, parseTightPipeline)(tokens, start);
+}
+
+function parseArrowFunction(tokens, start) {
+  return parseAllOf(
+    [
+      parseParameterList,
+      consume("ARROW", "expectedArrowFunction"),
+      parsePipelineElement,
+    ],
+    (params, body) => {
+      return given(params, body);
+    }
+  )(tokens, start);
+}
+
+function parseParameterList(tokens, start) {
+  return parseAllOf(
+    [
+      consume("OPEN_PAREN", "expectedArrowFunction"),
+      parseZeroOrMore(parseParameter, {
+        terminator: consume("COMMA"),
+        errorIfTerminatorMissing: "missingParameterSeparator",
+      }),
+      consume("CLOSE_PAREN", "unclosedParameters"),
+    ],
+    (params) => {
+      const result = {};
+      const posParams = params
+        .filter((param) => "positional" in param)
+        .map((param) => param.positional);
+      if (posParams.length > 0) {
+        result.params = posParams;
+      }
+      const namedParams = params
+        .filter((param) => "named" in param)
+        .map((param) => param.named);
+      if (namedParams.length > 0) {
+        result.namedParams = namedParams;
+      }
+      return result;
+    }
+  )(tokens, start);
+}
+
+function parseParameter(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [
+        parseParameterName,
+        consume("EQUALS", "expectedParameterDefault"),
+        parse,
+      ],
+      (param, defaultValue) => {
+        if ("named" in param) {
+          return { named: [param.named, defaultValue] };
+        } else {
+          return { positional: [param.positional, defaultValue] };
+        }
+      }
+    ),
+    parseParameterName
+  )(tokens, start);
+}
+
+function parseParameterName(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [parseName, consume("COLON", "expectedNamedParameter")],
+      (name) => ({ named: name.name })
+    ),
+    convert(parseName, (node) => ({ positional: node.name }))
   )(tokens, start);
 }
 
@@ -145,23 +222,21 @@ function parsePropertyAccess(tokens, start) {
 }
 
 function parseArgumentList(tokens, start) {
-  return parseAnyOf(
-    parseAllOf(
-      [
-        consume("OPEN_PAREN", "expectedArguments"),
-        parseZeroOrMore(parseArgument, {
-          terminator: consume("COMMA"),
-          errorIfTerminatorMissing: "missingArgumentSeparator",
-        }),
-        consume("CLOSE_PAREN", "unclosedArguments"),
+  return parseAllOf(
+    [
+      consume("OPEN_PAREN", "expectedArguments"),
+      parseZeroOrMore(parseArgument, {
+        terminator: consume("COMMA"),
+        errorIfTerminatorMissing: "missingArgumentSeparator",
+      }),
+      consume("CLOSE_PAREN", "unclosedArguments"),
+    ],
+    (args) => ({
+      arguments: [
+        args.filter((argument) => !Array.isArray(argument)),
+        kpobject(...args.filter((argument) => Array.isArray(argument))),
       ],
-      (args) => ({
-        arguments: [
-          args.filter((argument) => !Array.isArray(argument)),
-          kpobject(...args.filter((argument) => Array.isArray(argument))),
-        ],
-      })
-    )
+    })
   )(tokens, start);
 }
 
@@ -317,7 +392,6 @@ function parseAnyOf(...parsers) {
     });
     return syntaxError("noAlternativeWorked", tokens, start, {
       errors: farthestErrors,
-      // errors,
     });
   };
 }
@@ -371,6 +445,9 @@ function parseRepeatedly(
 
     while (true) {
       const parserResult = parser(tokens, index);
+      if (parserResult === undefined) {
+        console.log(parser);
+      }
       if ("error" in parserResult) {
         if (elements.length >= minimumCount) {
           return { ast: elements, end: index };
@@ -401,6 +478,16 @@ function parseRepeatedly(
   };
 }
 
+function convert(parser, converter) {
+  return function (tokens, start) {
+    const result = parser(tokens, start);
+    if ("error" in result) {
+      return result;
+    }
+    return { ast: converter(result.ast), end: result.end };
+  };
+}
+
 function syntaxError(name, tokens, offendingTokenIndex, properties) {
   const offendingToken = tokens[offendingTokenIndex];
   return {
@@ -408,5 +495,14 @@ function syntaxError(name, tokens, offendingTokenIndex, properties) {
     line: offendingToken.line,
     column: offendingToken.column,
     ...properties,
+  };
+}
+
+function debug(parser, name) {
+  return function (tokens, start) {
+    const result = parser(tokens, start);
+    console.log(name);
+    console.log(result);
+    return result;
   };
 }
