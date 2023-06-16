@@ -36,11 +36,10 @@ export function toAst(expressionRaw) {
 
 export default function kpeval(expression, names = kpobject()) {
   const namesWithBuiltins = kpoMerge(builtins, names);
-  // const namesWithCore = kpoMerge(
-  //   loadCore(namesWithBuiltins),
-  //   namesWithBuiltins
-  // );
-  const namesWithCore = namesWithBuiltins;
+  const namesWithCore = kpoMerge(
+    loadCore(namesWithBuiltins),
+    namesWithBuiltins
+  );
   return evalWithBuiltins(expression, namesWithCore);
 }
 
@@ -49,9 +48,11 @@ let core = null;
 function loadCore(names) {
   if (!core) {
     const code = fs.readFileSync("../kenpali/core.kpc", { encoding: "utf-8" });
-    console.log(code);
-    const ast = kpparse(code);
-    console.log(ast);
+    const ast = kpparse(code + "null");
+    core = kpoMap(ast.defining, ([name, f]) => [
+      name,
+      evalWithBuiltins(f, names),
+    ]);
   }
   return core;
 }
@@ -96,8 +97,8 @@ function evalWithBuiltins(expression, names) {
   } else if ("calling" in expression) {
     const f = kpeval(expression.calling, names);
     const args = expression.args ?? [];
-    const kwargs = expression.kwargs ?? kpobject();
-    return callOnExpressions(f, args, kwargs, names);
+    const namedArgs = expression.namedArgs ?? kpobject();
+    return callOnExpressions(f, args, namedArgs, names);
   } else if ("quote" in expression) {
     return quote(expression.quote, names);
   } else {
@@ -105,23 +106,25 @@ function evalWithBuiltins(expression, names) {
   }
 }
 
-function callOnExpressions(f, args, kwargs, names) {
+function callOnExpressions(f, args, namedArgs, names) {
   const argValues = args.map((arg) => kpeval(arg, names));
-  const kwargValues = kpoMap(kwargs, ([name, value]) => [
+  const namedArgValues = kpoMap(namedArgs, ([name, value]) => [
     name,
     kpeval(value, names),
   ]);
-  return callOnValues(f, argValues, kwargValues);
+  return callOnValues(f, argValues, namedArgValues);
 }
 
-function callOnValues(f, args, kwargs) {
+function callOnValues(f, args, namedArgs) {
   if (f instanceof Map && f.get("!!given")) {
     const paramBindings = kpobject(
       ...(f.get("!!given").params ?? []).map((name, i) => [name, args[i]])
     );
-    return kpeval(f.get("result"), kpoMerge(paramBindings, kwargs));
+    return kpeval(f.get("result"), kpoMerge(paramBindings, namedArgs));
+  } else if (typeof f === "function") {
+    return f(args, namedArgs);
   } else {
-    return f(args, kwargs);
+    return kperror("notCallable", ["value", f]);
   }
 }
 

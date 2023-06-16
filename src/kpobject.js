@@ -10,6 +10,10 @@ export function toJsObject(kpo) {
   return Object.fromEntries([...kpo]);
 }
 
+export function kpoEntries(kpo) {
+  return [...kpo];
+}
+
 export function kpoMap(kpo, f) {
   return new Map([...kpo].map(f));
 }
