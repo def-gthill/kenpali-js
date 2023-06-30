@@ -17,6 +17,10 @@ test("This implementation follows the Kenpali JSON spec", (t) => {
     const [_, description, input, output, errorName, errorDetails] = match;
     const actualOutputValue = kpevalJson(input);
     if (errorName) {
+      t.assert(
+        actualOutputValue instanceof Map,
+        `${actualOutputValue} isn't an error object`
+      );
       t.like(toJsObject(actualOutputValue), {
         "!!error": errorName,
         ...JSON.parse(errorDetails),

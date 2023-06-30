@@ -2,7 +2,12 @@ import fs from "fs";
 import { builtins } from "./builtins.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
-import kpobject, { kpoMap, kpoMerge, toKpobject } from "./kpobject.js";
+import kpobject, {
+  kpoFilter,
+  kpoMap,
+  kpoMerge,
+  toKpobject,
+} from "./kpobject.js";
 import kpparse from "./kpparse.js";
 
 export function kpevalJson(json, names = kpobject()) {
@@ -70,10 +75,10 @@ function evalWithBuiltins(expression, names) {
       ])
     );
   } else if ("name" in expression) {
-    const binding = names.get(expression.name);
-    if (!binding) {
+    if (!names.has(expression.name)) {
       return kperror("nameNotDefined", ["name", expression.name]);
     }
+    const binding = names.get(expression.name);
     if (typeof binding === "object" && "expression" in binding) {
       return kpeval(binding.expression, binding.context);
     } else {
@@ -85,14 +90,15 @@ function evalWithBuiltins(expression, names) {
       ([name, value]) => [name, { expression: value }]
     );
     const combinedNames = kpoMerge(names, localNamesWithContext);
-    for (const [_, value] of combinedNames) {
+    for (const [_, value] of localNamesWithContext) {
       value.context = combinedNames;
     }
     return kpeval(expression.result, combinedNames);
   } else if ("given" in expression) {
     return kpobject(
       ["!!given", expression.given],
-      ["result", expression.result]
+      ["result", expression.result],
+      ["closure", names]
     );
   } else if ("calling" in expression) {
     const f = kpeval(expression.calling, names);
@@ -107,24 +113,61 @@ function evalWithBuiltins(expression, names) {
 }
 
 function callOnExpressions(f, args, namedArgs, names) {
-  const argValues = args.map((arg) => kpeval(arg, names));
+  const argValues = args.map((arg) => evalArg(arg, names));
   const namedArgValues = kpoMap(namedArgs, ([name, value]) => [
     name,
-    kpeval(value, names),
+    evalArg(value, names),
   ]);
   return callOnValues(f, argValues, namedArgValues);
 }
 
-function callOnValues(f, args, namedArgs) {
-  if (f instanceof Map && f.get("!!given")) {
-    const paramBindings = kpobject(
-      ...(f.get("!!given").params ?? []).map((name, i) => [name, args[i]])
-    );
-    return kpeval(f.get("result"), kpoMerge(paramBindings, namedArgs));
-  } else if (typeof f === "function") {
-    return f(args, namedArgs);
+function evalArg(arg, names) {
+  if ("optional" in arg) {
+    return kpobject(["!!optional", kpeval(arg.optional, names)]);
   } else {
-    return kperror("notCallable", ["value", f]);
+    return kpeval(arg, names);
+  }
+}
+
+export function callOnValues(f, args, namedArgs) {
+  const argObjects = args.map(toArgObject);
+  const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
+    name,
+    toArgObject(arg),
+  ]);
+  return callOnArgObjects(f, argObjects, namedArgObjects);
+}
+
+function toArgObject(arg) {
+  if (arg instanceof Map && arg.has("!!optional")) {
+    return { value: arg.get("!!optional"), optional: true };
+  } else {
+    return { value: arg, optional: false };
+  }
+}
+
+function callOnArgObjects(f, args, namedArgs) {
+  const argValues = args.map((arg) => arg.value);
+  const namedArgValues = kpoMap(namedArgs, ([name, arg]) => [name, arg.value]);
+  if (f instanceof Map && f.has("!!given")) {
+    const paramBindings = kpobject(
+      ...(f.get("!!given").params ?? []).map((name, i) => [name, argValues[i]])
+    );
+    return kpeval(
+      f.get("result"),
+      kpoMerge(f.get("closure"), paramBindings, namedArgValues)
+    );
+  } else if (typeof f === "function") {
+    return f(argValues, namedArgValues);
+  } else {
+    if (
+      args.filter((arg) => !arg.optional).length === 0 &&
+      kpoFilter(namedArgs, ([_, arg]) => !arg.optional).size === 0
+    ) {
+      return f;
+    } else {
+      return kperror("notCallable", ["value", f]);
+    }
   }
 }
 

@@ -18,6 +18,10 @@ export function kpoMap(kpo, f) {
   return new Map([...kpo].map(f));
 }
 
+export function kpoFilter(kpo, f) {
+  return new Map([...kpo].filter(f));
+}
+
 export function kpoMerge(...kpos) {
   return new Map(
     [].concat.apply(

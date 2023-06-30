@@ -1,3 +1,5 @@
+import kperror from "./kperror.js";
+import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 export const rawBuiltins = {
@@ -7,6 +9,9 @@ export const rawBuiltins = {
   oneOver: ([x]) => 1 / x,
   divideWithRemainder: ([a, b]) =>
     kpobject(["quotient", Math.floor(a / b)], ["remainder", ((a % b) + b) % b]),
+  join(args) {
+    return args.join("");
+  },
   equals([a, b]) {
     return equals(a, b);
   },
@@ -29,19 +34,69 @@ export const rawBuiltins = {
       return namedArgs.get("else");
     }
   },
+  repeat([start, step]) {
+    let current = start;
+    for (let i = 0; i < 1000; i++) {
+      const stepResult = callOnValues(step, [current], kpobject());
+      const next = stepResult.get("next");
+      if (!stepResult.get("while")) {
+        return current;
+      }
+      current = next;
+    }
+    return kperror("tooManyIterations", [
+      ["function", "repeat"],
+      ["currentValue", current],
+    ]);
+  },
   at([collection, index]) {
     if (isArray(collection)) {
       return collection[index - 1];
     } else if (isObject(collection)) {
       return collection.get(index);
     } else {
-      return error("wrongArgumentType", {
-        function: "at",
-        parameter: "collection",
-        value: collection,
-        expectedType: "array or object",
-      });
+      return kperror("wrongArgumentType", [
+        ["function", "at"],
+        ["parameter", "collection"],
+        ["value", collection],
+        ["expectedType", "array or object"],
+      ]);
     }
+  },
+  length([array]) {
+    return array.length;
+  },
+  build([start, step]) {
+    const result = [];
+    let current = start;
+    for (let i = 0; i < 1000; i++) {
+      const stepResult = callOnValues(step, [current], kpobject());
+      if (!stepResult.has("while")) {
+        return kperror("requiredKeyMissing", [
+          ["function", "build"],
+          ["object", stepResult],
+          ["key", "while"],
+        ]);
+      }
+      if (!stepResult.has("next")) {
+        return kperror("requiredKeyMissing", [
+          ["function", "build"],
+          ["object", stepResult],
+          ["key", "next"],
+        ]);
+      }
+      const next = stepResult.get("next");
+      result.push(stepResult.get("out") ?? next);
+      if (!stepResult.get("while")) {
+        return result;
+      }
+      current = next;
+    }
+    return kperror("tooManyIterations", [
+      ["function", "build"],
+      ["currentValue", current],
+      ["lastValuesOfResult", result.slice(-5)],
+    ]);
   },
 };
 

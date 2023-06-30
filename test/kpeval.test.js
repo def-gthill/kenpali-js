@@ -204,6 +204,7 @@ test("Local names don't leak into function calls", (t) => {
       defining(["intruder", literal(42)], calling(name("leaky")))
     )
   );
+  t.assert(result instanceof Map, `${result} isn't an error object`);
   t.like(toJsObject(result), {
     "!!error": "nameNotDefined",
     name: "intruder",
