@@ -16,7 +16,25 @@ export const rawBuiltins = {
     return equals(a, b);
   },
   isLessThan([a, b]) {
-    return a < b;
+    if (isArray(a) && isArray(b)) {
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if (i >= a.length) {
+          return true;
+        }
+        if (i >= b.length) {
+          return false;
+        }
+        if (a[i] < b[i]) {
+          return true;
+        }
+        if (b[i] < a[i]) {
+          return false;
+        }
+      }
+      return false;
+    } else {
+      return a < b;
+    }
   },
   typeOf([value]) {
     return typeOf(value);
@@ -126,6 +144,14 @@ function typeOf(value) {
     return "null";
   } else if (isArray(value)) {
     return "array";
+  } else if (isRecord(value)) {
+    return "record";
+  } else if (isBuiltin(value)) {
+    return "builtin";
+  } else if (isGiven(value)) {
+    return "given";
+  } else if (isError(value)) {
+    return "error";
   } else {
     return typeof value;
   }
@@ -135,8 +161,28 @@ function isArray(value) {
   return Array.isArray(value);
 }
 
+function isRecord(value) {
+  return isObject(value) && !isGiven(value) && !isError(value);
+}
+
+function isBuiltin(value) {
+  return typeof value === "function";
+}
+
+function isGiven(value) {
+  return isObject(value) && value.has("!!given");
+}
+
+function isError(value) {
+  return isObject(value) && value.has("!!error");
+}
+
 function isObject(value) {
   return value instanceof Map;
+}
+
+function isFunction(value) {
+  return isBuiltin(value) || isGiven(value);
 }
 
 function toString(value) {
@@ -150,6 +196,8 @@ function toString(value) {
         .join(", ") +
       "}"
     );
+  } else if (isBuiltin(value)) {
+    return `function ${value.name.split(" ").at(-1)}`;
   } else {
     return JSON.stringify(value);
   }
