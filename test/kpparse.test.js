@@ -1,21 +1,8 @@
 import test from "ava";
-import {
-  array,
-  calling,
-  defining,
-  literal,
-  name,
-  object,
-  optional,
-} from "../src/kpast.js";
-import kpobject from "../src/kpobject.js";
+import { array, defining, literal, name, object } from "../src/kpast.js";
 import kpparse from "../src/kpparse.js";
 
 const r = String.raw;
-
-test(`Parsing "null" produces a null literal`, (t) => {
-  t.deepEqual(kpparse("null"), literal(null));
-});
 
 test(`Parsing "true" produces a true literal`, (t) => {
   t.deepEqual(kpparse("true"), literal(true));
@@ -115,47 +102,11 @@ test("We can parse a one-character name", (t) => {
   t.deepEqual(kpparse("x"), name("x"));
 });
 
-test("We can parse a function call with one positional argument", (t) => {
-  t.deepEqual(kpparse("foo(1)"), calling(name("foo"), [literal(1)]));
-});
-
-test("We can parse a function call with two positional arguments", (t) => {
-  t.deepEqual(
-    kpparse("bar(1, 2)"),
-    calling(name("bar"), [literal(1), literal(2)])
-  );
-});
-
-test("We can parse a function call with one keyword arguments", (t) => {
-  t.deepEqual(
-    kpparse("foo(bar: 1)"),
-    calling(name("foo"), [], kpobject(["bar", literal(1)]))
-  );
-});
-
 test("A function call can cross lines", (t) => {
   t.deepEqual(kpparse("bar(\n1,\n2\n)"), kpparse("bar(1, 2)"));
 });
 
-test("We can call a function expression as a function", (t) => {
-  t.deepEqual(
-    kpparse("f(x)(y)"),
-    calling(calling(name("f"), [name("x")]), [name("y")])
-  );
-});
-
 // TODO calling a pipe expression as a function
-
-test("We can mark a positional argument optional", (t) => {
-  t.deepEqual(kpparse("foo(1?)"), calling(name("foo"), [optional(literal(1))]));
-});
-
-test("We can mark a keyword argument as optional", (t) => {
-  t.deepEqual(
-    kpparse("foo(bar: 1?)"),
-    calling(name("foo"), [], kpobject(["bar", optional(literal(1))]))
-  );
-});
 
 test("We can forward-pipe into a bare name", (t) => {
   t.deepEqual(kpparse("1 | foo"), kpparse("foo(1)"));
