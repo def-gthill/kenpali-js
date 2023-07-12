@@ -5,14 +5,14 @@ import kpparse from "../src/kpparse.js";
 
 const specPath = "../kenpali/kenpali-code.md";
 
-test("This implementation follows the Kenpali Code spec", (t) => {
-  const spec = fs.readFileSync(specPath);
+const spec = fs.readFileSync(specPath);
 
-  const regex = /```\n#\s+(.*?)\n((?:.|\n)*?)\n>>\s+((?:.|\n)*?)\n```/gm;
+const regex = /```\n#\s+(.*?)\n((?:.|\n)*?)\n>>\s+((?:.|\n)*?)\n```/gm;
 
-  let match;
-  while ((match = regex.exec(spec)) !== null) {
-    const [_, description, input, output] = match;
+let match;
+while ((match = regex.exec(spec)) !== null) {
+  const [_, description, input, output] = match;
+  test(description, (t) => {
     const expectedCode = toAst(JSON.parse(output));
     const actualCode = kpparse(input);
     t.deepEqual(
@@ -20,5 +20,5 @@ test("This implementation follows the Kenpali Code spec", (t) => {
       expectedCode,
       `Doesn't comply with Kenpali Code Specification: ${description}`
     );
-  }
-});
+  });
+}

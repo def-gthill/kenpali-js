@@ -6,15 +6,15 @@ import kpparse from "../src/kpparse.js";
 
 const specPath = "../kenpali/kenpali-json.md";
 
-test("This implementation follows the Kenpali JSON spec", (t) => {
-  const spec = fs.readFileSync(specPath);
+const spec = fs.readFileSync(specPath);
 
-  const regex =
-    /```\n#\s+(.*?)\n((?:.|\n)*?)\n(?:>>\s+((?:.|\n)*?)|!!\s+(.*?)\s+(.*?))\n```/gm;
+const regex =
+  /```\n#\s+(.*?)\n((?:.|\n)*?)\n(?:>>\s+((?:.|\n)*?)|!!\s+(.*?)\s+(.*?))\n```/gm;
 
-  let match;
-  while ((match = regex.exec(spec)) !== null) {
-    const [_, description, input, output, errorName, errorDetails] = match;
+let match;
+while ((match = regex.exec(spec)) !== null) {
+  const [_, description, input, output, errorName, errorDetails] = match;
+  test(description, (t) => {
     const actualOutputValue = kpevalJson(input);
     if (errorName) {
       t.assert(
@@ -33,5 +33,5 @@ test("This implementation follows the Kenpali JSON spec", (t) => {
         `Doesn't comply with Kenpali JSON Specification: ${description}`
       );
     }
-  }
-});
+  });
+}
