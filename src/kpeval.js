@@ -96,7 +96,7 @@ function evalWithBuiltins(expression, names) {
     return kpeval(expression.result, combinedNames);
   } else if ("given" in expression) {
     return kpobject(
-      ["!!given", expression.given],
+      ["#given", expression.given],
       ["result", expression.result],
       ["closure", names]
     );
@@ -123,7 +123,7 @@ function callOnExpressions(f, args, namedArgs, names) {
 
 function evalArg(arg, names) {
   if ("optional" in arg) {
-    return kpobject(["!!optional", kpeval(arg.optional, names)]);
+    return kpobject(["#optional", kpeval(arg.optional, names)]);
   } else {
     return kpeval(arg, names);
   }
@@ -139,8 +139,8 @@ export function callOnValues(f, args, namedArgs) {
 }
 
 function toArgObject(arg) {
-  if (arg instanceof Map && arg.has("!!optional")) {
-    return { value: arg.get("!!optional"), optional: true };
+  if (arg instanceof Map && arg.has("#optional")) {
+    return { value: arg.get("#optional"), optional: true };
   } else {
     return { value: arg, optional: false };
   }
@@ -149,9 +149,9 @@ function toArgObject(arg) {
 function callOnArgObjects(f, args, namedArgs) {
   const argValues = args.map((arg) => arg.value);
   const namedArgValues = kpoMap(namedArgs, ([name, arg]) => [name, arg.value]);
-  if (f instanceof Map && f.has("!!given")) {
+  if (f instanceof Map && f.has("#given")) {
     const paramBindings = kpobject(
-      ...(f.get("!!given").params ?? []).map((name, i) => [name, argValues[i]])
+      ...(f.get("#given").params ?? []).map((name, i) => [name, argValues[i]])
     );
     return kpeval(
       f.get("result"),

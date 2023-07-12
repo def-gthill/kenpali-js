@@ -170,11 +170,11 @@ function isBuiltin(value) {
 }
 
 function isGiven(value) {
-  return isObject(value) && value.has("!!given");
+  return isObject(value) && value.has("#given");
 }
 
 function isError(value) {
-  return isObject(value) && value.has("!!error");
+  return isObject(value) && value.has("#error");
 }
 
 function isObject(value) {

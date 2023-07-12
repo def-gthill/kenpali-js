@@ -18,7 +18,7 @@ runSpecFile(
       `${actualOutputValue} isn't an error object`
     );
     t.like(toJsObject(actualOutputValue), {
-      "!!error": expectedErrorName,
+      "#error": expectedErrorName,
       ...JSON.parse(expectedErrorDetails),
     });
   }
