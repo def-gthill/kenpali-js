@@ -13,5 +13,10 @@
     "ava": "^5.2.0",
     "eslint": "^8.41.0",
     "prettier": "^2.8.8"
+  },
+  "ava": {
+    "files": [
+      "test/**/*.test.js"
+    ]
   }
 }

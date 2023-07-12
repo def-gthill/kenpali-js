@@ -1,37 +1,25 @@
-import test from "ava";
-import fs from "fs";
 import kpeval, { kpevalJson } from "../src/kpeval.js";
 import { toJsObject } from "../src/kpobject.js";
 import kpparse from "../src/kpparse.js";
+import { runSpecFile } from "./specRunner.js";
 
 const specPath = "../kenpali/kenpali-json.md";
 
-const spec = fs.readFileSync(specPath);
-
-const regex =
-  /```\n#\s+(.*?)\n((?:.|\n)*?)\n(?:>>\s+((?:.|\n)*?)|!!\s+(.*?)\s+(.*?))\n```/gm;
-
-let match;
-while ((match = regex.exec(spec)) !== null) {
-  const [_, description, input, output, errorName, errorDetails] = match;
-  test(description, (t) => {
-    const actualOutputValue = kpevalJson(input);
-    if (errorName) {
-      t.assert(
-        actualOutputValue instanceof Map,
-        `${actualOutputValue} isn't an error object`
-      );
-      t.like(toJsObject(actualOutputValue), {
-        "!!error": errorName,
-        ...JSON.parse(errorDetails),
-      });
-    } else {
-      const expectedOutputValue = kpeval(kpparse(output));
-      t.deepEqual(
-        actualOutputValue,
-        expectedOutputValue,
-        `Doesn't comply with Kenpali JSON Specification: ${description}`
-      );
-    }
-  });
-}
+runSpecFile(
+  specPath,
+  kpevalJson,
+  (t, actualOutputValue, expectedOutput) => {
+    const expectedOutputValue = kpeval(kpparse(expectedOutput));
+    t.deepEqual(actualOutputValue, expectedOutputValue);
+  },
+  (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {
+    t.assert(
+      actualOutputValue instanceof Map,
+      `${actualOutputValue} isn't an error object`
+    );
+    t.like(toJsObject(actualOutputValue), {
+      "!!error": expectedErrorName,
+      ...JSON.parse(expectedErrorDetails),
+    });
+  }
+);
