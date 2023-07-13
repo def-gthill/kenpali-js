@@ -5,7 +5,8 @@ export function runSpecFile(
   specPath,
   functionToTest,
   checkNormalOutput,
-  checkErrorOutput
+  checkErrorOutput,
+  only = null
 ) {
   const spec = fs.readFileSync(specPath);
 
@@ -15,6 +16,9 @@ export function runSpecFile(
   let match;
   while ((match = regex.exec(spec)) !== null) {
     const [_, description, input, output, errorName, errorDetails] = match;
+    if (only && description !== only) {
+      continue;
+    }
     const actualOutputValue = functionToTest(input);
     test(description, (t) => {
       if (errorName) {

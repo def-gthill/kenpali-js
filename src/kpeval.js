@@ -1,11 +1,12 @@
 import fs from "fs";
-import { builtins } from "./builtins.js";
+import { builtins, isError } from "./builtins.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, {
   kpoFilter,
   kpoMap,
   kpoMerge,
+  kpoValues,
   toKpobject,
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -149,6 +150,16 @@ function toArgObject(arg) {
 function callOnArgObjects(f, args, namedArgs) {
   const argValues = args.map((arg) => arg.value);
   const namedArgValues = kpoMap(namedArgs, ([name, arg]) => [name, arg.value]);
+  for (const argValue of argValues) {
+    if (isError(argValue)) {
+      return argValue;
+    }
+  }
+  for (const namedArgValue of kpoValues(namedArgValues)) {
+    if (isError(namedArgValue)) {
+      return namedArgValue;
+    }
+  }
   if (f instanceof Map && f.has("#given")) {
     const paramBindings = kpobject(
       ...(f.get("#given").params ?? []).map((name, i) => [name, argValues[i]])

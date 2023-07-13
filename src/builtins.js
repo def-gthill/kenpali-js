@@ -205,7 +205,7 @@ function isGiven(value) {
   return isObject(value) && value.has("#given");
 }
 
-function isError(value) {
+export function isError(value) {
   return isObject(value) && value.has("#error");
 }
 

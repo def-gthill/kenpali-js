@@ -14,6 +14,10 @@ export function kpoEntries(kpo) {
   return [...kpo];
 }
 
+export function kpoValues(kpo) {
+  return [...kpo.values()];
+}
+
 export function kpoMap(kpo, f) {
   return new Map([...kpo].map(f));
 }
