@@ -3,10 +3,10 @@ import { builtins, isError } from "./builtins.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, {
+  kpoEntries,
   kpoFilter,
   kpoMap,
   kpoMerge,
-  kpoValues,
   toKpobject,
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -124,7 +124,9 @@ function callOnExpressions(f, args, namedArgs, names) {
 
 function evalArg(arg, names) {
   if ("optional" in arg) {
-    return kpobject(["#optional", kpeval(arg.optional, names)]);
+    return kpobject(["#optional", evalArg(arg.optional, names)]);
+  } else if ("errorPassing" in arg) {
+    return kpobject(["#errorPassing", evalArg(arg.errorPassing, names)]);
   } else {
     return kpeval(arg, names);
   }
@@ -140,25 +142,34 @@ export function callOnValues(f, args, namedArgs) {
 }
 
 function toArgObject(arg) {
-  if (arg instanceof Map && arg.has("#optional")) {
-    return { value: arg.get("#optional"), optional: true };
-  } else {
-    return { value: arg, optional: false };
+  let value = arg;
+  let result = { optional: false, errorPassing: false };
+  if (value instanceof Map && value.has("#optional")) {
+    value = value.get("#optional");
+    result.optional = true;
   }
+  if (value instanceof Map && value.has("#errorPassing")) {
+    value = value.get("#errorPassing");
+    result.errorPassing = true;
+  }
+  result.value = value;
+  return result;
 }
 
 function callOnArgObjects(f, args, namedArgs) {
-  const argValues = args.map((arg) => arg.value);
-  const namedArgValues = kpoMap(namedArgs, ([name, arg]) => [name, arg.value]);
-  for (const argValue of argValues) {
-    if (isError(argValue)) {
-      return argValue;
+  const argValues = [];
+  for (const arg of args) {
+    if (!arg.errorPassing && isError(arg.value)) {
+      return arg.value;
     }
+    argValues.push(arg.value);
   }
-  for (const namedArgValue of kpoValues(namedArgValues)) {
-    if (isError(namedArgValue)) {
-      return namedArgValue;
+  const namedArgValues = kpobject();
+  for (const [name, arg] of kpoEntries(namedArgs)) {
+    if (!arg.errorPassing && isError(arg.value)) {
+      return arg.value;
     }
+    namedArgValues.set(name, arg.value);
   }
   if (f instanceof Map && f.has("#given")) {
     const paramBindings = kpobject(

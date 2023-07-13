@@ -2,6 +2,7 @@ import {
   array,
   calling,
   defining,
+  errorPassing,
   given,
   literal,
   name,
@@ -245,21 +246,38 @@ function parseArgument(tokens, start) {
 }
 
 function parsePositionalArgument(tokens, start) {
-  return parseArgumentValue(tokens, start);
+  return parsePossiblyOptionalArgument(tokens, start);
 }
 
 function parseNamedArgument(tokens, start) {
   return parseAllOf(
-    [parseName, consume("COLON", "expectedNamedArgument"), parseArgumentValue],
+    [
+      parseName,
+      consume("COLON", "expectedNamedArgument"),
+      parsePossiblyOptionalArgument,
+    ],
     (name, value) => [name.name, value]
   )(tokens, start);
 }
 
-function parseArgumentValue(tokens, start) {
+function parsePossiblyOptionalArgument(tokens, start) {
   return parseAnyOf(
     parseAllOf(
-      [parse, consume("QUESTION_MARK", "expectedOptionalArgument")],
+      [
+        parsePossiblyErrorPassingArgument,
+        consume("QUESTION_MARK", "expectedOptionalArgument"),
+      ],
       optional
+    ),
+    parsePossiblyErrorPassingArgument
+  )(tokens, start);
+}
+
+function parsePossiblyErrorPassingArgument(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [parse, consume("BANG", "expectedErrorPassingArgument")],
+      errorPassing
     ),
     parse
   )(tokens, start);

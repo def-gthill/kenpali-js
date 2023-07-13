@@ -41,6 +41,10 @@ export function optional(expression) {
   return { optional: expression };
 }
 
+export function errorPassing(expression) {
+  return { errorPassing: expression };
+}
+
 export function quote(expression) {
   return { quote: expression };
 }

@@ -29,6 +29,7 @@ const tokenSpec = [
   ["AT", "@"],
   ["DOT", r`\.`],
   ["QUESTION_MARK", r`\?`],
+  ["BANG", "!"],
   // Other
   ["NAME", "[A-Za-z][A-Za-z0-9]*"],
   ["NEWLINE", r`\r\n|\r|\n`],
