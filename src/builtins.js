@@ -3,7 +3,30 @@ import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 export const rawBuiltins = {
-  plus: (args) => args.reduce((acc, value) => acc + value, 0),
+  plus(args, namedArgs) {
+    if (namedArgs.size > 0) {
+      const [badName, badValue] = [...namedArgs][0];
+      return kperror(
+        "unexpectedArgument",
+        ["function", "plus"],
+        ["name", badName],
+        ["value", badValue],
+        ["expectedType", "array or object"]
+      );
+    }
+    for (const arg of args) {
+      if (!isNumber(arg)) {
+        return kperror(
+          "wrongArgumentType",
+          ["function", "plus"],
+          ["parameter", "args"],
+          ["value", arg],
+          ["expectedType", "number"]
+        );
+      }
+    }
+    return args.reduce((acc, value) => acc + value, 0);
+  },
   negative: ([x]) => -x,
   times: (args) => args.reduce((acc, value) => acc * value, 1),
   oneOver: ([x]) => 1 / x,
@@ -62,10 +85,11 @@ export const rawBuiltins = {
       }
       current = next;
     }
-    return kperror("tooManyIterations", [
+    return kperror(
+      "tooManyIterations",
       ["function", "repeat"],
-      ["currentValue", current],
-    ]);
+      ["currentValue", current]
+    );
   },
   at([collection, index]) {
     if (isArray(collection)) {
@@ -73,12 +97,13 @@ export const rawBuiltins = {
     } else if (isObject(collection)) {
       return collection.get(index);
     } else {
-      return kperror("wrongArgumentType", [
+      return kperror(
+        "wrongArgumentType",
         ["function", "at"],
         ["parameter", "collection"],
         ["value", collection],
-        ["expectedType", "array or object"],
-      ]);
+        ["expectedType", "array or object"]
+      );
     }
   },
   length([array]) {
@@ -90,18 +115,20 @@ export const rawBuiltins = {
     for (let i = 0; i < 1000; i++) {
       const stepResult = callOnValues(step, [current], kpobject());
       if (!stepResult.has("while")) {
-        return kperror("requiredKeyMissing", [
+        return kperror(
+          "requiredKeyMissing",
           ["function", "build"],
           ["object", stepResult],
-          ["key", "while"],
-        ]);
+          ["key", "while"]
+        );
       }
       if (!stepResult.has("next")) {
-        return kperror("requiredKeyMissing", [
+        return kperror(
+          "requiredKeyMissing",
           ["function", "build"],
           ["object", stepResult],
-          ["key", "next"],
-        ]);
+          ["key", "next"]
+        );
       }
       const next = stepResult.get("next");
       result.push(stepResult.get("out") ?? next);
@@ -110,11 +137,12 @@ export const rawBuiltins = {
       }
       current = next;
     }
-    return kperror("tooManyIterations", [
+    return kperror(
+      "tooManyIterations",
       ["function", "build"],
       ["currentValue", current],
-      ["lastValuesOfResult", result.slice(-5)],
-    ]);
+      ["lastValuesOfResult", result.slice(-5)]
+    );
   },
 };
 
@@ -155,6 +183,10 @@ function typeOf(value) {
   } else {
     return typeof value;
   }
+}
+
+function isNumber(value) {
+  return typeof value === "number";
 }
 
 function isArray(value) {
