@@ -10,8 +10,7 @@ export const rawBuiltins = {
         "unexpectedArgument",
         ["function", "plus"],
         ["name", badName],
-        ["value", badValue],
-        ["expectedType", "array or object"]
+        ["value", badValue]
       );
     }
     for (const arg of args) {
@@ -27,7 +26,38 @@ export const rawBuiltins = {
     }
     return args.reduce((acc, value) => acc + value, 0);
   },
-  negative: ([x]) => -x,
+  negative(args, namedArgs) {
+    if (args.length === 0) {
+      return kperror("missingArgument", ["name", "x"]);
+    }
+    if (args.length > 1) {
+      return kperror(
+        "unexpectedArgument",
+        ["function", "negative"],
+        ["position", 2],
+        ["value", args[1]]
+      );
+    }
+    if (namedArgs.size > 0) {
+      const [badName, badValue] = [...namedArgs][0];
+      return kperror(
+        "unexpectedArgument",
+        ["function", "negative"],
+        ["name", badName],
+        ["value", badValue]
+      );
+    }
+    if (!isNumber(args[0])) {
+      return kperror(
+        "wrongArgumentType",
+        ["function", "negative"],
+        ["parameter", "x"],
+        ["value", args[0]],
+        ["expectedType", "number"]
+      );
+    }
+    return -args[0];
+  },
   times: (args) => args.reduce((acc, value) => acc * value, 1),
   oneOver: ([x]) => 1 / x,
   divideWithRemainder: ([a, b]) =>
