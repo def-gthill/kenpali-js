@@ -133,12 +133,54 @@ function evalArg(arg, names) {
 }
 
 export function callOnValues(f, args, namedArgs) {
-  const argObjects = args.map(toArgObject);
   const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
     name,
     toArgObject(arg),
   ]);
-  return callOnArgObjects(f, argObjects, namedArgObjects);
+  const namedArgValues = kpobject();
+  for (const [name, arg] of kpoEntries(namedArgObjects)) {
+    if (!arg.errorPassing && isError(arg.value)) {
+      return arg.value;
+    }
+    namedArgValues.set(name, arg.value);
+  }
+  if (f instanceof Map && f.has("#given")) {
+    const argValues = bindArgs(args, f.get("#given").params);
+    if (isError(argValues)) {
+      return argValues;
+    }
+    const paramBindings = kpobject(
+      ...(f.get("#given").params ?? []).map((name, i) => [name, argValues[i]])
+    );
+    return kpeval(
+      f.get("result"),
+      kpoMerge(f.get("closure"), paramBindings, namedArgValues)
+    );
+  } else if (typeof f === "function") {
+    const argObjects = args.map(toArgObject);
+    const argValues = [];
+    for (const arg of argObjects) {
+      if (!arg.errorPassing && isError(arg.value)) {
+        return arg.value;
+      }
+      argValues.push(arg.value);
+    }
+    return f(argValues, namedArgValues);
+  } else {
+    const argObjects = args.map(toArgObject);
+    if (
+      argObjects.filter((arg) => !arg.optional).length === 0 &&
+      kpoFilter(namedArgObjects, ([_, arg]) => !arg.optional).size === 0
+    ) {
+      return f;
+    } else {
+      return kperror("notCallable", ["value", f]);
+    }
+  }
+}
+
+export function bindArgs(args, params) {
+  return bindArgObjects(args.map(toArgObject), params.map(toParamObject));
 }
 
 function toArgObject(arg) {
@@ -156,41 +198,50 @@ function toArgObject(arg) {
   return result;
 }
 
-function callOnArgObjects(f, args, namedArgs) {
-  const argValues = [];
-  for (const arg of args) {
-    if (!arg.errorPassing && isError(arg.value)) {
-      return arg.value;
-    }
-    argValues.push(arg.value);
-  }
-  const namedArgValues = kpobject();
-  for (const [name, arg] of kpoEntries(namedArgs)) {
-    if (!arg.errorPassing && isError(arg.value)) {
-      return arg.value;
-    }
-    namedArgValues.set(name, arg.value);
-  }
-  if (f instanceof Map && f.has("#given")) {
-    const paramBindings = kpobject(
-      ...(f.get("#given").params ?? []).map((name, i) => [name, argValues[i]])
-    );
-    return kpeval(
-      f.get("result"),
-      kpoMerge(f.get("closure"), paramBindings, namedArgValues)
-    );
-  } else if (typeof f === "function") {
-    return f(argValues, namedArgValues);
+function toParamObject(param) {
+  if (Array.isArray(param)) {
+    const [name, defaultValue] = param;
+    return { name, defaultValue };
   } else {
-    if (
-      args.filter((arg) => !arg.optional).length === 0 &&
-      kpoFilter(namedArgs, ([_, arg]) => !arg.optional).size === 0
-    ) {
-      return f;
-    } else {
-      return kperror("notCallable", ["value", f]);
+    return { name: param };
+  }
+}
+
+function bindArgObjects(args, params) {
+  let hasRest = params.at(-1)?.name === "#rest";
+  let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
+  if (numRequiredParams === -1) {
+    numRequiredParams = params.length;
+    if (hasRest) {
+      numRequiredParams -= 1;
     }
   }
+  if (args.length < numRequiredParams) {
+    return kperror("missingArgument", ["name", params[args.length].name]);
+  }
+  if (!hasRest) {
+    let numRequiredArgs = args.findIndex((arg) => arg.optional);
+    if (numRequiredArgs === -1) {
+      numRequiredArgs = args.length;
+    }
+    if (numRequiredArgs > params.length) {
+      return kperror(
+        "unexpectedArgument",
+        ["position", params.length + 1],
+        ["value", args[params.length].value]
+      );
+    }
+  }
+  const argsToBind = hasRest ? args : args.slice(0, params.length);
+  for (const arg of argsToBind) {
+    if (!arg.errorPassing && isError(arg.value)) {
+      return arg.value;
+    }
+  }
+  const defaults = hasRest
+    ? []
+    : params.slice(args.length).map((param) => param.defaultValue);
+  return [...argsToBind.map((arg) => arg.value), ...defaults];
 }
 
 function quote(expression, names) {

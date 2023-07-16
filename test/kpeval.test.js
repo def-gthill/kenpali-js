@@ -45,5 +45,3 @@ test("Function arguments can reference names", (t) => {
     45
   );
 });
-
-// TODO argument validation
