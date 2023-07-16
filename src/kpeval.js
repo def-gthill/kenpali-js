@@ -145,27 +145,37 @@ export function callOnValues(f, args, namedArgs) {
     namedArgValues.set(name, arg.value);
   }
   if (f instanceof Map && f.has("#given")) {
-    const argValues = bindArgs(args, f.get("#given").params);
+    const params = f.get("#given").params;
+    const argValues = bindArgs(args, params);
     if (isError(argValues)) {
       return argValues;
     }
     const paramBindings = kpobject(
-      ...(f.get("#given").params ?? []).map((name, i) => [name, argValues[i]])
+      ...(params ?? []).map((name, i) => [name, argValues[i]])
     );
     return kpeval(
       f.get("result"),
       kpoMerge(f.get("closure"), paramBindings, namedArgValues)
     );
   } else if (typeof f === "function") {
-    const argObjects = args.map(toArgObject);
-    const argValues = [];
-    for (const arg of argObjects) {
-      if (!arg.errorPassing && isError(arg.value)) {
-        return arg.value;
+    if ("params" in f) {
+      const params = f.params;
+      const argValues = bindArgs(args, params);
+      if (isError(argValues)) {
+        return argValues;
       }
-      argValues.push(arg.value);
+      return f(argValues, namedArgValues);
+    } else {
+      const argObjects = args.map(toArgObject);
+      const argValues = [];
+      for (const arg of argObjects) {
+        if (!arg.errorPassing && isError(arg.value)) {
+          return arg.value;
+        }
+        argValues.push(arg.value);
+      }
+      return f(argValues, namedArgValues);
     }
-    return f(argValues, namedArgValues);
   } else {
     const argObjects = args.map(toArgObject);
     if (

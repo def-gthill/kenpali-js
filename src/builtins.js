@@ -2,7 +2,37 @@ import kperror from "./kperror.js";
 import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
-export const rawBuiltins = {
+const rawBuiltins_NEW = [
+  builtin(["x"], [], function negative(args, namedArgs) {
+    if (namedArgs.size > 0) {
+      const [badName, badValue] = [...namedArgs][0];
+      return kperror(
+        "unexpectedArgument",
+        ["function", "negative"],
+        ["name", badName],
+        ["value", badValue]
+      );
+    }
+    if (!isNumber(args[0])) {
+      return kperror(
+        "wrongArgumentType",
+        ["function", "negative"],
+        ["parameter", "x"],
+        ["value", args[0]],
+        ["expectedType", "number"]
+      );
+    }
+    return -args[0];
+  }),
+];
+
+function builtin(params, namedParams, f) {
+  f.params = params;
+  f.namedParams = namedParams;
+  return f;
+}
+
+const rawBuiltins = {
   plus(args, namedArgs) {
     if (namedArgs.size > 0) {
       const [badName, badValue] = [...namedArgs][0];
@@ -25,38 +55,6 @@ export const rawBuiltins = {
       }
     }
     return args.reduce((acc, value) => acc + value, 0);
-  },
-  negative(args, namedArgs) {
-    if (args.length === 0) {
-      return kperror("missingArgument", ["name", "x"]);
-    }
-    if (args.length > 1) {
-      return kperror(
-        "unexpectedArgument",
-        ["function", "negative"],
-        ["position", 2],
-        ["value", args[1]]
-      );
-    }
-    if (namedArgs.size > 0) {
-      const [badName, badValue] = [...namedArgs][0];
-      return kperror(
-        "unexpectedArgument",
-        ["function", "negative"],
-        ["name", badName],
-        ["value", badValue]
-      );
-    }
-    if (!isNumber(args[0])) {
-      return kperror(
-        "wrongArgumentType",
-        ["function", "negative"],
-        ["parameter", "x"],
-        ["value", args[0]],
-        ["expectedType", "number"]
-      );
-    }
-    return -args[0];
   },
   times: (args) => args.reduce((acc, value) => acc * value, 1),
   oneOver: ([x]) => 1 / x,
@@ -270,5 +268,6 @@ function isValidName(string) {
 }
 
 export const builtins = kpobject(
+  ...rawBuiltins_NEW.map((f) => [f.name, f]),
   ...Object.entries(rawBuiltins).map(([name, f]) => [name, f.bind(rawBuiltins)])
 );
