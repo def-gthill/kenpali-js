@@ -193,30 +193,6 @@ export function bindArgs(args, params) {
   return bindArgObjects(args.map(toArgObject), params.map(toParamObject));
 }
 
-function toArgObject(arg) {
-  let value = arg;
-  let result = { optional: false, errorPassing: false };
-  if (value instanceof Map && value.has("#optional")) {
-    value = value.get("#optional");
-    result.optional = true;
-  }
-  if (value instanceof Map && value.has("#errorPassing")) {
-    value = value.get("#errorPassing");
-    result.errorPassing = true;
-  }
-  result.value = value;
-  return result;
-}
-
-function toParamObject(param) {
-  if (Array.isArray(param)) {
-    const [name, defaultValue] = param;
-    return { name, defaultValue };
-  } else {
-    return { name: param };
-  }
-}
-
 function bindArgObjects(args, params) {
   let hasRest = params.at(-1)?.name === "#rest";
   let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
@@ -252,6 +228,66 @@ function bindArgObjects(args, params) {
     ? []
     : params.slice(args.length).map((param) => param.defaultValue);
   return [...argsToBind.map((arg) => arg.value), ...defaults];
+}
+
+export function bindNamedArgs(args, params) {
+  return bindNamedArgObjects(
+    kpoMap(args, ([name, arg]) => [name, toArgObject(arg)]),
+    params.map(toParamObject)
+  );
+}
+
+function bindNamedArgObjects(args, params) {
+  const defaults = kpobject();
+  for (const param of params) {
+    if (!args.has(param.name)) {
+      if ("defaultValue" in param) {
+        defaults.set(param.name, param.defaultValue);
+      } else {
+        return kperror("missingArgument", ["name", param.name]);
+      }
+    }
+  }
+  for (const [name, arg] of kpoEntries(args)) {
+    if (!arg.optional && !params.some((param) => param.name === name)) {
+      return kperror(
+        "unexpectedArgument",
+        ["name", name],
+        ["value", arg.value]
+      );
+    }
+  }
+  const argsToBind = kpobject();
+  for (const [name, arg] of kpoEntries(args)) {
+    if (params.some((param) => param.name === name)) {
+      argsToBind.set(name, arg.value);
+    }
+  }
+  return kpoMerge(argsToBind, defaults);
+}
+
+function toArgObject(arg) {
+  let value = arg;
+  let result = { optional: false, errorPassing: false };
+  if (value instanceof Map && value.has("#optional")) {
+    value = value.get("#optional");
+    result.optional = true;
+  }
+  if (value instanceof Map && value.has("#errorPassing")) {
+    value = value.get("#errorPassing");
+    result.errorPassing = true;
+  }
+  result.value = value;
+  return result;
+}
+
+function toParamObject(param) {
+  if (Array.isArray(param)) {
+    const [name, defaultValue] = param;
+    return { name, defaultValue };
+  } else {
+    return { name: param };
+  }
 }
 
 function quote(expression, names) {

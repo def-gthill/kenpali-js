@@ -7,6 +7,7 @@ export default function assertIsError(
   expectedErrorDetails = {}
 ) {
   t.assert(actual instanceof Map, `${actual} isn't an error object`);
+  t.assert(actual.has("#error"), `${actual} isn't an error object`);
   t.like(toJsObject(actual), {
     "#error": expectedErrorName,
     ...expectedErrorDetails,
