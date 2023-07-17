@@ -3,16 +3,7 @@ import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins_NEW = [
-  builtin(["x"], [], function negative(args, namedArgs) {
-    if (namedArgs.size > 0) {
-      const [badName, badValue] = [...namedArgs][0];
-      return kperror(
-        "unexpectedArgument",
-        ["function", "negative"],
-        ["name", badName],
-        ["value", badValue]
-      );
-    }
+  builtin(["x"], [], function negative(args) {
     if (!isNumber(args[0])) {
       return kperror(
         "wrongArgumentType",

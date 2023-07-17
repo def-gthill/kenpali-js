@@ -133,19 +133,9 @@ function evalArg(arg, names) {
 }
 
 export function callOnValues(f, args, namedArgs) {
-  const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
-    name,
-    toArgObject(arg),
-  ]);
-  const namedArgValues = kpobject();
-  for (const [name, arg] of kpoEntries(namedArgObjects)) {
-    if (!arg.errorPassing && isError(arg.value)) {
-      return arg.value;
-    }
-    namedArgValues.set(name, arg.value);
-  }
   if (f instanceof Map && f.has("#given")) {
-    const params = f.get("#given").params;
+    const params = f.get("#given").params ?? [];
+    const namedParams = f.get("#given").namedParams ?? [];
     const argValues = bindArgs(args, params);
     if (isError(argValues)) {
       return argValues;
@@ -153,16 +143,25 @@ export function callOnValues(f, args, namedArgs) {
     const paramBindings = kpobject(
       ...(params ?? []).map((name, i) => [name, argValues[i]])
     );
+    const namedParamBindings = bindNamedArgs(namedArgs, namedParams);
+    if (isError(namedParamBindings)) {
+      return namedParamBindings;
+    }
     return kpeval(
       f.get("result"),
-      kpoMerge(f.get("closure"), paramBindings, namedArgValues)
+      kpoMerge(f.get("closure"), paramBindings, namedParamBindings)
     );
   } else if (typeof f === "function") {
     if ("params" in f) {
       const params = f.params;
+      const namedParams = f.namedParams;
       const argValues = bindArgs(args, params);
       if (isError(argValues)) {
         return argValues;
+      }
+      const namedArgValues = bindNamedArgs(namedArgs, namedParams);
+      if (isError(namedArgValues)) {
+        return namedArgValues;
       }
       return f(argValues, namedArgValues);
     } else {
@@ -174,10 +173,25 @@ export function callOnValues(f, args, namedArgs) {
         }
         argValues.push(arg.value);
       }
+      const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
+        name,
+        toArgObject(arg),
+      ]);
+      const namedArgValues = kpobject();
+      for (const [name, arg] of kpoEntries(namedArgObjects)) {
+        if (!arg.errorPassing && isError(arg.value)) {
+          return arg.value;
+        }
+        namedArgValues.set(name, arg.value);
+      }
       return f(argValues, namedArgValues);
     }
   } else {
     const argObjects = args.map(toArgObject);
+    const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
+      name,
+      toArgObject(arg),
+    ]);
     if (
       argObjects.filter((arg) => !arg.optional).length === 0 &&
       kpoFilter(namedArgObjects, ([_, arg]) => !arg.optional).size === 0
