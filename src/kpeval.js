@@ -194,7 +194,7 @@ export function bindArgs(args, params) {
 }
 
 function bindArgObjects(args, params) {
-  let hasRest = params.at(-1)?.name === "#rest";
+  const hasRest = params.at(-1)?.name === "#rest";
   let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
   if (numRequiredParams === -1) {
     numRequiredParams = params.length;
@@ -238,8 +238,12 @@ export function bindNamedArgs(args, params) {
 }
 
 function bindNamedArgObjects(args, params) {
+  const hasRest = params.some((param) => param.name === "#rest");
   const defaults = kpobject();
   for (const param of params) {
+    if (param.name === "#rest") {
+      continue;
+    }
     if (!args.has(param.name)) {
       if ("defaultValue" in param) {
         defaults.set(param.name, param.defaultValue);
@@ -248,18 +252,23 @@ function bindNamedArgObjects(args, params) {
       }
     }
   }
-  for (const [name, arg] of kpoEntries(args)) {
-    if (!arg.optional && !params.some((param) => param.name === name)) {
-      return kperror(
-        "unexpectedArgument",
-        ["name", name],
-        ["value", arg.value]
-      );
+  if (!hasRest) {
+    for (const [name, arg] of kpoEntries(args)) {
+      if (!arg.optional && !params.some((param) => param.name === name)) {
+        return kperror(
+          "unexpectedArgument",
+          ["name", name],
+          ["value", arg.value]
+        );
+      }
     }
   }
   const argsToBind = kpobject();
   for (const [name, arg] of kpoEntries(args)) {
-    if (params.some((param) => param.name === name)) {
+    if (hasRest || params.some((param) => param.name === name)) {
+      if (!arg.errorPassing && isError(arg.value)) {
+        return arg.value;
+      }
       argsToBind.set(name, arg.value);
     }
   }
