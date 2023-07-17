@@ -48,25 +48,7 @@ const rawBuiltins = [
     return equals(a, b);
   }),
   builtin("isLessThan", ["a", "b"], [], function ([a, b]) {
-    if (isArray(a) && isArray(b)) {
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        if (i >= a.length) {
-          return true;
-        }
-        if (i >= b.length) {
-          return false;
-        }
-        if (a[i] < b[i]) {
-          return true;
-        }
-        if (b[i] < a[i]) {
-          return false;
-        }
-      }
-      return false;
-    } else {
-      return a < b;
-    }
+    return isLessThan(a, b);
   }),
   builtin("typeOf", ["value"], [], function ([value]) {
     return typeOf(value);
@@ -185,6 +167,28 @@ function equals(a, b) {
     return true;
   } else {
     return a === b;
+  }
+}
+
+function isLessThan(a, b) {
+  if (isArray(a) && isArray(b)) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (i >= a.length) {
+        return true;
+      }
+      if (i >= b.length) {
+        return false;
+      }
+      if (isLessThan(a[i], b[i])) {
+        return true;
+      }
+      if (isLessThan(b[i], a[i])) {
+        return false;
+      }
+    }
+    return false;
+  } else {
+    return a < b;
   }
 }
 
