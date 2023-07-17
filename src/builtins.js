@@ -15,25 +15,7 @@ const rawBuiltins_NEW = [
     }
     return -args[0];
   }),
-];
-
-function builtin(params, namedParams, f) {
-  f.params = params;
-  f.namedParams = namedParams;
-  return f;
-}
-
-const rawBuiltins = {
-  plus(args, namedArgs) {
-    if (namedArgs.size > 0) {
-      const [badName, badValue] = [...namedArgs][0];
-      return kperror(
-        "unexpectedArgument",
-        ["function", "plus"],
-        ["name", badName],
-        ["value", badValue]
-      );
-    }
+  builtin(["#rest"], [], function plus(args) {
     for (const arg of args) {
       if (!isNumber(arg)) {
         return kperror(
@@ -46,7 +28,16 @@ const rawBuiltins = {
       }
     }
     return args.reduce((acc, value) => acc + value, 0);
-  },
+  }),
+];
+
+function builtin(params, namedParams, f) {
+  f.params = params;
+  f.namedParams = namedParams;
+  return f;
+}
+
+const rawBuiltins = {
   times: (args) => args.reduce((acc, value) => acc * value, 1),
   oneOver: ([x]) => 1 / x,
   divideWithRemainder: ([a, b]) =>
