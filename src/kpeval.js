@@ -97,7 +97,7 @@ function evalWithBuiltins(expression, names) {
     return kpeval(expression.result, combinedNames);
   } else if ("given" in expression) {
     return kpobject(
-      ["#given", expression.given],
+      ["#given", paramSpecToKpValue(expression.given)],
       ["result", expression.result],
       ["closure", names]
     );
@@ -110,6 +110,21 @@ function evalWithBuiltins(expression, names) {
     return quote(expression.quote, names);
   } else {
     return kperror("notAnExpression", ["value", expression]);
+  }
+}
+
+function paramSpecToKpValue(paramSpec) {
+  return {
+    params: (paramSpec.params ?? []).map(paramToKpValue),
+    namedParams: (paramSpec.namedParams ?? []).map(paramToKpValue),
+  };
+}
+
+function paramToKpValue(param) {
+  if (typeof param === "object") {
+    return toKpobject(param);
+  } else {
+    return param;
   }
 }
 
@@ -134,14 +149,17 @@ function evalArg(arg, names) {
 
 export function callOnValues(f, args, namedArgs) {
   if (f instanceof Map && f.has("#given")) {
-    const params = f.get("#given").params ?? [];
-    const namedParams = f.get("#given").namedParams ?? [];
+    const params = f.get("#given").params;
+    const namedParams = f.get("#given").namedParams;
     const argValues = bindArgs(args, params);
     if (isError(argValues)) {
       return argValues;
     }
     const paramBindings = kpobject(
-      ...(params ?? []).map((name, i) => [name, argValues[i]])
+      ...params.map((param, i) => [
+        toParamObject(param).get("name"),
+        argValues[i],
+      ])
     );
     const namedParamBindings = bindNamedArgs(namedArgs, namedParams);
     if (isError(namedParamBindings)) {
@@ -153,8 +171,8 @@ export function callOnValues(f, args, namedArgs) {
     );
   } else if (typeof f === "function") {
     if ("params" in f) {
-      const params = f.params;
-      const namedParams = f.namedParams;
+      const params = f.params.map(paramToKpValue);
+      const namedParams = f.namedParams.map(paramToKpValue);
       const argValues = bindArgs(args, params);
       if (isError(argValues)) {
         return argValues;
@@ -208,8 +226,10 @@ export function bindArgs(args, params) {
 }
 
 function bindArgObjects(args, params) {
-  const hasRest = params.at(-1)?.name === "#rest";
-  let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
+  const hasRest = params.at(-1)?.get("name") === "#rest";
+  let numRequiredParams = params.findIndex((param) =>
+    param.has("defaultValue")
+  );
   if (numRequiredParams === -1) {
     numRequiredParams = params.length;
     if (hasRest) {
@@ -217,7 +237,10 @@ function bindArgObjects(args, params) {
     }
   }
   if (args.length < numRequiredParams) {
-    return kperror("missingArgument", ["name", params[args.length].name]);
+    return kperror("missingArgument", [
+      "name",
+      params[args.length].get("name"),
+    ]);
   }
   if (!hasRest) {
     let numRequiredArgs = args.findIndex((arg) => arg.optional);
@@ -240,7 +263,7 @@ function bindArgObjects(args, params) {
   }
   const defaults = hasRest
     ? []
-    : params.slice(args.length).map((param) => param.defaultValue);
+    : params.slice(args.length).map((param) => param.get("defaultValue"));
   return [...argsToBind.map((arg) => arg.value), ...defaults];
 }
 
@@ -252,23 +275,26 @@ export function bindNamedArgs(args, params) {
 }
 
 function bindNamedArgObjects(args, params) {
-  const hasRest = params.some((param) => param.name === "#rest");
+  const hasRest = params.some((param) => param.get("name") === "#rest");
   const defaults = kpobject();
   for (const param of params) {
-    if (param.name === "#rest") {
+    if (param.get("name") === "#rest") {
       continue;
     }
-    if (!args.has(param.name)) {
-      if ("defaultValue" in param) {
-        defaults.set(param.name, param.defaultValue);
+    if (!args.has(param.get("name"))) {
+      if (param.has("defaultValue")) {
+        defaults.set(param.get("name"), param.get("defaultValue"));
       } else {
-        return kperror("missingArgument", ["name", param.name]);
+        return kperror("missingArgument", ["name", param.get("name")]);
       }
     }
   }
   if (!hasRest) {
     for (const [name, arg] of kpoEntries(args)) {
-      if (!arg.optional && !params.some((param) => param.name === name)) {
+      if (
+        !arg.optional &&
+        !params.some((param) => param.get("name") === name)
+      ) {
         return kperror(
           "unexpectedArgument",
           ["name", name],
@@ -279,7 +305,7 @@ function bindNamedArgObjects(args, params) {
   }
   const argsToBind = kpobject();
   for (const [name, arg] of kpoEntries(args)) {
-    if (hasRest || params.some((param) => param.name === name)) {
+    if (hasRest || params.some((param) => param.get("name") === name)) {
       if (!arg.errorPassing && isError(arg.value)) {
         return arg.value;
       }
@@ -305,11 +331,10 @@ function toArgObject(arg) {
 }
 
 function toParamObject(param) {
-  if (Array.isArray(param)) {
-    const [name, defaultValue] = param;
-    return { name, defaultValue };
+  if (typeof param === "string") {
+    return kpobject(["name", param]);
   } else {
-    return { name: param };
+    return param;
   }
 }
 

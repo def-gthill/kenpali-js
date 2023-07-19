@@ -1,7 +1,7 @@
 import test from "ava";
 import kperror from "../src/kperror.js";
 import { bindNamedArgs } from "../src/kpeval.js";
-import kpobject from "../src/kpobject.js";
+import kpobject, { toKpobject } from "../src/kpobject.js";
 import assertIsError from "./assertIsError.js";
 
 test("Binding no arguments to no parameters yields no bindings", (t) => {
@@ -54,7 +54,7 @@ test("Binding one argument to no parameters yields an unexpected argument error"
 
 test("Binding an argument to an optional parameter yields a single binding of that argument", (t) => {
   const args = kpobject(["x", 42]);
-  const params = [["x", 73]];
+  const params = [param("x", 73)];
 
   const argBindings = bindNamedArgs(args, params);
 
@@ -63,7 +63,7 @@ test("Binding an argument to an optional parameter yields a single binding of th
 
 test("Binding no arguments to an optional parameter yields a single binding of the default value", (t) => {
   const args = kpobject();
-  const params = [["x", 73]];
+  const params = [param("x", 73)];
 
   const argBindings = bindNamedArgs(args, params);
 
@@ -187,3 +187,7 @@ test("Binding two arguments to a rest parameter yields bindings for both argumen
 
   t.deepEqual(argBindings, kpobject(["x", 42], ["y", 73]));
 });
+
+function param(name, defaultValue) {
+  return toKpobject({ name, defaultValue });
+}

@@ -174,9 +174,9 @@ function parseParameter(tokens, start) {
       ],
       (param, defaultValue) => {
         if ("named" in param) {
-          return { named: [param.named, defaultValue] };
+          return { named: { name: param.named, defaultValue } };
         } else {
-          return { positional: [param.positional, defaultValue] };
+          return { positional: { name: param.positional, defaultValue } };
         }
       }
     ),
