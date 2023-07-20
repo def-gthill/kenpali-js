@@ -1,5 +1,5 @@
 import fs from "fs";
-import { builtins, isError } from "./builtins.js";
+import { builtins, isError, typeOf } from "./builtins.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, {
@@ -259,6 +259,34 @@ function bindArgObjects(args, params) {
   for (const arg of argsToBind) {
     if (!arg.errorPassing && isError(arg.value)) {
       return arg.value;
+    }
+  }
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (i >= params.length) {
+      if (hasRest) {
+        const rest = params.at(-1);
+        if (rest.has("type") && typeOf(arg.value) !== rest.get("type")) {
+          return kperror(
+            "wrongArgumentType",
+            ["parameter", rest.get("name")],
+            ["value", arg.value],
+            ["expectedType", rest.get("type")]
+          );
+        }
+      } else {
+        break;
+      }
+    } else {
+      const param = params[i];
+      if (param.has("type") && typeOf(arg.value) !== param.get("type")) {
+        return kperror(
+          "wrongArgumentType",
+          ["parameter", param.get("name")],
+          ["value", arg.value],
+          ["expectedType", param.get("type")]
+        );
+      }
     }
   }
   const defaults = hasRest

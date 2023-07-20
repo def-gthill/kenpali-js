@@ -3,30 +3,10 @@ import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
-  builtin("plus", ["#rest"], [], function (args) {
-    for (const arg of args) {
-      if (!isNumber(arg)) {
-        return kperror(
-          "wrongArgumentType",
-          ["function", "plus"],
-          ["parameter", "args"],
-          ["value", arg],
-          ["expectedType", "number"]
-        );
-      }
-    }
+  builtin("plus", [{ name: "#rest", type: "number" }], [], function (args) {
     return args.reduce((acc, value) => acc + value, 0);
   }),
-  builtin("negative", ["x"], [], function ([x]) {
-    if (!isNumber(x)) {
-      return kperror(
-        "wrongArgumentType",
-        ["function", "negative"],
-        ["parameter", "x"],
-        ["value", x],
-        ["expectedType", "number"]
-      );
-    }
+  builtin("negative", [{ name: "x", type: "number" }], [], function ([x]) {
     return -x;
   }),
   builtin("times", ["#rest"], [], function (args) {
@@ -192,7 +172,7 @@ function isLessThan(a, b) {
   }
 }
 
-function typeOf(value) {
+export function typeOf(value) {
   if (value === null) {
     return "null";
   } else if (isArray(value)) {
