@@ -52,9 +52,31 @@ test("Binding one argument to no parameters yields an unexpected argument error"
   });
 });
 
+test("Binding an argument to a typed parameter yields a binding of that argument", (t) => {
+  const args = kpobject(["x", 42]);
+  const params = [toKpobject({ name: "x", type: "number" })];
+
+  const argBindings = bindNamedArgs(args, params);
+
+  t.deepEqual(argBindings, kpobject(["x", 42]));
+});
+
+test("Binding an argument of the wrong type yields a wrong argument type error", (t) => {
+  const args = kpobject(["x", 42]);
+  const params = [toKpobject({ name: "x", type: "string" })];
+
+  const argBindings = bindNamedArgs(args, params);
+
+  assertIsError(t, argBindings, "wrongArgumentType", {
+    parameter: "x",
+    value: 42,
+    expectedType: "string",
+  });
+});
+
 test("Binding an argument to an optional parameter yields a single binding of that argument", (t) => {
   const args = kpobject(["x", 42]);
-  const params = [param("x", 73)];
+  const params = [toKpobject({ name: "x", defaultValue: 73 })];
 
   const argBindings = bindNamedArgs(args, params);
 
@@ -63,7 +85,7 @@ test("Binding an argument to an optional parameter yields a single binding of th
 
 test("Binding no arguments to an optional parameter yields a single binding of the default value", (t) => {
   const args = kpobject();
-  const params = [param("x", 73)];
+  const params = [toKpobject({ name: "x", defaultValue: 73 })];
 
   const argBindings = bindNamedArgs(args, params);
 
@@ -163,31 +185,54 @@ test("Binding an optional error value marked as error-passing yields a binding o
 
 test("Binding no arguments to a rest parameter yields no bindings", (t) => {
   const args = kpobject();
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindNamedArgs(args, params);
+  const argBindings = bindNamedArgs(args, params, restParam);
 
   t.deepEqual(argBindings, kpobject());
 });
 
 test("Binding one argument to a rest parameter yields a single binding for that argument", (t) => {
   const args = kpobject(["x", 42]);
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindNamedArgs(args, params);
+  const argBindings = bindNamedArgs(args, params, restParam);
 
   t.deepEqual(argBindings, kpobject(["x", 42]));
 });
 
 test("Binding two arguments to a rest parameter yields bindings for both arguments", (t) => {
   const args = kpobject(["x", 42], ["y", 73]);
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindNamedArgs(args, params);
+  const argBindings = bindNamedArgs(args, params, restParam);
 
   t.deepEqual(argBindings, kpobject(["x", 42], ["y", 73]));
 });
 
-function param(name, defaultValue) {
-  return toKpobject({ name, defaultValue });
-}
+test("Binding two arguments to a typed rest parameter yields bindings for both arguments", (t) => {
+  const args = kpobject(["x", 42], ["y", 73]);
+  const params = [];
+  const restParam = toKpobject({ name: "rest", type: "number" });
+
+  const argBindings = bindNamedArgs(args, params, restParam);
+
+  t.deepEqual(argBindings, kpobject(["x", 42], ["y", 73]));
+});
+
+test("Binding an argument of the wrong type to a rest parameter yields a wrong argument type error", (t) => {
+  const args = kpobject(["x", 42], ["y", "foo"]);
+  const params = [];
+  const restParam = toKpobject({ name: "rest", type: "number" });
+
+  const argBindings = bindNamedArgs(args, params, restParam);
+
+  assertIsError(t, argBindings, "wrongArgumentType", {
+    parameter: "rest",
+    value: "foo",
+    expectedType: "number",
+  });
+});

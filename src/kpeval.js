@@ -268,26 +268,18 @@ function bindArgObjects(args, params, restParam) {
     const arg = args[i];
     if (i >= params.length) {
       if (hasRest) {
-        if (rest.has("type") && typeOf(arg.value) !== rest.get("type")) {
-          return kperror(
-            "wrongArgumentType",
-            ["parameter", rest.get("name")],
-            ["value", arg.value],
-            ["expectedType", rest.get("type")]
-          );
+        const typeError = checkType(arg, rest);
+        if (typeError) {
+          return typeError;
         }
       } else {
         break;
       }
     } else {
       const param = params[i];
-      if (param.has("type") && typeOf(arg.value) !== param.get("type")) {
-        return kperror(
-          "wrongArgumentType",
-          ["parameter", param.get("name")],
-          ["value", arg.value],
-          ["expectedType", param.get("type")]
-        );
+      const typeError = checkType(arg, param);
+      if (typeError) {
+        return typeError;
       }
     }
   }
@@ -297,15 +289,16 @@ function bindArgObjects(args, params, restParam) {
   return [...argsToBind.map((arg) => arg.value), ...defaults];
 }
 
-export function bindNamedArgs(args, params) {
+export function bindNamedArgs(args, params, restParam = null) {
   return bindNamedArgObjects(
     kpoMap(args, ([name, arg]) => [name, toArgObject(arg)]),
-    params.map(toParamObject)
+    params.map(toParamObject),
+    restParam === null ? null : toParamObject(restParam)
   );
 }
 
-function bindNamedArgObjects(args, params) {
-  const hasRest = params.some((param) => param.get("name") === "#rest");
+function bindNamedArgObjects(args, params, restParam) {
+  const hasRest = restParam !== null;
   const defaults = kpobject();
   for (const param of params) {
     if (param.get("name") === "#rest") {
@@ -339,6 +332,12 @@ function bindNamedArgObjects(args, params) {
       if (!arg.errorPassing && isError(arg.value)) {
         return arg.value;
       }
+      const param =
+        params.find((param) => param.get("name") === name) ?? restParam;
+      const typeError = checkType(arg, param);
+      if (typeError) {
+        return typeError;
+      }
       argsToBind.set(name, arg.value);
     }
   }
@@ -365,6 +364,17 @@ function toParamObject(param) {
     return kpobject(["name", param]);
   } else {
     return param;
+  }
+}
+
+function checkType(arg, param) {
+  if (param.has("type") && typeOf(arg.value) !== param.get("type")) {
+    return kperror(
+      "wrongArgumentType",
+      ["parameter", param.get("name")],
+      ["value", arg.value],
+      ["expectedType", param.get("type")]
+    );
   }
 }
 
