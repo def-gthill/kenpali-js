@@ -157,48 +157,53 @@ test("Binding an optional error value marked as error-passing yields an array co
 
 test("Binding no arguments to a rest parameter yields an empty array", (t) => {
   const args = [];
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindArgs(args, params);
+  const argBindings = bindArgs(args, params, restParam);
 
   t.deepEqual(argBindings, []);
 });
 
 test("Binding one argument to a rest parameter yields an array of that argument", (t) => {
   const args = [42];
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindArgs(args, params);
+  const argBindings = bindArgs(args, params, restParam);
 
   t.deepEqual(argBindings, [42]);
 });
 
 test("Binding two arguments to a rest parameter yields an array of those arguments", (t) => {
   const args = [42, 73];
-  const params = ["#rest"];
+  const params = [];
+  const restParam = "rest";
 
-  const argBindings = bindArgs(args, params);
+  const argBindings = bindArgs(args, params, restParam);
 
   t.deepEqual(argBindings, [42, 73]);
 });
 
 test("Binding two arguments to a typed rest parameter yields an array of those arguments", (t) => {
   const args = [42, 73];
-  const params = [toKpobject({ name: "#rest", type: "number" })];
+  const params = [];
+  const restParam = toKpobject({ name: "rest", type: "number" });
 
-  const argBindings = bindArgs(args, params);
+  const argBindings = bindArgs(args, params, restParam);
 
   t.deepEqual(argBindings, [42, 73]);
 });
 
 test("Binding an argument of the wrong type to a rest parameter yields a wrong argument type error", (t) => {
   const args = [42, "foo"];
-  const params = [toKpobject({ name: "#rest", type: "number" })];
+  const params = [];
+  const restParam = toKpobject({ name: "rest", type: "number" });
 
-  const argBindings = bindArgs(args, params);
+  const argBindings = bindArgs(args, params, restParam);
 
   assertIsError(t, argBindings, "wrongArgumentType", {
-    parameter: "#rest",
+    parameter: "rest",
     value: "foo",
     expectedType: "number",
   });

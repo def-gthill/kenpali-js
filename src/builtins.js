@@ -3,46 +3,74 @@ import { callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
-  builtin("plus", [{ name: "#rest", type: "number" }], [], function (args) {
-    return args.reduce((acc, value) => acc + value, 0);
-  }),
-  builtin("negative", [{ name: "x", type: "number" }], [], function ([x]) {
-    return -x;
-  }),
-  builtin("times", ["#rest"], [], function (args) {
-    return args.reduce((acc, value) => acc * value, 1);
-  }),
-  builtin("oneOver", ["x"], [], function ([x]) {
-    return 1 / x;
-  }),
-  builtin("divideWithRemainder", ["a", "b"], [], function ([a, b]) {
-    return kpobject(
-      ["quotient", Math.floor(a / b)],
-      ["remainder", ((a % b) + b) % b]
-    );
-  }),
-  builtin("join", ["#rest"], [], function (args) {
-    return args.join("");
-  }),
-  builtin("equals", ["a", "b"], [], function ([a, b]) {
+  builtin(
+    "plus",
+    { restParam: { name: "rest", type: "number" } },
+    function (args) {
+      return args.reduce((acc, value) => acc + value, 0);
+    }
+  ),
+  builtin(
+    "negative",
+    { params: [{ name: "x", type: "number" }] },
+    function ([x]) {
+      return -x;
+    }
+  ),
+  builtin(
+    "times",
+    { restParam: { name: "rest", type: "number" } },
+    function (args) {
+      return args.reduce((acc, value) => acc * value, 1);
+    }
+  ),
+  builtin(
+    "oneOver",
+    { params: [{ name: "x", type: "number" }] },
+    function ([x]) {
+      return 1 / x;
+    }
+  ),
+  builtin(
+    "divideWithRemainder",
+    {
+      params: [
+        { name: "a", type: "number" },
+        { name: "b", type: "number" },
+      ],
+    },
+    function ([a, b]) {
+      return kpobject(
+        ["quotient", Math.floor(a / b)],
+        ["remainder", ((a % b) + b) % b]
+      );
+    }
+  ),
+  builtin(
+    "join",
+    { restParam: { name: "rest", type: "string" } },
+    function (args) {
+      return args.join("");
+    }
+  ),
+  builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
-  builtin("isLessThan", ["a", "b"], [], function ([a, b]) {
+  builtin("isLessThan", { params: ["a", "b"] }, function ([a, b]) {
     return isLessThan(a, b);
   }),
-  builtin("typeOf", ["value"], [], function ([value]) {
+  builtin("typeOf", { params: ["value"] }, function ([value]) {
     return typeOf(value);
   }),
-  builtin("toString", ["value"], [], function ([value]) {
+  builtin("toString", { params: ["value"] }, function ([value]) {
     return toString(value);
   }),
-  builtin("toNumber", ["value"], [], function ([value]) {
+  builtin("toNumber", { params: ["value"] }, function ([value]) {
     return parseFloat(value);
   }),
   builtin(
     "if",
-    ["condition"],
-    ["then", "else"],
+    { params: ["condition"], namedParams: ["then", "else"] },
     function ([condition], namedArgs) {
       if (condition) {
         return namedArgs.get("then");
@@ -51,7 +79,7 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin("repeat", ["start", "step"], [], function ([start, step]) {
+  builtin("repeat", { params: ["start", "step"] }, function ([start, step]) {
     let current = start;
     for (let i = 0; i < 1000; i++) {
       const stepResult = callOnValues(step, [current], kpobject());
@@ -67,25 +95,29 @@ const rawBuiltins = [
       ["currentValue", current]
     );
   }),
-  builtin("at", ["collection", "index"], [], function ([collection, index]) {
-    if (isArray(collection)) {
-      return collection[index - 1];
-    } else if (isObject(collection)) {
-      return collection.get(index);
-    } else {
-      return kperror(
-        "wrongArgumentType",
-        ["function", "at"],
-        ["parameter", "collection"],
-        ["value", collection],
-        ["expectedType", "array or object"]
-      );
+  builtin(
+    "at",
+    { params: ["collection", "index"] },
+    function ([collection, index]) {
+      if (isArray(collection)) {
+        return collection[index - 1];
+      } else if (isObject(collection)) {
+        return collection.get(index);
+      } else {
+        return kperror(
+          "wrongArgumentType",
+          ["function", "at"],
+          ["parameter", "collection"],
+          ["value", collection],
+          ["expectedType", "array or object"]
+        );
+      }
     }
-  }),
-  builtin("length", ["array"], [], function ([array]) {
+  ),
+  builtin("length", { params: ["array"] }, function ([array]) {
     return array.length;
   }),
-  builtin("build", ["start", "step"], [], function ([start, step]) {
+  builtin("build", { params: ["start", "step"] }, function ([start, step]) {
     const result = [];
     let current = start;
     for (let i = 0; i < 1000; i++) {
@@ -122,10 +154,11 @@ const rawBuiltins = [
   }),
 ];
 
-function builtin(name, params, namedParams, f) {
+function builtin(name, paramSpec, f) {
   f.builtinName = name;
-  f.params = params;
-  f.namedParams = namedParams;
+  for (const property in paramSpec) {
+    f[property] = paramSpec[property];
+  }
   return f;
 }
 

@@ -170,13 +170,14 @@ export function callOnValues(f, args, namedArgs) {
       kpoMerge(f.get("closure"), paramBindings, namedParamBindings)
     );
   } else if (typeof f === "function") {
-    if ("params" in f) {
-      const params = f.params.map(paramToKpValue);
-      const namedParams = f.namedParams.map(paramToKpValue);
-      const argValues = bindArgs(args, params);
+    if ("builtinName" in f) {
+      const params = (f.params ?? []).map(paramToKpValue);
+      const restParam = f.restParam ? paramToKpValue(f.restParam) : null;
+      const argValues = bindArgs(args, params, restParam);
       if (isError(argValues)) {
         return argValues;
       }
+      const namedParams = (f.namedParams ?? []).map(paramToKpValue);
       const namedArgValues = bindNamedArgs(namedArgs, namedParams);
       if (isError(namedArgValues)) {
         return namedArgValues;
@@ -221,20 +222,22 @@ export function callOnValues(f, args, namedArgs) {
   }
 }
 
-export function bindArgs(args, params) {
-  return bindArgObjects(args.map(toArgObject), params.map(toParamObject));
+export function bindArgs(args, params, restParam = null) {
+  return bindArgObjects(
+    args.map(toArgObject),
+    params.map(toParamObject),
+    restParam === null ? null : toParamObject(restParam)
+  );
 }
 
-function bindArgObjects(args, params) {
-  const hasRest = params.at(-1)?.get("name") === "#rest";
+function bindArgObjects(args, params, restParam) {
+  const hasRest = restParam !== null;
+  const rest = restParam;
   let numRequiredParams = params.findIndex((param) =>
     param.has("defaultValue")
   );
   if (numRequiredParams === -1) {
     numRequiredParams = params.length;
-    if (hasRest) {
-      numRequiredParams -= 1;
-    }
   }
   if (args.length < numRequiredParams) {
     return kperror("missingArgument", [
@@ -265,7 +268,6 @@ function bindArgObjects(args, params) {
     const arg = args[i];
     if (i >= params.length) {
       if (hasRest) {
-        const rest = params.at(-1);
         if (rest.has("type") && typeOf(arg.value) !== rest.get("type")) {
           return kperror(
             "wrongArgumentType",
