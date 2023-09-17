@@ -255,7 +255,7 @@ function isFunction(value) {
   return isBuiltin(value) || isGiven(value);
 }
 
-function toString(value) {
+export function toString(value) {
   if (isArray(value)) {
     return "[" + value.map(toString).join(", ") + "]";
   } else if (isObject(value)) {

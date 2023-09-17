@@ -1,5 +1,5 @@
-import fs from "fs";
 import { builtins, isError, typeOf } from "./builtins.js";
+import { core as coreCode } from "./core.js";
 import { array, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, {
@@ -53,7 +53,8 @@ let core = null;
 
 function loadCore(names) {
   if (!core) {
-    const code = fs.readFileSync("../kenpali/core.kpc", { encoding: "utf-8" });
+    // const code = fs.readFileSync("../kenpali/core.kpc", { encoding: "utf-8" });
+    const code = coreCode;
     const ast = kpparse(code + "null");
     core = kpoMap(ast.defining, ([name, f]) => [
       name,

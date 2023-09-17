@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A minimalistic programming language for scripting applications",
   "main": "index.js",
+  "types": "index.d.ts",
   "type": "module",
   "scripts": {
     "test": "ava"
