@@ -59,6 +59,23 @@ const rawBuiltins = [
   builtin("isLessThan", { params: ["a", "b"] }, function ([a, b]) {
     return isLessThan(a, b);
   }),
+  builtin(
+    "and",
+    { restParam: [{ name: "rest", type: "boolean" }] },
+    function (args) {
+      return args.reduce((acc, value) => acc && value, true);
+    }
+  ),
+  builtin(
+    "or",
+    { restParam: [{ name: "rest", type: "boolean" }] },
+    function (args) {
+      return args.reduce((acc, value) => acc || value, false);
+    }
+  ),
+  builtin("not", { params: [{ name: "x", type: "boolean" }] }, function ([x]) {
+    return !x;
+  }),
   builtin("typeOf", { params: ["value"] }, function ([value]) {
     return typeOf(value);
   }),
@@ -100,6 +117,15 @@ const rawBuiltins = [
     { params: ["collection", "index"] },
     function ([collection, index]) {
       if (isArray(collection)) {
+        if (index < 1 || index > collection.length) {
+          return kperror(
+            "indexOutOfBounds",
+            ["function", "at"],
+            ["value", collection],
+            ["length", collection.length],
+            ["index", index]
+          );
+        }
         return collection[index - 1];
       } else if (isObject(collection)) {
         return collection.get(index);
@@ -138,11 +164,11 @@ const rawBuiltins = [
           ["key", "next"]
         );
       }
-      const next = stepResult.get("next");
-      result.push(stepResult.get("out") ?? next);
       if (!stepResult.get("while")) {
         return result;
       }
+      const next = stepResult.get("next");
+      result.push(stepResult.get("out") ?? next);
       current = next;
     }
     return kperror(
