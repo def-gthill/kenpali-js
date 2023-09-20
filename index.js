@@ -1,5 +1,6 @@
 import { toString } from "./src/builtins";
-import kpeval from "./src/kpeval";
+import kpeval, { callOnValues } from "./src/kpeval";
+import kpobject from "./src/kpobject";
 import kpparse from "./src/kpparse";
 
-export { kpeval, kpparse, toString };
+export { callOnValues, kpeval, kpobject, kpparse, toString };
