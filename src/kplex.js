@@ -34,6 +34,7 @@ const tokenSpec = [
   ["NAME", "[A-Za-z][A-Za-z0-9]*"],
   ["NEWLINE", r`\r\n|\r|\n`],
   ["WHITESPACE", r`[ \t]+`],
+  ["COMMENT", r`//[^\r\n]*(\r\n|\r|\n)?`],
   ["INVALID", "."],
 ];
 
@@ -67,7 +68,7 @@ export default function* kplex(code) {
     } else if (kind === "STRING") {
       kind = "LITERAL";
       value = JSON.parse(lastText);
-    } else if (kind === "NEWLINE") {
+    } else if (kind === "NEWLINE" || kind === "COMMENT") {
       lineStart = mo.index + text.length;
       lineNum += 1;
       continue;
