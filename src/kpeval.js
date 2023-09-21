@@ -68,12 +68,12 @@ function evalWithBuiltins(expression, names) {
   if ("literal" in expression) {
     return expression.literal;
   } else if ("array" in expression) {
-    return expression.array.map((element) => kpeval(element, names));
+    return expression.array.map((element) => evalWithBuiltins(element, names));
   } else if ("object" in expression) {
     return kpobject(
       ...expression.object.map(([key, value]) => [
-        typeof key === "string" ? key : kpeval(key, names),
-        kpeval(value, names),
+        typeof key === "string" ? key : evalWithBuiltins(key, names),
+        evalWithBuiltins(value, names),
       ])
     );
   } else if ("name" in expression) {
@@ -82,7 +82,9 @@ function evalWithBuiltins(expression, names) {
     }
     const binding = names.get(expression.name);
     if (typeof binding === "object" && "expression" in binding) {
-      return kpeval(binding.expression, binding.context);
+      const result = evalWithBuiltins(binding.expression, binding.context);
+      names.set(expression.name, result);
+      return result;
     } else {
       return binding;
     }
@@ -95,7 +97,7 @@ function evalWithBuiltins(expression, names) {
     for (const [_, value] of localNamesWithContext) {
       value.context = combinedNames;
     }
-    return kpeval(expression.result, combinedNames);
+    return evalWithBuiltins(expression.result, combinedNames);
   } else if ("given" in expression) {
     return kpobject(
       ["#given", paramSpecToKpValue(expression.given)],
@@ -103,7 +105,7 @@ function evalWithBuiltins(expression, names) {
       ["closure", names]
     );
   } else if ("calling" in expression) {
-    const f = kpeval(expression.calling, names);
+    const f = evalWithBuiltins(expression.calling, names);
     const args = expression.args ?? [];
     const namedArgs = expression.namedArgs ?? kpobject();
     return callOnExpressions(f, args, namedArgs, names);
@@ -144,7 +146,7 @@ function evalArg(arg, names) {
   } else if ("errorPassing" in arg) {
     return kpobject(["#errorPassing", evalArg(arg.errorPassing, names)]);
   } else {
-    return kpeval(arg, names);
+    return evalWithBuiltins(arg, names);
   }
 }
 
@@ -381,7 +383,7 @@ function checkType(arg, param) {
 
 function quote(expression, names) {
   if ("unquote" in expression) {
-    return toKpobject(literal(kpeval(expression.unquote, names)));
+    return toKpobject(literal(evalWithBuiltins(expression.unquote, names)));
   } else if ("array" in expression) {
     return toKpobject(
       array(...expression.array.map((element) => quote(element, names)))
