@@ -97,20 +97,7 @@ const rawBuiltins = [
     }
   ),
   builtin("repeat", { params: ["start", "step"] }, function ([start, step]) {
-    let current = start;
-    for (let i = 0; i < 1000; i++) {
-      const stepResult = callOnValues(step, [current], kpobject());
-      const next = stepResult.get("next");
-      if (!stepResult.get("while")) {
-        return current;
-      }
-      current = next;
-    }
-    return kperror(
-      "tooManyIterations",
-      ["function", "repeat"],
-      ["currentValue", current]
-    );
+    return loop("repeat", start, step, () => {});
   }),
   builtin(
     "at",
@@ -145,38 +132,14 @@ const rawBuiltins = [
   }),
   builtin("build", { params: ["start", "step"] }, function ([start, step]) {
     const result = [];
-    let current = start;
-    for (let i = 0; i < 1000; i++) {
-      const stepResult = callOnValues(step, [current], kpobject());
-      if (!stepResult.has("while")) {
-        return kperror(
-          "requiredKeyMissing",
-          ["function", "build"],
-          ["object", stepResult],
-          ["key", "while"]
-        );
-      }
-      if (!stepResult.has("next")) {
-        return kperror(
-          "requiredKeyMissing",
-          ["function", "build"],
-          ["object", stepResult],
-          ["key", "next"]
-        );
-      }
-      if (!stepResult.get("while")) {
-        return result;
-      }
-      const next = stepResult.get("next");
-      result.push(stepResult.get("out") ?? next);
-      current = next;
+    const loopResult = loop("build", start, step, (stepResult) => {
+      result.push(stepResult.get("out") ?? stepResult.get("next"));
+    });
+    if (isError(loopResult)) {
+      return loopResult;
+    } else {
+      return result;
     }
-    return kperror(
-      "tooManyIterations",
-      ["function", "build"],
-      ["currentValue", current],
-      ["lastValuesOfResult", result.slice(-5)]
-    );
   }),
 ];
 
@@ -249,6 +212,10 @@ export function typeOf(value) {
   }
 }
 
+export function isBoolean(value) {
+  return typeof value === "boolean";
+}
+
 function isNumber(value) {
   return typeof value === "number";
 }
@@ -301,6 +268,69 @@ export function toString(value) {
 
 function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
+}
+
+function loop(functionName, start, step, callback) {
+  let current = start;
+  for (let i = 0; i < 1000; i++) {
+    const stepResult = callOnValues(step, [current], kpobject());
+    const whileCondition = stepResult.has("while")
+      ? stepResult.get("while")
+      : true;
+    if (!isBoolean(whileCondition)) {
+      return kperror(
+        "wrongElementType",
+        ["function", functionName],
+        ["object", stepResult],
+        ["key", "while"],
+        ["value", whileCondition],
+        ["expectedType", "boolean"]
+      );
+    }
+    if (!whileCondition) {
+      return current;
+    }
+    const continueIf = stepResult.has("continueIf")
+      ? stepResult.get("continueIf")
+      : true;
+    if (!isBoolean(continueIf)) {
+      return kperror(
+        "wrongElementType",
+        ["function", functionName],
+        ["object", stepResult],
+        ["key", "continueIf"],
+        ["value", continueIf],
+        ["expectedType", "boolean"]
+      );
+    }
+    if (!stepResult.has("next")) {
+      return kperror(
+        "requiredKeyMissing",
+        ["function", functionName],
+        ["object", stepResult],
+        ["key", "next"]
+      );
+    }
+    callback(stepResult);
+    const next = stepResult.get("next");
+    if (isError(next)) {
+      return kperror(
+        "errorInIteration",
+        ["function", functionName],
+        ["currentValue", current],
+        ["error", next]
+      );
+    }
+    if (!continueIf) {
+      return next;
+    }
+    current = next;
+  }
+  return kperror(
+    "tooManyIterations",
+    ["function", functionName],
+    ["currentValue", current]
+  );
 }
 
 export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
