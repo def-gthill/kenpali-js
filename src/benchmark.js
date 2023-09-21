@@ -5,6 +5,10 @@ const hello = `join("Hello", ", ", "world!")`;
 const repeatedReference = `array = 1 | to(100);
 plus(length(array), length(array), length(array))
 `;
+const repeatedGiven = `array = 1 | to(100);
+myLength = (a) => length(a);
+plus(myLength(array), myLength(array), myLength(array))
+`;
 const naiveFib = `
 fib = (n) => if(
   n | isAtMost(2),
@@ -17,6 +21,12 @@ fib(2)
 const benchmarks = [
   { name: "Hello", code: hello, times: 200000 },
   { name: "Repeated Reference", code: repeatedReference, times: 400 },
+  // This is fine now, but it may blow up when we implement lazy arguments.
+  {
+    name: "Repeated Reference in Given",
+    code: repeatedGiven,
+    times: 400,
+  },
   // This doesn't work yet because function calls force-evaluate their arguments!
   // { name: "Naive Fibonacci", code: naiveFib, times: 1 },
 ];
