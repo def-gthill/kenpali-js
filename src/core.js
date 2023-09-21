@@ -29,7 +29,7 @@ forEach = (array, transform) => (
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: transform(array @ i ?)
+            out: transform(array @ i)
         }
     )
 );
