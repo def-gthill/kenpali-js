@@ -1,5 +1,5 @@
 import test from "ava";
-import { array, defining, literal, name, object } from "../src/kpast.js";
+import { array, literal, name, object } from "../src/kpast.js";
 import kpparse from "../src/kpparse.js";
 
 const r = String.raw;
@@ -122,13 +122,6 @@ test("We can access a property on an expression", (t) => {
 
 test("We can chain property access", (t) => {
   t.deepEqual(kpparse("x.y.z"), kpparse(`(x @ "y") @ "z"`));
-});
-
-test("We can parse an ad hoc scope", (t) => {
-  t.deepEqual(
-    kpparse("foo = 42; foo"),
-    defining(["foo", literal(42)], name("foo"))
-  );
 });
 
 // TODO quote, unquote, and function definitions

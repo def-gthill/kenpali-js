@@ -75,15 +75,51 @@ function parseScope(tokens, start) {
       parsePipeline,
     ],
     (definitions, result) =>
-      definitions.length === 0 ? result : defining(...definitions, result)
+      definitions.length === 0
+        ? result
+        : definingPatterns(...definitions, result)
   )(tokens, start);
 }
 
 function parseNameDefinition(tokens, start) {
   return parseAllOf(
-    [parseName, consume("EQUALS", "missingEqualsInDefinition"), parsePipeline],
-    (name, value) => [name.name, value]
+    [
+      parseAnyOf(parseName, parseArray),
+      consume("EQUALS", "missingEqualsInDefinition"),
+      parsePipeline,
+    ],
+    (pattern, value) => [pattern, value]
   )(tokens, start);
+}
+
+function definingPatterns(...args) {
+  const patterns = args.slice(0, -1);
+  const result = args.at(-1);
+
+  const names = [];
+  let arrayNumber = 1;
+
+  function resolvePattern(pattern, value) {
+    if ("name" in pattern) {
+      names.push([pattern.name, value]);
+    } else if ("array" in pattern) {
+      const tempName = `#array${arrayNumber}`;
+      arrayNumber++;
+      names.push([tempName, value]);
+      pattern.array.forEach((subpattern, i) => {
+        resolvePattern(
+          subpattern,
+          calling(name("at"), [name(tempName), literal(i + 1)])
+        );
+      });
+    }
+  }
+
+  for (const [pattern, value] of patterns) {
+    resolvePattern(pattern, value);
+  }
+
+  return defining(...names, result);
 }
 
 function parsePipeline(tokens, start) {
