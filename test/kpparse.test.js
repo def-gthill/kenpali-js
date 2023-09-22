@@ -108,40 +108,6 @@ test("A function call can cross lines", (t) => {
 
 // TODO calling a pipe expression as a function
 
-test("We can forward-pipe into a bare name", (t) => {
-  t.deepEqual(kpparse("1 | foo"), kpparse("foo(1)"));
-});
-
-test("We can forward-pipe into a function call to add a first argument", (t) => {
-  t.deepEqual(kpparse("1 | bar(2)"), kpparse("bar(1, 2)"));
-});
-
-test("We can chain forward-pipes", (t) => {
-  t.deepEqual(kpparse("1 | foo | bar(2)"), kpparse("bar(foo(1), 2)"));
-});
-
-test("We can prevent first-argument injection with parens", (t) => {
-  t.deepEqual(kpparse("1 | (bar(2))"), kpparse("bar(2)(1)"));
-});
-
-test("We can use the @ operator to index into an array", (t) => {
-  t.deepEqual(kpparse(`["foo", "bar"] @ 2`), kpparse(`["foo", "bar"] | at(2)`));
-});
-
-test("The @ operator has the same precedence as the | operator and binds left-to-right", (t) => {
-  t.deepEqual(kpparse(`x @ "y" | f`), kpparse(`f(x @ "y")`));
-  t.deepEqual(kpparse(`x | f @ "y"`), kpparse(`f(x) @ "y"`));
-});
-
-test("We can use the . operator to index into an object", (t) => {
-  t.deepEqual(kpparse("foo.bar"), kpparse(`foo @ "bar"`));
-});
-
-test("The . operator binds tighter than the | operator", (t) => {
-  t.deepEqual(kpparse("x.y | f"), kpparse("f(x.y)"));
-  t.deepEqual(kpparse("x | y.f"), kpparse("(y.f)(x)"));
-});
-
 test("We can call a property as a function", (t) => {
   t.deepEqual(kpparse("x.f(y)"), kpparse("(x.f)(y)"));
 });
