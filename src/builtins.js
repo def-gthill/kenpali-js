@@ -71,11 +71,16 @@ const rawBuiltins = [
       return true;
     }
   ),
-  builtin(
+  lazyBuiltin(
     "or",
     { restParam: { name: "rest", type: "boolean" } },
-    function (args) {
-      return args.reduce((acc, value) => acc || value, false);
+    function (argGetter) {
+      for (let i = 0; i < argGetter.numArgs; i++) {
+        if (argGetter.arg(i)) {
+          return true;
+        }
+      }
+      return false;
     }
   ),
   builtin("not", { params: [{ name: "x", type: "boolean" }] }, function ([x]) {
