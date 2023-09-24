@@ -59,16 +59,21 @@ const rawBuiltins = [
   builtin("isLessThan", { params: ["a", "b"] }, function ([a, b]) {
     return isLessThan(a, b);
   }),
-  builtin(
+  lazyBuiltin(
     "and",
-    { restParam: [{ name: "rest", type: "boolean" }] },
-    function (args) {
-      return args.reduce((acc, value) => acc && value, true);
+    { restParam: { name: "rest", type: "boolean" } },
+    function (argGetter) {
+      for (let i = 0; i < argGetter.numArgs; i++) {
+        if (!argGetter.arg(i)) {
+          return false;
+        }
+      }
+      return true;
     }
   ),
   builtin(
     "or",
-    { restParam: [{ name: "rest", type: "boolean" }] },
+    { restParam: { name: "rest", type: "boolean" } },
     function (args) {
       return args.reduce((acc, value) => acc || value, false);
     }
@@ -145,6 +150,15 @@ const rawBuiltins = [
 
 function builtin(name, paramSpec, f) {
   f.builtinName = name;
+  for (const property in paramSpec) {
+    f[property] = paramSpec[property];
+  }
+  return f;
+}
+
+function lazyBuiltin(name, paramSpec, f) {
+  f.builtinName = name;
+  f.isLazy = true;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
