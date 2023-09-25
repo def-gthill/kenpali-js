@@ -95,17 +95,6 @@ const rawBuiltins = [
   builtin("toNumber", { params: ["value"] }, function ([value]) {
     return parseFloat(value);
   }),
-  // builtin(
-  //   "if",
-  //   { params: ["condition"], namedParams: ["then", "else"] },
-  //   function ([condition], namedArgs) {
-  //     if (condition) {
-  //       return namedArgs.get("then");
-  //     } else {
-  //       return namedArgs.get("else");
-  //     }
-  //   }
-  // ),
   lazyBuiltin(
     "if",
     { params: ["condition"], namedParams: ["then", "else"] },
@@ -164,7 +153,7 @@ const rawBuiltins = [
   }),
 ];
 
-function builtin(name, paramSpec, f) {
+export function builtin(name, paramSpec, f) {
   f.builtinName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];

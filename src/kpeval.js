@@ -7,6 +7,7 @@ import kpobject, {
   kpoFilter,
   kpoMap,
   kpoMerge,
+  toJsObject,
   toKpobject,
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -119,7 +120,9 @@ function evalWithBuiltins(expression, names) {
 function paramSpecToKpValue(paramSpec) {
   return {
     params: (paramSpec.params ?? []).map(paramToKpValue),
+    restParam: mapNullable(paramSpec.restParam, paramToKpValue),
     namedParams: (paramSpec.namedParams ?? []).map(paramToKpValue),
+    namedRestParam: mapNullable(paramSpec.namedRestParam, paramToKpValue),
   };
 }
 
@@ -183,19 +186,23 @@ export function callOnValues(f, args, namedArgs) {
 }
 
 function callGiven(f, args, namedArgs) {
-  const params = f.get("#given").params;
-  const namedParams = f.get("#given").namedParams;
-  const argValues = bindArgs(args, params);
+  const allParams = paramsFromGiven(f);
+  const paramObjects = paramsToKpobjects(normalizeAllParams(allParams));
+  const argValues = bindArgs(args, paramObjects.params, paramObjects.restParam);
   if (isError(argValues)) {
     return argValues;
   }
   const paramBindings = kpobject(
-    ...params.map((param, i) => [
+    ...allParams.params.map((param, i) => [
       toParamObject(param).get("name"),
       argValues[i],
     ])
   );
-  const namedParamBindings = bindNamedArgs(namedArgs, namedParams);
+  const namedParamBindings = bindNamedArgs(
+    namedArgs,
+    paramObjects.namedParams,
+    paramObjects.namedRestParam
+  );
   if (isError(namedParamBindings)) {
     return namedParamBindings;
   }
@@ -205,15 +212,22 @@ function callGiven(f, args, namedArgs) {
   );
 }
 
+export function paramsFromGiven(f) {
+  return f.get("#given");
+}
+
 function callBuiltin(f, args, namedArgs) {
-  const params = (f.params ?? []).map(paramToKpValue);
-  const restParam = f.restParam ? paramToKpValue(f.restParam) : null;
-  const argValues = bindArgs(args, params, restParam);
+  const allParams = paramsFromBuiltin(f);
+  const paramObjects = paramsToKpobjects(normalizeAllParams(allParams));
+  const argValues = bindArgs(args, paramObjects.params, paramObjects.restParam);
   if (isError(argValues)) {
     return argValues;
   }
-  const namedParams = (f.namedParams ?? []).map(paramToKpValue);
-  const namedArgValues = bindNamedArgs(namedArgs, namedParams);
+  const namedArgValues = bindNamedArgs(
+    namedArgs,
+    paramObjects.namedParams,
+    paramObjects.namedRestParam
+  );
   if (isError(namedArgValues)) {
     return namedArgValues;
   }
@@ -221,10 +235,11 @@ function callBuiltin(f, args, namedArgs) {
 }
 
 function callLazyBuiltin(f, args, namedArgs, names) {
+  const allParams = paramsFromBuiltin(f);
   const argObjects = args.map(toArgObject);
-  const params = (f.params ?? []).map(toParamObject).map(paramToKpValue);
-  const restParam = f.restParam
-    ? paramToKpValue(toParamObject(f.restParam))
+  const params = allParams.params.map(toParamObject).map(paramToKpValue);
+  const restParam = allParams.restParam
+    ? paramToKpValue(toParamObject(allParams.restParam))
     : null;
   const boundArgs = bindArgObjects(argObjects, params, restParam);
   if (isError(boundArgs)) {
@@ -234,11 +249,11 @@ function callLazyBuiltin(f, args, namedArgs, names) {
     name,
     toArgObject(arg),
   ]);
-  const namedParams = (f.namedParams ?? [])
+  const namedParams = allParams.namedParams
     .map(toParamObject)
     .map(paramToKpValue);
-  const namedRestParam = f.namedRestParam
-    ? paramToKpValue(toParamObject(f.namedRestParam))
+  const namedRestParam = allParams.namedRestParam
+    ? paramToKpValue(toParamObject(allParams.namedRestParam))
     : null;
   const boundNamedArgs = bindNamedArgObjects(
     namedArgObjects,
@@ -267,6 +282,15 @@ function callLazyBuiltin(f, args, namedArgs, names) {
       throw error;
     }
   }
+}
+
+export function paramsFromBuiltin(f) {
+  return {
+    params: f.params ?? [],
+    restParam: f.restParam ?? null,
+    namedParams: f.namedParams ?? [],
+    namedRestParam: f.namedRestParam ?? null,
+  };
 }
 
 class ArgGetter {
@@ -304,10 +328,8 @@ class ArgGetter {
   }
 }
 
-export function bindArgs(args, params, restParam = null) {
+export function bindArgs(args, paramObjects, restParamObject) {
   const argObjects = args.map(toArgObject);
-  const paramObjects = params.map(toParamObject);
-  const restParamObject = restParam === null ? null : toParamObject(restParam);
   const result = bindArgObjects(argObjects, paramObjects, restParamObject);
   if (isError(result)) {
     return result;
@@ -392,10 +414,8 @@ function validateArg(arg, params, restParam, i) {
   return null;
 }
 
-export function bindNamedArgs(args, params, restParam = null) {
+export function bindNamedArgs(args, paramObjects, restParamObject) {
   const argObjects = kpoMap(args, ([name, arg]) => [name, toArgObject(arg)]);
-  const paramObjects = params.map(toParamObject);
-  const restParamObject = restParam === null ? null : toParamObject(restParam);
   const result = bindNamedArgObjects(argObjects, paramObjects, restParamObject);
   if (isError(result)) {
     return result;
@@ -483,8 +503,32 @@ function toArgObject(arg) {
 }
 
 function toParamObject(param) {
+  return toKpobject(normalizeParam(param));
+}
+
+function paramsToKpobjects(params) {
+  return {
+    params: params.params.map(toKpobject),
+    restParam: mapNullable(params.restParam, toKpobject),
+    namedParams: params.namedParams.map(toKpobject),
+    namedRestParam: mapNullable(params.namedRestParam, toKpobject),
+  };
+}
+
+export function normalizeAllParams(params) {
+  return {
+    params: params.params.map(normalizeParam),
+    restParam: mapNullable(params.restParam, normalizeParam),
+    namedParams: params.namedParams.map(normalizeParam),
+    namedRestParam: mapNullable(params.namedRestParam, normalizeParam),
+  };
+}
+
+export function normalizeParam(param) {
   if (typeof param === "string") {
-    return kpobject(["name", param]);
+    return { name: param };
+  } else if (param instanceof Map) {
+    return toJsObject(param);
   } else {
     return param;
   }
@@ -538,4 +582,8 @@ function quote(expression, names) {
   } else {
     return toKpobject(expression);
   }
+}
+
+function mapNullable(nullable, f) {
+  return nullable === null || nullable === undefined ? null : f(nullable);
 }
