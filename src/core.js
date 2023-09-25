@@ -39,10 +39,9 @@ where = (array, condition) => (
             next = increment(i) | repeat(
                 (j) => (
                     {
-                        while: if(
+                        while: and(
                             j | isAtMost(length(array)),
-                            then: not(condition(array @ j)) !,
-                            else: false,
+                            not(condition(array @ j)),
                         ),
                         next: increment(j),
                     }

@@ -95,14 +95,25 @@ const rawBuiltins = [
   builtin("toNumber", { params: ["value"] }, function ([value]) {
     return parseFloat(value);
   }),
-  builtin(
+  // builtin(
+  //   "if",
+  //   { params: ["condition"], namedParams: ["then", "else"] },
+  //   function ([condition], namedArgs) {
+  //     if (condition) {
+  //       return namedArgs.get("then");
+  //     } else {
+  //       return namedArgs.get("else");
+  //     }
+  //   }
+  // ),
+  lazyBuiltin(
     "if",
     { params: ["condition"], namedParams: ["then", "else"] },
-    function ([condition], namedArgs) {
-      if (condition) {
-        return namedArgs.get("then");
+    function (argGetter) {
+      if (argGetter.arg(0)) {
+        return argGetter.namedArg("then");
       } else {
-        return namedArgs.get("else");
+        return argGetter.namedArg("else");
       }
     }
   ),

@@ -124,7 +124,9 @@ function paramSpecToKpValue(paramSpec) {
 }
 
 function paramToKpValue(param) {
-  if (typeof param === "object") {
+  if (param instanceof Map) {
+    return param;
+  } else if (typeof param === "object") {
     return toKpobject(param);
   } else {
     return param;
@@ -220,14 +222,44 @@ function callBuiltin(f, args, namedArgs) {
 
 function callLazyBuiltin(f, args, namedArgs, names) {
   const argObjects = args.map(toArgObject);
-  const params = (f.params ?? []).map(paramToKpValue);
-  const restParam = f.restParam ? paramToKpValue(f.restParam) : null;
+  const params = (f.params ?? []).map(toParamObject).map(paramToKpValue);
+  const restParam = f.restParam
+    ? paramToKpValue(toParamObject(f.restParam))
+    : null;
   const boundArgs = bindArgObjects(argObjects, params, restParam);
   if (isError(boundArgs)) {
     return boundArgs;
   }
+  const namedArgObjects = kpoMap(namedArgs, ([name, arg]) => [
+    name,
+    toArgObject(arg),
+  ]);
+  const namedParams = (f.namedParams ?? [])
+    .map(toParamObject)
+    .map(paramToKpValue);
+  const namedRestParam = f.namedRestParam
+    ? paramToKpValue(toParamObject(f.namedRestParam))
+    : null;
+  const boundNamedArgs = bindNamedArgObjects(
+    namedArgObjects,
+    namedParams,
+    namedRestParam
+  );
+  if (isError(boundNamedArgs)) {
+    return boundNamedArgs;
+  }
   try {
-    return f(new ArgGetter(boundArgs, params, restParam, names));
+    return f(
+      new ArgGetter(
+        { args: boundArgs, params, restParam },
+        {
+          args: boundNamedArgs,
+          params: namedParams,
+          restParam: namedRestParam,
+        },
+        names
+      )
+    );
   } catch (error) {
     if (isError(error)) {
       return error;
@@ -238,26 +270,36 @@ function callLazyBuiltin(f, args, namedArgs, names) {
 }
 
 class ArgGetter {
-  constructor(boundArgs, params, restParam, names) {
-    this.boundArgs = boundArgs;
-    this.params = params;
-    this.restParam = restParam;
+  constructor(positional, named, names) {
+    this.args = positional.args;
+    this.params = positional.params;
+    this.restParam = positional.restParam;
+
+    this.namedArgs = named.args;
+    this.namedParams = named.params;
+    this.namedRestParam = named.restParam;
+
     this.names = names;
 
-    this.numArgs = boundArgs.length;
+    this.numArgs = this.args.length;
   }
 
-  arg(i) {
-    const argValue = evalArg(this.boundArgs[i], this.names);
+  arg(index) {
+    const argValue = evalArg(this.args[index], this.names);
     const validationResult = validateArg(
       argValue,
       this.params,
       this.restParam,
-      i
+      index
     );
     if (isError(validationResult)) {
       throw validationResult;
     }
+    return argValue;
+  }
+
+  namedArg(name) {
+    const argValue = evalArg(this.namedArgs.get(name), this.names);
     return argValue;
   }
 }
@@ -351,11 +393,22 @@ function validateArg(arg, params, restParam, i) {
 }
 
 export function bindNamedArgs(args, params, restParam = null) {
-  return bindNamedArgObjects(
-    kpoMap(args, ([name, arg]) => [name, toArgObject(arg)]),
-    params.map(toParamObject),
-    restParam === null ? null : toParamObject(restParam)
+  const argObjects = kpoMap(args, ([name, arg]) => [name, toArgObject(arg)]);
+  const paramObjects = params.map(toParamObject);
+  const restParamObject = restParam === null ? null : toParamObject(restParam);
+  const result = bindNamedArgObjects(argObjects, paramObjects, restParamObject);
+  if (isError(result)) {
+    return result;
+  }
+  const validationResult = validateNamedArgObjects(
+    argObjects,
+    paramObjects,
+    restParamObject
   );
+  if (isError(validationResult)) {
+    return validationResult;
+  }
+  return result;
 }
 
 function bindNamedArgObjects(args, params, restParam) {
@@ -386,10 +439,6 @@ function bindNamedArgObjects(args, params, restParam) {
         );
       }
     }
-  }
-  const validationResult = validateNamedArgObjects(args, params, restParam);
-  if (isError(validationResult)) {
-    return validationResult;
   }
   const argsToBind = kpobject();
   for (const [name, arg] of kpoEntries(args)) {
