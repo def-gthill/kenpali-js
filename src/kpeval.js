@@ -226,7 +226,15 @@ function callLazyBuiltin(f, args, namedArgs, names) {
   if (isError(boundArgs)) {
     return boundArgs;
   }
-  return f(new ArgGetter(boundArgs, params, restParam, names));
+  try {
+    return f(new ArgGetter(boundArgs, params, restParam, names));
+  } catch (error) {
+    if (isError(error)) {
+      return error;
+    } else {
+      throw error;
+    }
+  }
 }
 
 class ArgGetter {
@@ -241,6 +249,15 @@ class ArgGetter {
 
   arg(i) {
     const argValue = evalArg(this.boundArgs[i], this.names);
+    const validationResult = validateArg(
+      argValue,
+      this.params,
+      this.restParam,
+      i
+    );
+    if (isError(validationResult)) {
+      throw validationResult;
+    }
     return argValue;
   }
 }
@@ -305,7 +322,8 @@ function bindArgObjects(args, params, restParam) {
 
 function validateArgObjects(args, params, restParam) {
   for (let i = 0; i < args.length; i++) {
-    const validationResult = validateArgObject(args, params, restParam, i);
+    const arg = args[i];
+    const validationResult = validateArg(arg.value, params, restParam, i);
     if (isError(validationResult)) {
       return validationResult;
     }
@@ -313,19 +331,18 @@ function validateArgObjects(args, params, restParam) {
   return null;
 }
 
-function validateArgObject(args, params, restParam, i) {
+function validateArg(arg, params, restParam, i) {
   const hasRest = restParam !== null;
-  const arg = args[i];
   if (i >= params.length) {
     if (hasRest) {
-      const typeError = checkType(arg, restParam);
+      const typeError = checkType_NEW(arg, restParam);
       if (typeError) {
         return typeError;
       }
     }
   } else {
     const param = params[i];
-    const typeError = checkType(arg, param);
+    const typeError = checkType_NEW(arg, param);
     if (typeError) {
       return typeError;
     }
@@ -430,6 +447,17 @@ function checkType(arg, param) {
       "wrongArgumentType",
       ["parameter", param.get("name")],
       ["value", arg.value],
+      ["expectedType", param.get("type")]
+    );
+  }
+}
+
+function checkType_NEW(arg, param) {
+  if (param.has("type") && typeOf(arg) !== param.get("type")) {
+    return kperror(
+      "wrongArgumentType",
+      ["parameter", param.get("name")],
+      ["value", arg],
       ["expectedType", param.get("type")]
     );
   }
