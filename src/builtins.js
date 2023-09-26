@@ -63,8 +63,8 @@ const rawBuiltins = [
     "and",
     { restParam: { name: "rest", type: "boolean" } },
     function (argGetter) {
-      for (let i = 0; i < argGetter.numArgs; i++) {
-        if (!argGetter.arg(i)) {
+      for (let i = 0; i < argGetter.numRestArgs; i++) {
+        if (!argGetter.restArg(i)) {
           return false;
         }
       }
@@ -75,8 +75,8 @@ const rawBuiltins = [
     "or",
     { restParam: { name: "rest", type: "boolean" } },
     function (argGetter) {
-      for (let i = 0; i < argGetter.numArgs; i++) {
-        if (argGetter.arg(i)) {
+      for (let i = 0; i < argGetter.numRestArgs; i++) {
+        if (argGetter.restArg(i)) {
           return true;
         }
       }
@@ -99,10 +99,10 @@ const rawBuiltins = [
     "if",
     { params: ["condition"], namedParams: ["then", "else"] },
     function (argGetter) {
-      if (argGetter.arg(0)) {
-        return argGetter.namedArg("then");
+      if (argGetter.arg("condition")) {
+        return argGetter.arg("then");
       } else {
-        return argGetter.namedArg("else");
+        return argGetter.arg("else");
       }
     }
   ),
