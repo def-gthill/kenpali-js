@@ -42,7 +42,7 @@ export function toAst(expressionRaw) {
 }
 
 export default function kpeval(expression, names = kpobject()) {
-  const withCore = new Scope(builtins, loadCore(builtins));
+  const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
   return evalWithBuiltins(expression, withCustomNames);
 }
@@ -85,19 +85,15 @@ class Scope {
   }
 }
 
-let core = null;
+let coreScope = null;
 
-function loadCore(names) {
-  if (!core) {
-    // const code = fs.readFileSync("../kenpali/core.kpc", { encoding: "utf-8" });
+function loadCore(enclosingScope) {
+  if (!coreScope) {
     const code = coreCode;
     const ast = kpparse(code + "null");
-    core = kpoMap(ast.defining, ([name, f]) => [
-      name,
-      evalWithBuiltins(f, names),
-    ]);
+    coreScope = selfReferentialScope(enclosingScope, ast.defining);
   }
-  return core;
+  return coreScope;
 }
 
 function evalWithBuiltins(expression, names) {
@@ -127,15 +123,8 @@ function evalWithBuiltins(expression, names) {
       return binding;
     }
   } else if ("defining" in expression) {
-    const localNamesWithContext = kpoMap(
-      expression.defining,
-      ([name, value]) => [name, { expression: value }]
-    );
-    const combinedNames = new Scope(names, localNamesWithContext);
-    for (const [_, value] of localNamesWithContext) {
-      value.context = combinedNames;
-    }
-    return evalWithBuiltins(expression.result, combinedNames);
+    const scope = selfReferentialScope(names, expression.defining);
+    return evalWithBuiltins(expression.result, scope);
   } else if ("given" in expression) {
     return kpobject(
       ["#given", paramSpecToKpValue(expression.given)],
@@ -152,6 +141,18 @@ function evalWithBuiltins(expression, names) {
   } else {
     return kperror("notAnExpression", ["value", expression]);
   }
+}
+
+function selfReferentialScope(enclosingScope, localNames) {
+  const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
+    name,
+    { expression: value },
+  ]);
+  const scope = new Scope(enclosingScope, localNamesWithContext);
+  for (const [_, value] of localNamesWithContext) {
+    value.context = scope;
+  }
+  return scope;
 }
 
 function paramSpecToKpValue(paramSpec) {
@@ -246,7 +247,7 @@ function callGiven(f, allArgs, names) {
     return bindings;
   }
   const thunks = bindingsToThunks(paramObjects, bindings, names);
-  return kpeval(f.get("result"), new Scope(f.get("closure"), thunks));
+  return evalWithBuiltins(f.get("result"), new Scope(f.get("closure"), thunks));
 }
 
 export function paramsFromGiven(f) {
