@@ -42,12 +42,47 @@ export function toAst(expressionRaw) {
 }
 
 export default function kpeval(expression, names = kpobject()) {
-  const namesWithBuiltins = kpoMerge(builtins, names);
-  const namesWithCore = kpoMerge(
-    loadCore(namesWithBuiltins),
-    namesWithBuiltins
-  );
-  return evalWithBuiltins(expression, namesWithCore);
+  const withCore = new Scope(builtins, loadCore(builtins));
+  const withCustomNames = new Scope(withCore, names);
+  return evalWithBuiltins(expression, withCustomNames);
+}
+
+class Scope {
+  constructor(enclosingScope, localNames) {
+    this.enclosingScope = enclosingScope;
+    this.localNames = localNames;
+  }
+
+  [Symbol.iterator] = function* () {
+    for (const [name, value] of this.enclosingScope) {
+      if (!this.localNames.has(name)) {
+        yield [name, value];
+      }
+    }
+    for (const entry of this.localNames) {
+      yield entry;
+    }
+  };
+
+  has(key) {
+    return this.localNames.has(key) || this.enclosingScope.has(key);
+  }
+
+  get(key) {
+    if (this.localNames.has(key)) {
+      return this.localNames.get(key);
+    } else {
+      return this.enclosingScope.get(key);
+    }
+  }
+
+  set(key, value) {
+    if (this.localNames.has(key)) {
+      this.localNames.set(key, value);
+    } else {
+      this.enclosingScope.set(key, value);
+    }
+  }
 }
 
 let core = null;
@@ -96,7 +131,7 @@ function evalWithBuiltins(expression, names) {
       expression.defining,
       ([name, value]) => [name, { expression: value }]
     );
-    const combinedNames = kpoMerge(names, localNamesWithContext);
+    const combinedNames = new Scope(names, localNamesWithContext);
     for (const [_, value] of localNamesWithContext) {
       value.context = combinedNames;
     }
@@ -211,7 +246,7 @@ function callGiven(f, allArgs, names) {
     return bindings;
   }
   const thunks = bindingsToThunks(paramObjects, bindings, names);
-  return kpeval(f.get("result"), kpoMerge(f.get("closure"), thunks));
+  return kpeval(f.get("result"), new Scope(f.get("closure"), thunks));
 }
 
 export function paramsFromGiven(f) {
