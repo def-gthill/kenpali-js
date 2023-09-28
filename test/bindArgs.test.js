@@ -212,6 +212,33 @@ test("Binding one argument to a rest parameter yields a binding to an array cont
 //   });
 // });
 
+test("Binding one named argument to one named parameter yields one binding", (t) => {
+  const args = argObjects({ namedArgs: kpobject(["x", literal(42)]) });
+  const params = paramObjects({ namedParams: ["x"] });
+
+  const argBindings = bindArgs(args, params);
+
+  t.deepEqual(argBindings, bindings(["x", literal(42)]));
+});
+
+test("Binding no arguments to a named rest parameter yields a binding to an empty object", (t) => {
+  const args = argObjects();
+  const params = paramObjects({ namedRestParam: "rest" });
+
+  const argBindings = bindArgs(args, params);
+
+  t.deepEqual(argBindings, bindings(["rest", kpobject()]));
+});
+
+test("Binding one argument to a named rest parameter yields a binding to an object containing that argument", (t) => {
+  const args = argObjects({ namedArgs: kpobject(["x", literal(42)]) });
+  const params = paramObjects({ namedRestParam: "rest" });
+
+  const argBindings = bindArgs(args, params);
+
+  t.deepEqual(argBindings, bindings(["rest", kpobject(["x", literal(42)])]));
+});
+
 function argObjects({ args, namedArgs } = {}) {
   const allArgs = { args: args ?? [], namedArgs: namedArgs ?? kpobject() };
   return normalizeAllArgs(allArgs);
