@@ -53,17 +53,6 @@ class Scope {
     this.localNames = localNames;
   }
 
-  [Symbol.iterator] = function* () {
-    for (const [name, value] of this.enclosingScope) {
-      if (!this.localNames.has(name)) {
-        yield [name, value];
-      }
-    }
-    for (const entry of this.localNames) {
-      yield entry;
-    }
-  };
-
   has(key) {
     return this.localNames.has(key) || this.enclosingScope.has(key);
   }
