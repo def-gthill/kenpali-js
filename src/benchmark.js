@@ -55,7 +55,6 @@ const benchmarks = [
     code: primePairs,
     times: 25,
   },
-  // This doesn't work yet because function calls force-evaluate their arguments!
   { name: "Naive Fibonacci", code: naiveFib, times: 10 },
 ];
 
