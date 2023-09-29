@@ -258,25 +258,35 @@ function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const argObjects = normalizeAllArgs(allArgs);
-  const bindings = bindArgs_NEW(argObjects, paramObjects);
+  const bindings = bindArgs(argObjects, paramObjects);
   if (isError(bindings)) {
     return bindings;
   }
-  const evaluatedBindings = evalBindings(bindings, names);
-  const validationError = validateBindings(paramObjects, evaluatedBindings);
+  const bindingValues = evalBindings(bindings, names);
+  const validationError = validateBindings(paramObjects, bindingValues);
   if (validationError) {
     return validationError;
   }
-  const bindingValues = toBindings_OLD(evaluatedBindings);
-  const argValues_NEW = [
+  const [argValues, namedArgValues] = bindingValuesToBuiltinArgs(
+    paramObjects,
+    bindingValues
+  );
+  return f(argValues, namedArgValues);
+}
+
+function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
+  const argValues = [
     ...paramObjects.params.map((param) => bindingValues.get(param.name)),
     ...(bindingValues.get(paramObjects.restParam?.name) ?? []),
-  ];
-  const namedArgValues_NEW = kpobject(
-    ...paramObjects.namedParams.map((param) => bindingValues.get(param.name)),
-    ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
+  ].map((binding) => binding.value);
+  const namedArgValues = kpoMap(
+    kpobject(
+      ...paramObjects.namedParams.map((param) => bindingValues.get(param.name)),
+      ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
+    ),
+    ([name, binding]) => [name, binding.value]
   );
-  return f(argValues_NEW, namedArgValues_NEW);
+  return [argValues, namedArgValues];
 }
 
 function callLazyBuiltin(f, allArgs, names) {
@@ -320,7 +330,7 @@ class ArgGetter {
   }
 
   restArg(index) {
-    const arg = this.restArgs[index];
+    const arg = this.restArgs[index].value;
     const argValue = evalWithBuiltins(arg, this.names);
     const typeError = checkType(argValue, toKpobject(this.restParam));
     if (typeError) {
@@ -330,16 +340,15 @@ class ArgGetter {
   }
 
   arg(name) {
-    const argValue = evalWithBuiltins(this.bindings.get(name), this.names);
+    const argValue = evalWithBuiltins(
+      this.bindings.get(name).value,
+      this.names
+    );
     return argValue;
   }
 }
 
 export function bindArgs(args, params) {
-  return toBindings_OLD(bindArgs_NEW(args, params));
-}
-
-export function bindArgs_NEW(args, params) {
   const kpParams = paramsToKpobjects(params);
   const acceptedArgs = bindArgObjects(
     args.args,
@@ -370,23 +379,6 @@ export function bindArgs_NEW(args, params) {
     return namedParamBindings;
   }
   return kpoMerge(paramBindings, namedParamBindings);
-}
-
-function toBindings_OLD(bindings) {
-  if (isError(bindings)) {
-    return bindings;
-  }
-  return kpoMap(bindings, ([name, binding]) => [name, toBinding_OLD(binding)]);
-}
-
-function toBinding_OLD(binding) {
-  if (binding instanceof Map) {
-    return kpoMap(binding, ([name, expression]) => [name, expression.value]);
-  } else if (Array.isArray(binding)) {
-    return binding.map((expression) => expression.value);
-  } else {
-    return binding.value;
-  }
 }
 
 function bindArgObjects(args, params, restParam) {

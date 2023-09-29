@@ -5,8 +5,9 @@ import {
   bindArgs,
   normalizeAllArgs,
   normalizeAllParams,
+  normalizeArg,
 } from "../src/kpeval.js";
-import kpobject from "../src/kpobject.js";
+import kpobject, { kpoMap } from "../src/kpobject.js";
 import assertIsError from "./assertIsError.js";
 
 test("Binding no arguments to no parameters yields no bindings", (t) => {
@@ -15,7 +16,7 @@ test("Binding no arguments to no parameters yields no bindings", (t) => {
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings());
+  t.deepEqual(argBindings, bindings_NEW());
 });
 
 test("Binding one argument to one parameter yields one binding", (t) => {
@@ -24,7 +25,7 @@ test("Binding one argument to one parameter yields one binding", (t) => {
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["x", literal(42)]));
+  t.deepEqual(argBindings, bindings_NEW(["x", literal(42)]));
 });
 
 test("Binding no arguments to one parameter yields a missing argument error", (t) => {
@@ -166,7 +167,7 @@ test("Binding no arguments to a rest parameter yields a binding to an empty arra
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["rest", []]));
+  t.deepEqual(argBindings, bindings_NEW(["rest", []]));
 });
 
 test("Binding one argument to a rest parameter yields a binding to an array containing that argument", (t) => {
@@ -175,7 +176,7 @@ test("Binding one argument to a rest parameter yields a binding to an array cont
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["rest", [literal(42)]]));
+  t.deepEqual(argBindings, bindings_NEW(["rest", [literal(42)]]));
 });
 
 // test("Binding two arguments to a rest parameter yields an array of those arguments", (t) => {
@@ -218,7 +219,7 @@ test("Binding one named argument to one named parameter yields one binding", (t)
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["x", literal(42)]));
+  t.deepEqual(argBindings, bindings_NEW(["x", literal(42)]));
 });
 
 test("Binding no arguments to a named rest parameter yields a binding to an empty object", (t) => {
@@ -227,7 +228,7 @@ test("Binding no arguments to a named rest parameter yields a binding to an empt
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["rest", kpobject()]));
+  t.deepEqual(argBindings, bindings_NEW(["rest", kpobject()]));
 });
 
 test("Binding one argument to a named rest parameter yields a binding to an object containing that argument", (t) => {
@@ -236,13 +237,20 @@ test("Binding one argument to a named rest parameter yields a binding to an obje
 
   const argBindings = bindArgs(args, params);
 
-  t.deepEqual(argBindings, bindings(["rest", kpobject(["x", literal(42)])]));
+  t.deepEqual(
+    argBindings,
+    bindings_NEW(["rest", kpobject(["x", literal(42)])])
+  );
 });
 
 function argObjects({ args, namedArgs } = {}) {
   const allArgs = { args: args ?? [], namedArgs: namedArgs ?? kpobject() };
   return normalizeAllArgs(allArgs);
 }
+
+// function argObject(expression, optional = false, errorPassing = false) {
+//   return { value: expression, optional, errorPassing };
+// }
 
 function paramObjects({ params, restParam, namedParams, namedRestParam } = {}) {
   const allParams = {
@@ -256,4 +264,23 @@ function paramObjects({ params, restParam, namedParams, namedRestParam } = {}) {
 
 function bindings(...entries) {
   return kpobject(...entries);
+}
+
+function bindings_NEW(...entries) {
+  return kpobject(
+    ...entries.map(([name, binding]) => [name, normalize(binding)])
+  );
+}
+
+function normalize(arg) {
+  if (arg instanceof Map) {
+    return kpoMap(arg, ([name, expression]) => [
+      name,
+      normalizeArg(expression),
+    ]);
+  } else if (Array.isArray(arg)) {
+    return arg.map(normalizeArg);
+  } else {
+    return normalizeArg(arg);
+  }
 }

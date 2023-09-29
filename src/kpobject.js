@@ -14,6 +14,10 @@ export function kpoEntries(kpo) {
   return [...kpo];
 }
 
+export function kpoKeys(kpo) {
+  return [...kpo.keys()];
+}
+
 export function kpoValues(kpo) {
   return [...kpo.values()];
 }
