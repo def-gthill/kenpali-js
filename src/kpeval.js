@@ -47,33 +47,6 @@ export default function kpeval(expression, names = kpobject()) {
   return evalWithBuiltins(expression, withCustomNames);
 }
 
-class Scope {
-  constructor(enclosingScope, localNames) {
-    this.enclosingScope = enclosingScope;
-    this.localNames = localNames;
-  }
-
-  has(key) {
-    return this.localNames.has(key) || this.enclosingScope.has(key);
-  }
-
-  get(key) {
-    if (this.localNames.has(key)) {
-      return this.localNames.get(key);
-    } else {
-      return this.enclosingScope.get(key);
-    }
-  }
-
-  set(key, value) {
-    if (this.localNames.has(key)) {
-      this.localNames.set(key, value);
-    } else {
-      this.enclosingScope.set(key, value);
-    }
-  }
-}
-
 let coreScope = null;
 
 function loadCore(enclosingScope) {
@@ -178,30 +151,6 @@ function callOnExpressions(f, args, namedArgs, names) {
   }
 }
 
-function evalBindings(bindings, names) {
-  return kpoMap(bindings, ([name, binding]) => [
-    name,
-    evalBinding(binding, names),
-  ]);
-}
-
-function evalBinding(binding, names) {
-  if (binding instanceof Map) {
-    return kpoMap(binding, ([name, expression]) => [
-      name,
-      evalArg(expression, names),
-    ]);
-  } else if (Array.isArray(binding)) {
-    return binding.map((expression) => evalArg(expression, names));
-  } else {
-    return evalArg(binding, names);
-  }
-}
-
-function evalArg(arg, names) {
-  return { ...arg, value: evalWithBuiltins(arg.value, names) };
-}
-
 // For use by the host program.
 // This expects already-evaluated arguments, rather than expressions.
 export function callOnValues(f, args, namedArgs) {
@@ -254,6 +203,33 @@ function bindingsToThunks(paramObjects, bindings, names) {
   });
 }
 
+class Scope {
+  constructor(enclosingScope, localNames) {
+    this.enclosingScope = enclosingScope;
+    this.localNames = localNames;
+  }
+
+  has(key) {
+    return this.localNames.has(key) || this.enclosingScope.has(key);
+  }
+
+  get(key) {
+    if (this.localNames.has(key)) {
+      return this.localNames.get(key);
+    } else {
+      return this.enclosingScope.get(key);
+    }
+  }
+
+  set(key, value) {
+    if (this.localNames.has(key)) {
+      this.localNames.set(key, value);
+    } else {
+      this.enclosingScope.set(key, value);
+    }
+  }
+}
+
 function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
@@ -272,6 +248,30 @@ function callBuiltin(f, allArgs, names) {
     bindingValues
   );
   return f(argValues, namedArgValues);
+}
+
+function evalBindings(bindings, names) {
+  return kpoMap(bindings, ([name, binding]) => [
+    name,
+    evalBinding(binding, names),
+  ]);
+}
+
+function evalBinding(binding, names) {
+  if (binding instanceof Map) {
+    return kpoMap(binding, ([name, expression]) => [
+      name,
+      evalArg(expression, names),
+    ]);
+  } else if (Array.isArray(binding)) {
+    return binding.map((expression) => evalArg(expression, names));
+  } else {
+    return evalArg(binding, names);
+  }
+}
+
+function evalArg(arg, names) {
+  return { ...arg, value: evalWithBuiltins(arg.value, names) };
 }
 
 function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
@@ -348,6 +348,62 @@ class ArgGetter {
   }
 }
 
+function callNonFunction(f, allArgs) {
+  const argObjects = normalizeAllArgs(allArgs);
+  if (
+    argObjects.args.filter((arg) => !arg.optional).length === 0 &&
+    kpoFilter(argObjects.namedArgs, ([_, arg]) => !arg.optional).size === 0
+  ) {
+    return f;
+  } else {
+    return kperror("notCallable", ["value", f]);
+  }
+}
+
+export function normalizeAllParams(params) {
+  return {
+    params: params.params.map(normalizeParam),
+    restParam: mapNullable(params.restParam, normalizeParam),
+    namedParams: params.namedParams.map(normalizeParam),
+    namedRestParam: mapNullable(params.namedRestParam, normalizeParam),
+  };
+}
+
+export function normalizeParam(param) {
+  if (typeof param === "string") {
+    return { name: param };
+  } else if (param instanceof Map) {
+    return toJsObject(param);
+  } else {
+    return param;
+  }
+}
+
+export function normalizeAllArgs(args) {
+  return {
+    args: args.args.map(normalizeArg),
+    namedArgs: kpoMap(args.namedArgs, ([name, value]) => [
+      name,
+      normalizeArg(value),
+    ]),
+  };
+}
+
+export function normalizeArg(arg) {
+  let value = arg;
+  const result = { optional: false, errorPassing: false };
+  if ("optional" in value) {
+    value = value.optional;
+    result.optional = true;
+  }
+  if ("errorPassing" in value) {
+    value = value.errorPassing;
+    result.errorPassing = true;
+  }
+  result.value = value;
+  return result;
+}
+
 export function bindArgs(args, params) {
   const kpParams = paramsToKpobjects(params);
   const acceptedArgs = bindArgObjects(
@@ -422,34 +478,6 @@ function bindArgObjects(args, params, restParam) {
   return [...argsToBind, ...defaults];
 }
 
-function validateBindings(paramObjects, bindings) {
-  for (const param of paramObjects.params) {
-    const error = validateBinding(param, bindings.get(param.name));
-    if (error) {
-      return error;
-    }
-  }
-  if (paramObjects.restParam) {
-    for (const binding of bindings.get(paramObjects.restParam.name)) {
-      const error = validateBinding(paramObjects.restParam, binding);
-      if (error) {
-        return error;
-      }
-    }
-  }
-}
-
-function validateBinding(paramObject, binding) {
-  const errorShortCircuit = checkErrorShortCircuit(binding, paramObject);
-  if (errorShortCircuit) {
-    return errorShortCircuit;
-  }
-  const typeError = checkType(binding.value, toKpobject(paramObject));
-  if (typeError) {
-    return typeError;
-  }
-}
-
 function bindNamedArgObjects(args, params, restParam) {
   const hasRest = restParam !== null;
   const defaults = kpobject();
@@ -494,29 +522,32 @@ function bindNamedArgObjects(args, params, restParam) {
   return kpoMerge(argsToBind, defaults);
 }
 
-export function normalizeAllArgs(args) {
-  return {
-    args: args.args.map(normalizeArg),
-    namedArgs: kpoMap(args.namedArgs, ([name, value]) => [
-      name,
-      normalizeArg(value),
-    ]),
-  };
+function validateBindings(paramObjects, bindings) {
+  for (const param of paramObjects.params) {
+    const error = validateBinding(param, bindings.get(param.name));
+    if (error) {
+      return error;
+    }
+  }
+  if (paramObjects.restParam) {
+    for (const binding of bindings.get(paramObjects.restParam.name)) {
+      const error = validateBinding(paramObjects.restParam, binding);
+      if (error) {
+        return error;
+      }
+    }
+  }
 }
 
-export function normalizeArg(arg) {
-  let value = arg;
-  const result = { optional: false, errorPassing: false };
-  if ("optional" in value) {
-    value = value.optional;
-    result.optional = true;
+function validateBinding(paramObject, binding) {
+  const errorShortCircuit = checkErrorShortCircuit(binding, paramObject);
+  if (errorShortCircuit) {
+    return errorShortCircuit;
   }
-  if ("errorPassing" in value) {
-    value = value.errorPassing;
-    result.errorPassing = true;
+  const typeError = checkType(binding.value, toKpobject(paramObject));
+  if (typeError) {
+    return typeError;
   }
-  result.value = value;
-  return result;
 }
 
 function toParamObject(param) {
@@ -530,25 +561,6 @@ function paramsToKpobjects(params) {
     namedParams: params.namedParams.map(toKpobject),
     namedRestParam: mapNullable(params.namedRestParam, toKpobject),
   };
-}
-
-export function normalizeAllParams(params) {
-  return {
-    params: params.params.map(normalizeParam),
-    restParam: mapNullable(params.restParam, normalizeParam),
-    namedParams: params.namedParams.map(normalizeParam),
-    namedRestParam: mapNullable(params.namedRestParam, normalizeParam),
-  };
-}
-
-export function normalizeParam(param) {
-  if (typeof param === "string") {
-    return { name: param };
-  } else if (param instanceof Map) {
-    return toJsObject(param);
-  } else {
-    return param;
-  }
 }
 
 function checkType(arg, param) {
@@ -565,18 +577,6 @@ function checkType(arg, param) {
 function checkErrorShortCircuit(arg) {
   if (isError(arg.value) && !arg.errorPassing) {
     return arg.value;
-  }
-}
-
-function callNonFunction(f, allArgs) {
-  const argObjects = normalizeAllArgs(allArgs);
-  if (
-    argObjects.args.filter((arg) => !arg.optional).length === 0 &&
-    kpoFilter(argObjects.namedArgs, ([_, arg]) => !arg.optional).size === 0
-  ) {
-    return f;
-  } else {
-    return kperror("notCallable", ["value", f]);
   }
 }
 
