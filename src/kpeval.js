@@ -332,7 +332,7 @@ class ArgGetter {
   restArg(index) {
     const arg = this.restArgs[index].value;
     const argValue = evalWithBuiltins(arg, this.names);
-    const typeError = checkType(argValue, toKpobject(this.restParam));
+    const typeError = checkType(argValue, this.restParam);
     if (typeError) {
       throw typeError;
     }
@@ -405,31 +405,27 @@ export function normalizeArg(arg) {
 }
 
 export function bindArgs(args, params) {
-  const kpParams = paramsToKpobjects(params);
   const acceptedArgs = bindArgObjects(
     args.args,
-    kpParams.params,
-    kpParams.restParam
+    params.params,
+    params.restParam
   );
   if (isError(acceptedArgs)) {
     return acceptedArgs;
   }
   const paramBindings = kpobject(
-    ...kpParams.params.map((param, i) => [
-      toParamObject(param).get("name"),
-      acceptedArgs[i],
-    ])
+    ...params.params.map((param, i) => [param.name, acceptedArgs[i]])
   );
-  if (kpParams.restParam) {
+  if (params.restParam) {
     paramBindings.set(
-      toParamObject(kpParams.restParam).get("name"),
-      acceptedArgs.slice(kpParams.params.length)
+      params.restParam.name,
+      acceptedArgs.slice(params.params.length)
     );
   }
   const namedParamBindings = bindNamedArgObjects(
     args.namedArgs,
-    kpParams.namedParams,
-    kpParams.namedRestParam
+    params.namedParams,
+    params.namedRestParam
   );
   if (isError(namedParamBindings)) {
     return namedParamBindings;
@@ -439,17 +435,12 @@ export function bindArgs(args, params) {
 
 function bindArgObjects(args, params, restParam) {
   const hasRest = restParam !== null;
-  let numRequiredParams = params.findIndex((param) =>
-    param.has("defaultValue")
-  );
+  let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
   if (numRequiredParams === -1) {
     numRequiredParams = params.length;
   }
   if (args.length < numRequiredParams) {
-    return kperror("missingArgument", [
-      "name",
-      params[args.length].get("name"),
-    ]);
+    return kperror("missingArgument", ["name", params[args.length].name]);
   }
   if (!hasRest) {
     let numRequiredArgs = args.findIndex((arg) => arg.optional);
@@ -472,9 +463,7 @@ function bindArgObjects(args, params, restParam) {
   }
   const defaults = hasRest
     ? []
-    : params
-        .slice(args.length)
-        .map((param) => ({ value: param.get("defaultValue") }));
+    : params.slice(args.length).map((param) => ({ value: param.defaultValue }));
   return [...argsToBind, ...defaults];
 }
 
@@ -482,23 +471,17 @@ function bindNamedArgObjects(args, params, restParam) {
   const hasRest = restParam !== null;
   const defaults = kpobject();
   for (const param of params) {
-    if (param.get("name") === "#rest") {
-      continue;
-    }
-    if (!args.has(param.get("name"))) {
+    if (!args.has(param.name)) {
       if (param.has("defaultValue")) {
-        defaults.set(param.get("name"), { value: param.get("defaultValue") });
+        defaults.set(param.name, { value: param.defaultValue });
       } else {
-        return kperror("missingArgument", ["name", param.get("name")]);
+        return kperror("missingArgument", ["name", param.name]);
       }
     }
   }
   if (!hasRest) {
     for (const [name, arg] of kpoEntries(args)) {
-      if (
-        !arg.optional &&
-        !params.some((param) => param.get("name") === name)
-      ) {
+      if (!arg.optional && !params.some((param) => param.name === name)) {
         return kperror(
           "unexpectedArgument",
           ["name", name],
@@ -510,14 +493,14 @@ function bindNamedArgObjects(args, params, restParam) {
   const argsToBind = kpobject();
   const restArgs = kpobject();
   for (const [name, arg] of kpoEntries(args)) {
-    if (params.some((param) => param.get("name") === name)) {
+    if (params.some((param) => param.name === name)) {
       argsToBind.set(name, arg);
     } else {
       restArgs.set(name, arg);
     }
   }
   if (hasRest) {
-    argsToBind.set(restParam.get("name"), restArgs);
+    argsToBind.set(restParam.name, restArgs);
   }
   return kpoMerge(argsToBind, defaults);
 }
@@ -544,32 +527,19 @@ function validateBinding(paramObject, binding) {
   if (errorShortCircuit) {
     return errorShortCircuit;
   }
-  const typeError = checkType(binding.value, toKpobject(paramObject));
+  const typeError = checkType(binding.value, paramObject);
   if (typeError) {
     return typeError;
   }
 }
 
-function toParamObject(param) {
-  return toKpobject(normalizeParam(param));
-}
-
-function paramsToKpobjects(params) {
-  return {
-    params: params.params.map(toKpobject),
-    restParam: mapNullable(params.restParam, toKpobject),
-    namedParams: params.namedParams.map(toKpobject),
-    namedRestParam: mapNullable(params.namedRestParam, toKpobject),
-  };
-}
-
 function checkType(arg, param) {
-  if (param.has("type") && typeOf(arg) !== param.get("type")) {
+  if ("type" in param && typeOf(arg) !== param.type) {
     return kperror(
       "wrongArgumentType",
-      ["parameter", param.get("name")],
+      ["parameter", param.name],
       ["value", arg],
-      ["expectedType", param.get("type")]
+      ["expectedType", param.type]
     );
   }
 }
