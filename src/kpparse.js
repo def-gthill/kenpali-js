@@ -233,7 +233,7 @@ function parseParameterName(tokens, start) {
 function parseTightPipeline(tokens, start) {
   return parseAllOf(
     [
-      parseCallable,
+      parseAtomic,
       parseZeroOrMore(parseAnyOf(parsePropertyAccess, parseArgumentList)),
     ],
     (expression, calls) => {
@@ -253,9 +253,21 @@ function parseTightPipeline(tokens, start) {
 
 function parsePropertyAccess(tokens, start) {
   return parseAllOf(
-    [consume("DOT", "expectedPropertyAccess"), parseName],
-    (property) => ({ access: { literal: property.name } })
+    [consume("DOT", "expectedPropertyAccess"), parsePropertyName],
+    (property) => ({ access: property })
   )(tokens, start);
+}
+
+function parsePropertyName(tokens, start) {
+  return convert(parseAnyOf(parseName, parseUnquote, parseLiteral), (key) => {
+    if ("name" in key) {
+      return { literal: key.name };
+    } else if ("unquote" in key) {
+      return key.unquote;
+    } else {
+      return key;
+    }
+  })(tokens, start);
 }
 
 function parseArgumentList(tokens, start) {
@@ -319,13 +331,37 @@ function parsePossiblyErrorPassingArgument(tokens, start) {
   )(tokens, start);
 }
 
-function parseCallable(tokens, start) {
+function parseAtomic(tokens, start) {
   return parseAnyOf(
+    parseQuote,
+    parseUnquote,
     parseGroup,
     parseArray,
     parseObject,
     parseLiteral,
     parseName
+  )(tokens, start);
+}
+
+function parseQuote(tokens, start) {
+  return parseAllOf(
+    [
+      consume("OPEN_QUOTE_PAREN", "expectedQuote"),
+      parse,
+      consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
+    ],
+    (expression) => ({ quote: expression })
+  )(tokens, start);
+}
+
+function parseUnquote(tokens, start) {
+  return parseAllOf(
+    [
+      consume("OPEN_ANGLES", "expectedUnquote"),
+      parse,
+      consume("CLOSE_ANGLES", "unclosedUnquote"),
+    ],
+    (expression) => ({ unquote: expression })
   )(tokens, start);
 }
 
@@ -375,7 +411,11 @@ function parseObjectEntry(tokens, start) {
     [parse, consume("COLON", "missingKeyValueSeparator"), parse],
     (key, value) => {
       if ("name" in key) {
-        return [literal(key.name), value];
+        return [key.name, value];
+      } else if ("unquote" in key) {
+        return [key.unquote, value];
+      } else if ("literal" in key) {
+        return [key.literal, value];
       } else {
         return [key, value];
       }

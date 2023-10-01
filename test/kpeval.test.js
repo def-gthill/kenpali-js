@@ -1,6 +1,14 @@
 import test from "ava";
-import { calling, defining, given, literal, name } from "../src/kpast.js";
+import {
+  calling,
+  defining,
+  given,
+  literal,
+  name,
+  quote,
+} from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
+import kpobject from "../src/kpobject.js";
 
 // TODO Expressions that evaluate to non-strings can't be keys.
 
@@ -43,5 +51,25 @@ test("Function arguments can reference names", (t) => {
       )
     ),
     45
+  );
+});
+
+test("Eval results are Kenpali objects, not JavaScript objects", (t) => {
+  t.deepEqual(
+    kpeval(
+      quote(
+        given({ params: ["x"] }, calling(name("plus"), [name("x"), literal(3)]))
+      )
+    ),
+    kpobject(
+      ["given", kpobject(["params", ["x"]])],
+      [
+        "result",
+        kpobject(
+          ["calling", kpobject(["name", "plus"])],
+          ["args", [kpobject(["name", "x"]), kpobject(["literal", 3])]]
+        ),
+      ]
+    )
   );
 });

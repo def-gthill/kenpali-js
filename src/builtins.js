@@ -89,6 +89,12 @@ const rawBuiltins = [
   builtin("typeOf", { params: ["value"] }, function ([value]) {
     return typeOf(value);
   }),
+  builtin("isNull", { params: ["value"] }, function ([value]) {
+    return value === null;
+  }),
+  builtin("isBoolean", { params: ["value"] }, function ([value]) {
+    return isBoolean(value);
+  }),
   builtin("toString", { params: ["value"] }, function ([value]) {
     return toString(value);
   }),
@@ -113,7 +119,7 @@ const rawBuiltins = [
     "at",
     { params: ["collection", "index"] },
     function ([collection, index]) {
-      if (isArray(collection)) {
+      if (isString(collection) || isArray(collection)) {
         if (index < 1 || index > collection.length) {
           return kperror(
             "indexOutOfBounds",
@@ -132,7 +138,7 @@ const rawBuiltins = [
           ["function", "at"],
           ["parameter", "collection"],
           ["value", collection],
-          ["expectedType", "array or object"]
+          ["expectedType", "string or array or object"]
         );
       }
     }
@@ -237,6 +243,10 @@ export function isBoolean(value) {
 
 function isNumber(value) {
   return typeof value === "number";
+}
+
+function isString(value) {
+  return typeof value === "string";
 }
 
 function isArray(value) {

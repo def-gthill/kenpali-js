@@ -1,6 +1,6 @@
 import { builtins, isError, typeOf } from "./builtins.js";
 import { core as coreCode } from "./core.js";
-import { array, literal } from "./kpast.js";
+import { array, literal, object } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, {
   kpoEntries,
@@ -100,6 +100,11 @@ function evalWithBuiltins(expression, names) {
     return callOnExpressions(f, args, namedArgs, names);
   } else if ("quote" in expression) {
     return quote(expression.quote, names);
+  } else if ("unquote" in expression) {
+    return evalWithBuiltins(
+      deepToJsObject(evalWithBuiltins(expression.unquote, names)),
+      names
+    );
   } else {
     return kperror("notAnExpression", ["value", expression]);
   }
@@ -551,14 +556,56 @@ function checkErrorShortCircuit(arg) {
 }
 
 function quote(expression, names) {
-  if ("unquote" in expression) {
-    return toKpobject(literal(evalWithBuiltins(expression.unquote, names)));
+  if (typeof expression !== "object") {
+    return expression;
+  } else if ("unquote" in expression) {
+    return deepToKpObject(evalWithBuiltins(expression.unquote, names));
   } else if ("array" in expression) {
-    return toKpobject(
+    return deepToKpObject(
       array(...expression.array.map((element) => quote(element, names)))
     );
+  } else if ("object" in expression) {
+    return deepToKpObject(
+      object(
+        ...expression.object.map(([key, value]) => [
+          quote(key, names),
+          quote(value, names),
+        ])
+      )
+    );
   } else {
-    return toKpobject(expression);
+    return deepToKpObject(expression);
+  }
+}
+
+function deepToKpObject(expression) {
+  if (expression === null) {
+    return expression;
+  } else if (Array.isArray(expression)) {
+    return expression.map(deepToKpObject);
+  } else if (expression instanceof Map) {
+    return expression;
+  } else if (typeof expression === "object") {
+    return kpoMap(toKpobject(expression), ([key, value]) => [
+      key,
+      deepToKpObject(value),
+    ]);
+  } else {
+    return expression;
+  }
+}
+
+function deepToJsObject(expression) {
+  if (expression === null) {
+    return expression;
+  } else if (Array.isArray(expression)) {
+    return expression.map(deepToJsObject);
+  } else if (expression instanceof Map) {
+    return toJsObject(
+      kpoMap(expression, ([key, value]) => [key, deepToJsObject(value)])
+    );
+  } else {
+    return expression;
   }
 }
 
