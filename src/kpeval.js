@@ -59,7 +59,9 @@ function loadCore(enclosingScope) {
 }
 
 function evalWithBuiltins(expression, names) {
-  if ("literal" in expression) {
+  if (expression === null || typeof expression !== "object") {
+    return kperror("notAnExpression", ["value", expression]);
+  } else if ("literal" in expression) {
     return expression.literal;
   } else if ("array" in expression) {
     return expression.array.map((element) => evalWithBuiltins(element, names));
