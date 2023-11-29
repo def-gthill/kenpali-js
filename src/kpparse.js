@@ -143,7 +143,9 @@ function parsePipeline(tokens, start) {
           axis = { indexing: axis, at: call };
         } else {
           if ("calling" in call) {
-            axis = calling(call.calling, [axis, ...call.args], call.kwArgs);
+            const args = call.args ?? [];
+            const namedArgs = call.namedArgs ?? kpobject();
+            axis = calling(call.calling, [axis, ...args], namedArgs);
           } else {
             axis = calling(call, [axis]);
           }
@@ -242,8 +244,8 @@ function parseTightPipeline(tokens, start) {
         if ("access" in call) {
           axis = { indexing: axis, at: call.access };
         } else {
-          const [args, kwArgs] = call.arguments;
-          axis = calling(axis, args, kwArgs);
+          const [args, namedArgs] = call.arguments;
+          axis = calling(axis, args, namedArgs);
         }
       }
       return axis;

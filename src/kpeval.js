@@ -1,4 +1,4 @@
-import { builtins, isError, typeOf } from "./builtins.js";
+import { builtins, isError, toString, typeOf } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kperror from "./kperror.js";
@@ -41,7 +41,8 @@ export function toAst(expressionRaw) {
   }
 }
 
-export default function kpeval(expression, names = kpobject()) {
+export default function kpeval(expression, names = kpobject(), trace = false) {
+  tracing = trace;
   const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
   return evalWithBuiltins(expression, withCustomNames);
@@ -82,7 +83,9 @@ function evalWithBuiltins(expression, names) {
       names.set(expression.name, result);
       return result;
     } else if (typeof binding === "object" && "thunk" in binding) {
-      return binding.thunk();
+      const result = binding.thunk();
+      names.set(expression.name, result);
+      return result;
     } else {
       return binding;
     }
@@ -99,7 +102,7 @@ function evalWithBuiltins(expression, names) {
     const f = evalWithBuiltins(expression.calling, names);
     const args = expression.args ?? [];
     const namedArgs = expression.namedArgs ?? kpobject();
-    return callOnExpressions(f, args, namedArgs, names);
+    return callOnExpressionsTracing(f, args, namedArgs, names);
   } else if ("quote" in expression) {
     return quote(expression.quote, names);
   } else if ("unquote" in expression) {
@@ -141,6 +144,42 @@ function paramToKpValue(param) {
   } else {
     return param;
   }
+}
+
+let tracing = false;
+
+class Tracer {
+  constructor() {
+    this.indent = "";
+  }
+
+  push() {
+    this.indent = this.indent + "| ";
+  }
+
+  pop() {
+    this.indent = this.indent.slice(0, -2);
+  }
+
+  trace(text) {
+    console.log(this.indent + text);
+  }
+}
+
+let tracer = new Tracer();
+
+function callOnExpressionsTracing(f, args, namedArgs, names) {
+  if (tracing) {
+    tracer.trace("Calling " + toString(f));
+    tracer.push();
+  }
+  const result = callOnExpressions(f, args, namedArgs, names);
+  if (tracing) {
+    tracer.pop();
+    tracer.trace("Called " + toString(f));
+    tracer.trace("Result was " + toString(result));
+  }
+  return result;
 }
 
 function callOnExpressions(f, args, namedArgs, names) {
@@ -288,7 +327,10 @@ function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
   ].map((binding) => binding.value);
   const namedArgValues = kpoMap(
     kpobject(
-      ...paramObjects.namedParams.map((param) => bindingValues.get(param.name)),
+      ...paramObjects.namedParams.map((param) => [
+        param.name,
+        bindingValues.get(param.name),
+      ]),
       ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
     ),
     ([name, binding]) => [name, binding.value]
@@ -479,7 +521,7 @@ function bindNamedArgObjects(args, params, restParam) {
   const defaults = kpobject();
   for (const param of params) {
     if (!args.has(param.name)) {
-      if (param.has("defaultValue")) {
+      if ("defaultValue" in param) {
         defaults.set(param.name, { value: param.defaultValue });
       } else {
         return kperror("missingArgument", ["name", param.name]);

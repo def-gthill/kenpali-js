@@ -48,9 +48,18 @@ const rawBuiltins = [
   ),
   builtin(
     "join",
-    { restParam: { name: "rest", type: "string" } },
-    function (args) {
-      return args.join("");
+    {
+      params: [{ name: "strings", type: "array" }],
+      namedParams: [
+        {
+          name: "with",
+          type: "string",
+          defaultValue: { literal: "" },
+        },
+      ],
+    },
+    function ([strings], namedArgs) {
+      return strings.join(namedArgs.get("with"));
     }
   ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {

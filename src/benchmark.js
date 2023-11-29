@@ -39,11 +39,19 @@ fib = (n) => if(
 );
 fib(15)
 `;
+const stringSplitting = String.raw`
+parseCsv = (text) => (
+  text | splitLines | forEach(
+    (line) => (line | split(","))
+  )
+);
+parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
+`;
 
 const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
-  { name: "Hello", code: hello, times: 1000000 },
+  { name: "Hello", code: hello, times: 1500000 },
   { name: "Repeated Reference", code: repeatedReference, times: 1000 },
   {
     name: "Repeated Reference in Given",
@@ -53,16 +61,19 @@ const benchmarks = [
   {
     name: "Prime Pairs",
     code: primePairs,
-    times: 25,
+    times: 300,
   },
-  { name: "Naive Fibonacci", code: naiveFib, times: 10 },
+  { name: "Naive Fibonacci", code: naiveFib, times: 50 },
+  { name: "String Splitting", code: stringSplitting, times: 100 },
 ];
+
+const trace = process.argv.includes("--trace");
 
 function runBenchmark(benchmark) {
   const json = kpparse(benchmark.code);
   const start = process.hrtime();
   for (let i = 0; i < benchmark.times; i++) {
-    kpeval(json);
+    kpeval(json, undefined, trace);
   }
   const [seconds, nanoseconds] = process.hrtime(start);
   const time = (seconds + nanoseconds / 1e9).toFixed(2);
@@ -70,15 +81,13 @@ function runBenchmark(benchmark) {
   console.log(`${time}`);
 }
 
-for (const benchmark of benchmarks) {
-  runBenchmark(benchmark);
-}
+const namesOfBenchmarksToRun = process.argv.slice(2);
 
-// const json = kpparse(`join("Hello", ", ", "world!")`);
-// const start = process.hrtime();
-// for (let i = 0; i < 100000; i++) {
-//   kpeval(json);
-// }
-// const [seconds, nanoseconds] = process.hrtime(start);
-// const time = (seconds + nanoseconds / 1e9).toFixed(2);
-// console.log(`${time}`);
+for (const benchmark of benchmarks) {
+  if (
+    namesOfBenchmarksToRun.length === 0 ||
+    namesOfBenchmarksToRun.includes(benchmark.name)
+  ) {
+    runBenchmark(benchmark);
+  }
+}

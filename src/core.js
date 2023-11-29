@@ -1,9 +1,58 @@
-export const core = `
+export const core = String.raw`
 minus = (a, b) => plus(a, negative(b));
 increment = (n) => (n | plus(1));
+decrement = (n) => (n | minus(1));
 dividedBy = (a, b) => times(a, oneOver(b));
 isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b).remainder | equals(0)
+);
+characters = (string) => (
+    1 | to(length(string)) | forEach((i) => (string @ i))
+);
+split = (string, delimiter) => (
+    0 | build(
+        (i) => (
+            word = increment(i) | build(
+                (j) => (
+                    {
+                        while: and(
+                            j | isAtMost(length(string)),
+                            not(
+                                string
+                                | slice(j | toSize(length(delimiter)))
+                                | equals(delimiter)
+                            ),
+                        ),
+                        next: increment(j),
+                        out: string @ j,
+                    }
+                )
+            ) | join;
+            next = i | plus(length(word), length(delimiter));
+            {
+                while: i | isAtMost(length(string)),
+                next: next,
+                out: word,
+            }
+        )
+    )
+);
+splitLines = (string) => (string | split("\n"));
+joinLines = (strings) => (strings | join(with: "\n"));
+trim = (string) => (
+    firstIndex = 1 | repeat(
+        (i) => {
+            while: string @ i | equals(" "),
+            next: increment(i),
+        }
+    );
+    lastIndex = length(string) | repeat(
+        (i) => {
+            while: string @ i | equals(" "),
+            next: decrement(i),
+        }
+    );
+    string | slice(firstIndex | to(lastIndex))
 );
 isAtMost = (a, b) => or(
     a | isLessThan(b),
@@ -15,6 +64,10 @@ butIf = (value, condition, ifTrue) => (
     if(condition(value?), then: ifTrue(value?), else: value)
 );
 isEmpty = (coll) => (length(coll) | equals(0));
+slice = (coll, indices) => (
+    result = indices | forEach((index) => (coll @ index));
+    join(result)
+);
 to = (start, end) => (
     start | build(
         (i) => {
@@ -24,6 +77,7 @@ to = (start, end) => (
         }
     )
 );
+toSize = (start, size) => (start | to(start | plus(decrement(size))));
 forEach = (array, transform) => (
     1 | build(
         (i) => {
