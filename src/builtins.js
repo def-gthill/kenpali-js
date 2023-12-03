@@ -104,6 +104,9 @@ const rawBuiltins = [
   builtin("isBoolean", { params: ["value"] }, function ([value]) {
     return isBoolean(value);
   }),
+  builtin("isString", { params: ["value"] }, function ([value]) {
+    return isString(value);
+  }),
   builtin("toString", { params: ["value"] }, function ([value]) {
     return toString(value);
   }),
@@ -112,7 +115,10 @@ const rawBuiltins = [
   }),
   lazyBuiltin(
     "if",
-    { params: ["condition"], namedParams: ["then", "else"] },
+    {
+      params: [{ name: "condition", type: "boolean" }],
+      namedParams: ["then", "else"],
+    },
     function (argGetter) {
       if (argGetter.arg("condition")) {
         return argGetter.arg("then");

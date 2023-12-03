@@ -373,6 +373,14 @@ class ArgGetter {
 
     this.names = names;
 
+    this.paramObjectsByName = new Map();
+    for (const param of this.paramObjects.params) {
+      this.paramObjectsByName.set(param.name, param);
+    }
+    for (const param of this.paramObjects.namedParams) {
+      this.paramObjectsByName.set(param.name, param);
+    }
+
     this.restParam = this.paramObjects.restParam;
     this.restArgs = this.bindings.get(this.restParam?.name) ?? [];
     this.numRestArgs = this.restArgs.length;
@@ -393,6 +401,10 @@ class ArgGetter {
       this.bindings.get(name).value,
       this.names
     );
+    const typeError = checkType(argValue, this.paramObjectsByName.get(name));
+    if (typeError) {
+      throw typeError;
+    }
     return argValue;
   }
 }
