@@ -1,5 +1,4 @@
-import kpeval from "../src/kpeval.js";
-import { toJsObject } from "../src/kpobject.js";
+import kpeval, { deepToJsObject } from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
 import { runSpecFile } from "./specRunner.js";
 
@@ -17,7 +16,7 @@ runSpecFile(
       actualOutputValue instanceof Map,
       `${actualOutputValue} isn't an error object`
     );
-    t.like(toJsObject(actualOutputValue), {
+    t.like(deepToJsObject(actualOutputValue), {
       "#error": expectedErrorName,
       ...JSON.parse(expectedErrorDetails),
     });

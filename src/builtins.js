@@ -1,6 +1,7 @@
+import { given, literal } from "./kpast.js";
 import kperror from "./kperror.js";
 import { callOnValues } from "./kpeval.js";
-import kpobject, { kpoEntries } from "./kpobject.js";
+import kpobject, { kpoEntries, kpoMerge } from "./kpobject.js";
 
 const rawBuiltins = [
   builtin(
@@ -49,12 +50,12 @@ const rawBuiltins = [
   builtin(
     "join",
     {
-      params: [{ name: "strings", type: "array" }],
+      params: [{ name: "strings", type: arrayOf("string") }],
       namedParams: [
         {
           name: "with",
           type: "string",
-          defaultValue: { literal: "" },
+          defaultValue: literal(""),
         },
       ],
     },
@@ -132,7 +133,12 @@ const rawBuiltins = [
   }),
   builtin(
     "at",
-    { params: ["collection", "index"] },
+    {
+      params: [
+        { name: "collection", type: either("string", "array", "object") },
+        "index",
+      ],
+    },
     function ([collection, index]) {
       if (isString(collection) || isArray(collection)) {
         if (index < 1 || index > collection.length) {
@@ -147,14 +153,6 @@ const rawBuiltins = [
         return collection[index - 1];
       } else if (isObject(collection)) {
         return collection.get(index);
-      } else {
-        return kperror(
-          "wrongArgumentType",
-          ["function", "at"],
-          ["parameter", "collection"],
-          ["value", collection],
-          ["expectedType", "string or array or object"]
-        );
       }
     }
   ),
@@ -172,6 +170,89 @@ const rawBuiltins = [
       return result;
     }
   }),
+  builtin(
+    "matches",
+    { params: ["value", "schema"] },
+    function ([value, schema]) {
+      return matches(value, schema);
+    }
+  ),
+  builtin(
+    "is",
+    {
+      params: [{ name: "type", type: "string" }],
+      namedParams: [
+        {
+          name: "where",
+          type: "function",
+          defaultValue: given({ params: ["value"] }, literal(true)),
+        },
+      ],
+    },
+    function ([type], namedArgs) {
+      return is(type, namedArgs);
+    }
+  ),
+  builtin(
+    "oneOf",
+    {
+      restParam: "values",
+    },
+    function (values) {
+      return oneOf(values);
+    }
+  ),
+  builtin(
+    "arrayOf",
+    {
+      params: ["elementSchema"],
+      namedParams: [
+        {
+          name: "where",
+          type: "function",
+          defaultValue: given({ params: ["value"] }, literal(true)),
+        },
+      ],
+    },
+    function ([type], namedArgs) {
+      return arrayOf(type, namedArgs);
+    }
+  ),
+  builtin(
+    "objectOf",
+    {
+      namedParams: [
+        { name: "names", defaultValue: "string" },
+        "values",
+        {
+          name: "where",
+          type: "function",
+          defaultValue: given({ params: ["value"] }, literal(true)),
+        },
+      ],
+    },
+    function ([], namedArgs) {
+      return objectOf(namedArgs);
+    }
+  ),
+  builtin(
+    "optional",
+    {
+      params: ["schema"],
+    },
+    function ([schema]) {
+      return optional(schema);
+    }
+  ),
+  builtin(
+    "either",
+    {
+      restParam: "schemas",
+    },
+    function (schemas) {
+      return either(...schemas);
+    }
+  ),
 ];
 
 export function builtin(name, paramSpec, f) {
@@ -292,6 +373,10 @@ function isFunction(value) {
   return isBuiltin(value) || isGiven(value);
 }
 
+function isSequence(value) {
+  return isString(value) || isArray(value);
+}
+
 export function toString(value) {
   if (isArray(value)) {
     return "[" + value.map(toString).join(", ") + "]";
@@ -317,7 +402,7 @@ function isValidName(string) {
 function loop(functionName, start, step, callback) {
   let current = start;
   for (let i = 0; i < 1000; i++) {
-    const stepResult = callOnValues(step, [current], kpobject());
+    const stepResult = callOnValues(step, [current]);
     const whileCondition = stepResult.has("while")
       ? stepResult.get("while")
       : true;
@@ -375,6 +460,119 @@ function loop(functionName, start, step, callback) {
     ["function", functionName],
     ["currentValue", current]
   );
+}
+
+export function matches(value, schema) {
+  if (isString(schema)) {
+    if (typeOf(value) === schema) {
+      return true;
+    } else if (schema === "object") {
+      return isObject(value);
+    } else if (schema === "function") {
+      return isFunction(value);
+    } else if (schema === "sequence") {
+      return isSequence(value);
+    }
+  } else if (isArray(schema)) {
+    if (!isArray(value)) {
+      return false;
+    }
+    if (value.length < schema.length) {
+      return false;
+    }
+    for (let i = 0; i < schema.length; i++) {
+      if (!matches(value[i], schema[i])) {
+        return false;
+      }
+    }
+    return true;
+  } else if (isObject(schema)) {
+    if (schema.has("#either")) {
+      for (const option of schema.get("#either")) {
+        if (matches(value, option)) {
+          return true;
+        }
+      }
+      return false;
+    } else if (schema.has("#oneOf")) {
+      for (const option of schema.get("#oneOf")) {
+        if (equals(value, option)) {
+          return true;
+        }
+      }
+      return false;
+    } else if (schema.has("#type")) {
+      if (!matches(value, schema.get("#type"))) {
+        return false;
+      }
+      if (schema.has("elements")) {
+        for (const element of value) {
+          if (!matches(element, schema.get("elements"))) {
+            return false;
+          }
+        }
+      }
+      if (schema.has("names")) {
+        for (const name of value.keys()) {
+          if (!matches(name, schema.get("names"))) {
+            return false;
+          }
+        }
+      }
+      if (schema.has("values")) {
+        for (const element of value.values()) {
+          if (!matches(element, schema.get("values"))) {
+            return false;
+          }
+        }
+      }
+      return callOnValues(schema.get("where"), [value]);
+    } else {
+      if (!isObject(value)) {
+        return false;
+      }
+      for (const name of schema.keys()) {
+        let propertySchema = schema.get(name);
+        if (isObject(propertySchema) && propertySchema.has("#optional")) {
+          propertySchema = propertySchema.get("#optional");
+        } else if (!value.has(name)) {
+          return false;
+        }
+        if (value.has(name) && !matches(value.get(name), propertySchema)) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+export function is(type, namedArgs = kpobject()) {
+  return kpoMerge(kpobject(["#type", type]), namedArgs);
+}
+
+export function oneOf(values) {
+  return kpobject(["#oneOf", values]);
+}
+
+export function arrayOf(elementSchema, namedArgs = kpobject()) {
+  return kpoMerge(
+    kpobject(["#type", "array"], ["elements", elementSchema]),
+    namedArgs
+  );
+}
+
+export function objectOf(namedArgs) {
+  return kpoMerge(kpobject(["#type", "object"]), namedArgs);
+}
+
+export function optional(schema) {
+  return kpobject(["#optional", schema]);
+}
+
+export function either(...schemas) {
+  return kpobject(["#either", schemas]);
 }
 
 export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));

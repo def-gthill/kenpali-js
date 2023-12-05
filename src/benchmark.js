@@ -64,7 +64,7 @@ const benchmarks = [
     times: 300,
   },
   { name: "Naive Fibonacci", code: naiveFib, times: 50 },
-  { name: "String Splitting", code: stringSplitting, times: 100 },
+  { name: "String Splitting", code: stringSplitting, times: 50 },
 ];
 
 const trace = process.argv.includes("--trace");

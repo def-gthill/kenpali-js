@@ -1,4 +1,4 @@
-import { builtins, isError, toString, typeOf } from "./builtins.js";
+import { builtins, isError, matches, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kperror from "./kperror.js";
@@ -199,7 +199,7 @@ function callOnExpressions(f, args, namedArgs, names) {
 
 // For use by the host program.
 // This expects already-evaluated arguments, rather than expressions.
-export function callOnValues(f, args, namedArgs) {
+export function callOnValues(f, args, namedArgs = kpobject()) {
   const argExpressions = args.map((arg) => literal(arg));
   const namedArgExpressions = kpoMap(namedArgs, ([name, value]) => [
     name,
@@ -595,7 +595,7 @@ function validateBinding(paramObject, binding) {
 }
 
 function checkType(arg, param) {
-  if ("type" in param && typeOf(arg) !== param.type) {
+  if ("type" in param && !matches(arg, param.type)) {
     return kperror(
       "wrongArgumentType",
       ["parameter", param.name],
@@ -651,7 +651,7 @@ function deepToKpObject(expression) {
   }
 }
 
-function deepToJsObject(expression) {
+export function deepToJsObject(expression) {
   if (expression === null) {
     return expression;
   } else if (Array.isArray(expression)) {
