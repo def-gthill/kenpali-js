@@ -162,7 +162,9 @@ const rawBuiltins = [
   builtin("build", { params: ["start", "step"] }, function ([start, step]) {
     const result = [];
     const loopResult = loop("build", start, step, (stepResult) => {
-      result.push(stepResult.get("out") ?? stepResult.get("next"));
+      if (stepResult.get("where") ?? true) {
+        result.push(stepResult.get("out") ?? stepResult.get("next"));
+      }
     });
     if (isError(loopResult)) {
       return loopResult;
