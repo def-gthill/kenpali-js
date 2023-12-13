@@ -240,11 +240,11 @@ function bindingsToThunks(paramObjects, bindings, names) {
     if (name === argGetter.restParam?.name) {
       const result = [];
       for (let i = 0; i < argGetter.numRestArgs; i++) {
-        result.push(() => argGetter.restArg(i));
+        result.push(() => argGetter.restArgCatching(i));
       }
       return [name, { restParamThunks: result }];
     } else {
-      return [name, { thunk: () => argGetter.arg(name) }];
+      return [name, { thunk: () => argGetter.argCatching(name) }];
     }
   });
 }
@@ -387,25 +387,50 @@ class ArgGetter {
   }
 
   restArg(index) {
-    const arg = this.restArgs[index].value;
-    const argValue = evalWithBuiltins(arg, this.names);
-    const typeError = checkType(argValue, this.restParam);
+    const argBinding = this.restArgs[index];
+    const argValue = evalBinding(argBinding, this.names);
+    const typeError = validateBinding(this.restParam, argValue);
     if (typeError) {
       throw typeError;
     }
-    return argValue;
+    return argValue.value;
+  }
+
+  restArgCatching(index) {
+    try {
+      return this.restArg(index);
+    } catch (error) {
+      if (isError(error)) {
+        return error;
+      } else {
+        throw error;
+      }
+    }
   }
 
   arg(name) {
-    const argValue = evalWithBuiltins(
-      this.bindings.get(name).value,
-      this.names
+    const argBinding = this.bindings.get(name);
+    const argValue = evalBinding(argBinding, this.names);
+    const typeError = validateBinding(
+      this.paramObjectsByName.get(name),
+      argValue
     );
-    const typeError = checkType(argValue, this.paramObjectsByName.get(name));
     if (typeError) {
       throw typeError;
     }
-    return argValue;
+    return argValue.value;
+  }
+
+  argCatching(name) {
+    try {
+      return this.arg(name);
+    } catch (error) {
+      if (isError(error)) {
+        return error;
+      } else {
+        throw error;
+      }
+    }
   }
 }
 

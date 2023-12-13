@@ -409,6 +409,9 @@ function loop(functionName, start, step, callback) {
       ? stepResult.get("while")
       : true;
     if (!isBoolean(whileCondition)) {
+      if (isError(whileCondition)) {
+        return whileCondition;
+      }
       return kperror(
         "wrongElementType",
         ["function", functionName],
@@ -425,6 +428,9 @@ function loop(functionName, start, step, callback) {
       ? stepResult.get("continueIf")
       : true;
     if (!isBoolean(continueIf)) {
+      if (isError(continueIf)) {
+        return continueIf;
+      }
       return kperror(
         "wrongElementType",
         ["function", functionName],

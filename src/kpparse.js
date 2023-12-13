@@ -1,5 +1,7 @@
+import desugar from "./desugar.js";
 import {
   array,
+  arraySpread,
   calling,
   defining,
   errorPassing,
@@ -13,6 +15,15 @@ import kplex from "./kplex.js";
 import kpobject, { kpoMap } from "./kpobject.js";
 
 export default function kpparse(code) {
+  const sugar = kpparseSugared(code);
+  if ("error" in sugar) {
+    return sugar;
+  } else {
+    return desugar(sugar);
+  }
+}
+
+export function kpparseSugared(code) {
   const tokens = kplex(code);
   const result = kpparseTokens(tokens);
   if ("error" in result) {
@@ -384,13 +395,24 @@ function parseArray(tokens, start) {
   return parseAllOfFlat(
     [
       consume("OPEN_BRACKET", "expectedArray"),
-      parseZeroOrMore(parse, {
+      parseZeroOrMore(parseArrayElement, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingArraySeparator",
       }),
       consume("CLOSE_BRACKET", "unclosedArray"),
     ],
     array
+  )(tokens, start);
+}
+
+function parseArrayElement(tokens, start) {
+  return parseAnyOf(parse, parseArraySpread)(tokens, start);
+}
+
+function parseArraySpread(tokens, start) {
+  return parseAllOfFlat(
+    [consume("STAR", "expectedSpread"), parse],
+    arraySpread
   )(tokens, start);
 }
 

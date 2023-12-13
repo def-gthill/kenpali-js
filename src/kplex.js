@@ -30,6 +30,7 @@ const tokenSpec = [
   ["DOT", r`\.`],
   ["QUESTION_MARK", r`\?`],
   ["BANG", "!"],
+  ["STAR", r`\*`],
   // Other
   ["NAME", "[A-Za-z][A-Za-z0-9]*"],
   ["NEWLINE", r`\r\n|\r|\n`],

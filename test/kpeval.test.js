@@ -10,8 +10,6 @@ import {
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 
-// TODO Expressions that evaluate to non-strings can't be keys.
-
 test("We can define and call a two-argument function", (t) => {
   t.is(
     kpeval(

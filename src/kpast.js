@@ -52,3 +52,13 @@ export function quote(expression) {
 export function unquote(expression) {
   return { unquote: expression };
 }
+
+// Syntactic sugar
+
+export function pipeline(start, ...expressions) {
+  return { start, calls: expressions };
+}
+
+export function arraySpread(expression) {
+  return { arraySpread: expression };
+}
