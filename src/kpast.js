@@ -55,6 +55,14 @@ export function unquote(expression) {
 
 // Syntactic sugar
 
+export function group(expression) {
+  return { group: expression };
+}
+
+export function access(object, key) {
+  return { on: object, access: key };
+}
+
 export function pipeline(start, ...expressions) {
   return { start, calls: expressions };
 }

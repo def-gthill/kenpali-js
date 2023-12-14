@@ -1,18 +1,23 @@
 import desugar from "./desugar.js";
 import {
+  access,
   array,
   arraySpread,
   calling,
   defining,
   errorPassing,
   given,
+  group,
   literal,
   name,
   object,
   optional,
+  pipeline,
+  quote,
+  unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
-import kpobject, { kpoMap } from "./kpobject.js";
+import kpobject from "./kpobject.js";
 
 export default function kpparse(code) {
   const sugar = kpparseSugared(code);
@@ -44,32 +49,10 @@ export function kpparseTokens(tokens) {
 }
 
 function parseAll(tokens) {
-  return parseAllOf([parse, consume("EOF", "unparsedInput")], normalize)(
+  return parseAllOf([parse, consume("EOF", "unparsedInput")], (ast) => ast)(
     tokens,
     0
   );
-}
-
-function normalize(ast) {
-  if (Array.isArray(ast)) {
-    return ast.map(normalize);
-  } else if (ast instanceof Map) {
-    return kpoMap(ast, ([key, value]) => [key, normalize(value)]);
-  } else if (ast === null) {
-    return null;
-  } else if (typeof ast === "object") {
-    if ("indexing" in ast) {
-      return calling(name("at"), [normalize(ast.indexing), normalize(ast.at)]);
-    } else if ("group" in ast) {
-      return normalize(ast.group);
-    } else {
-      return Object.fromEntries(
-        Object.entries(ast).map(([key, value]) => [key, normalize(value)])
-      );
-    }
-  } else {
-    return ast;
-  }
 }
 
 function parse(tokens, start) {
@@ -93,14 +76,11 @@ function parseScope(tokens, start) {
 }
 
 function parseNameDefinition(tokens, start) {
-  return parseAllOf(
-    [
-      parseAnyOf(parseName, parseArray),
-      consume("EQUALS", "missingEqualsInDefinition"),
-      parsePipeline,
-    ],
-    (pattern, value) => [pattern, value]
-  )(tokens, start);
+  return parseAllOf([
+    parseAnyOf(parseName, parseArray),
+    consume("EQUALS", "missingEqualsInDefinition"),
+    parsePipeline,
+  ])(tokens, start);
 }
 
 function definingPatterns(...args) {
@@ -148,21 +128,11 @@ function parsePipeline(tokens, start) {
       ),
     ],
     (expression, calls) => {
-      let axis = expression;
-      for (const [op, call] of calls) {
-        if (op === "AT") {
-          axis = { indexing: axis, at: call };
-        } else {
-          if ("calling" in call) {
-            const args = call.args ?? [];
-            const namedArgs = call.namedArgs ?? kpobject();
-            axis = calling(call.calling, [axis, ...args], namedArgs);
-          } else {
-            axis = calling(call, [axis]);
-          }
-        }
+      if (calls.length > 0) {
+        return pipeline(expression, ...calls);
+      } else {
+        return expression;
       }
-      return axis;
     }
   )(tokens, start);
 }
@@ -178,9 +148,7 @@ function parseArrowFunction(tokens, start) {
       consume("ARROW", "expectedArrowFunction"),
       parsePipelineElement,
     ],
-    (params, body) => {
-      return given(params, body);
-    }
+    given
   )(tokens, start);
 }
 
@@ -253,7 +221,7 @@ function parseTightPipeline(tokens, start) {
       let axis = expression;
       for (const call of calls) {
         if ("access" in call) {
-          axis = { indexing: axis, at: call.access };
+          axis = access(axis, call.access);
         } else {
           const [args, namedArgs] = call.arguments;
           axis = calling(axis, args, namedArgs);
@@ -272,15 +240,7 @@ function parsePropertyAccess(tokens, start) {
 }
 
 function parsePropertyName(tokens, start) {
-  return convert(parseAnyOf(parseName, parseUnquote, parseLiteral), (key) => {
-    if ("name" in key) {
-      return { literal: key.name };
-    } else if ("unquote" in key) {
-      return key.unquote;
-    } else {
-      return key;
-    }
-  })(tokens, start);
+  return parseAnyOf(parseName, parseUnquote, parseLiteral)(tokens, start);
 }
 
 function parseArgumentList(tokens, start) {
@@ -363,7 +323,7 @@ function parseQuote(tokens, start) {
       parse,
       consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
     ],
-    (expression) => ({ quote: expression })
+    quote
   )(tokens, start);
 }
 
@@ -374,7 +334,7 @@ function parseUnquote(tokens, start) {
       parse,
       consume("CLOSE_ANGLES", "unclosedUnquote"),
     ],
-    (expression) => ({ unquote: expression })
+    unquote
   )(tokens, start);
 }
 
@@ -385,9 +345,7 @@ function parseGroup(tokens, start) {
       parse,
       consume("CLOSE_PAREN", "unclosedGroup"),
     ],
-    (expression) => ({
-      group: expression,
-    })
+    group
   )(tokens, start);
 }
 

@@ -4,6 +4,7 @@ import {
   defining,
   errorPassing,
   given,
+  literal,
   name,
   object,
   optional,
@@ -31,6 +32,10 @@ export default function desugar(expression) {
     return desugarQuote(expression);
   } else if ("unquote" in expression) {
     return desugarUnquote(expression);
+  } else if ("group" in expression) {
+    return desugarGroup(expression);
+  } else if ("access" in expression) {
+    return desugarAccess(expression);
   } else if ("calls" in expression) {
     return desugarPipeline(expression);
   } else {
@@ -109,6 +114,27 @@ function desugarQuote(expression) {
 
 function desugarUnquote(expression) {
   return unquote(desugar(expression.unquote));
+}
+
+function desugarGroup(expression) {
+  return desugar(expression.group);
+}
+
+function desugarAccess(expression) {
+  return calling(name("at"), [
+    desugar(expression.on),
+    desugar(desugarProperty(expression.access)),
+  ]);
+}
+
+function desugarProperty(expression) {
+  if ("name" in expression) {
+    return literal(expression.name);
+  } else if ("unquote" in expression) {
+    return expression.unquote;
+  } else {
+    return expression;
+  }
 }
 
 function desugarPipeline(expression) {
