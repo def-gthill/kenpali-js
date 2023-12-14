@@ -19,6 +19,19 @@ import {
 } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
 
+test("Object key syntactic sugar desugars to standard object syntax", (t) => {
+  const expression = object(
+    [name("foo"), literal(1)],
+    [literal("bar"), literal(2)],
+    [unquote(name("baz")), literal(3)]
+  );
+  const result = desugar(expression);
+  t.deepEqual(
+    result,
+    object(["foo", literal(1)], ["bar", literal(2)], [name("baz"), literal(3)])
+  );
+});
+
 test("A group desugars to its contents", (t) => {
   const expression = group(literal(42));
   const result = desugar(expression);

@@ -69,10 +69,19 @@ function desugarArray(expression) {
 function desugarObject(expression) {
   return object(
     ...expression.object.map(([key, value]) => [
-      typeof key === "string" ? key : desugar(key),
+      desugarPropertyDefinition(key),
       desugar(value),
     ])
   );
+}
+
+function desugarPropertyDefinition(expression) {
+  const desugaredKey = desugarProperty(expression);
+  if ("literal" in desugaredKey) {
+    return desugaredKey.literal;
+  } else {
+    return desugaredKey;
+  }
 }
 
 function desugarDefining(expression) {
@@ -131,9 +140,9 @@ function desugarProperty(expression) {
   if ("name" in expression) {
     return literal(expression.name);
   } else if ("unquote" in expression) {
-    return expression.unquote;
+    return desugar(expression.unquote);
   } else {
-    return expression;
+    return desugar(expression);
   }
 }
 

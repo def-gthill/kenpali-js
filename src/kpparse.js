@@ -389,20 +389,11 @@ function parseObject(tokens, start) {
 }
 
 function parseObjectEntry(tokens, start) {
-  return parseAllOf(
-    [parse, consume("COLON", "missingKeyValueSeparator"), parse],
-    (key, value) => {
-      if ("name" in key) {
-        return [key.name, value];
-      } else if ("unquote" in key) {
-        return [key.unquote, value];
-      } else if ("literal" in key) {
-        return [key.literal, value];
-      } else {
-        return [key, value];
-      }
-    }
-  )(tokens, start);
+  return parseAllOf([
+    parse,
+    consume("COLON", "missingKeyValueSeparator"),
+    parse,
+  ])(tokens, start);
 }
 
 function parseLiteral(tokens, start) {
@@ -571,14 +562,5 @@ function syntaxError(name, tokens, offendingTokenIndex, properties) {
     line: offendingToken.line,
     column: offendingToken.column,
     ...properties,
-  };
-}
-
-function debug(parser, name) {
-  return function (tokens, start) {
-    const result = parser(tokens, start);
-    console.log(name);
-    console.log(result);
-    return result;
   };
 }
