@@ -128,4 +128,10 @@ flatten = (array) => (
         )
     )
 );
+properties = (object) => (
+    object | keys | forEach((key) => [key, object.<<key>>])
+);
+merge = (objects) => (
+    objects | forEach(properties) | flatten | toObject
+);
 `;

@@ -12,6 +12,7 @@ import {
   literal,
   name,
   object,
+  objectSpread,
   optional,
   pipeline,
   quote,
@@ -79,6 +80,25 @@ test("An array starting with a spread desugars to a flatten call", (t) => {
   t.deepEqual(
     result,
     calling(name("flatten"), [array(name("foo"), array(literal(3)))])
+  );
+});
+
+test("An object containing spreads desugars to a merge call", (t) => {
+  const expression = object(
+    [name("answer"), literal(42)],
+    objectSpread(name("foo")),
+    [name("question"), literal(97)]
+  );
+  const result = desugar(expression);
+  t.deepEqual(
+    result,
+    calling(name("merge"), [
+      array(
+        object(["answer", literal(42)]),
+        name("foo"),
+        object(["question", literal(97)])
+      ),
+    ])
   );
 });
 

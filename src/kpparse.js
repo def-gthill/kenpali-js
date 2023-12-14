@@ -11,6 +11,7 @@ import {
   literal,
   name,
   object,
+  objectSpread,
   optional,
   pipeline,
   quote,
@@ -389,11 +390,17 @@ function parseObject(tokens, start) {
 }
 
 function parseObjectEntry(tokens, start) {
-  return parseAllOf([
-    parse,
-    consume("COLON", "missingKeyValueSeparator"),
-    parse,
-  ])(tokens, start);
+  return parseAnyOf(
+    parseAllOf([parse, consume("COLON", "missingKeyValueSeparator"), parse]),
+    parseObjectSpread
+  )(tokens, start);
+}
+
+function parseObjectSpread(tokens, start) {
+  return parseAllOfFlat(
+    [consume("DOUBLE_STAR", "expectedSpread"), parse],
+    objectSpread
+  )(tokens, start);
 }
 
 function parseLiteral(tokens, start) {

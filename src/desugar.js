@@ -67,12 +67,32 @@ function desugarArray(expression) {
 }
 
 function desugarObject(expression) {
-  return object(
-    ...expression.object.map(([key, value]) => [
-      desugarPropertyDefinition(key),
-      desugar(value),
-    ])
-  );
+  if (!expression.object.some((entry) => "objectSpread" in entry)) {
+    return object(
+      ...expression.object.map(([key, value]) => [
+        desugarPropertyDefinition(key),
+        desugar(value),
+      ])
+    );
+  }
+  const subObjects = [];
+  let currentSubObject = [];
+  for (const entry of expression.object) {
+    if ("objectSpread" in entry) {
+      if (currentSubObject.length > 0) {
+        subObjects.push(object(...currentSubObject));
+        currentSubObject = [];
+      }
+      subObjects.push(desugar(entry.objectSpread));
+    } else {
+      const [key, value] = entry;
+      currentSubObject.push([desugarPropertyDefinition(key), desugar(value)]);
+    }
+  }
+  if (currentSubObject.length > 0) {
+    subObjects.push(object(...currentSubObject));
+  }
+  return calling(name("merge"), [array(...subObjects)]);
 }
 
 function desugarPropertyDefinition(expression) {

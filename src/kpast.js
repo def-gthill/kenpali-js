@@ -70,3 +70,7 @@ export function pipeline(start, ...expressions) {
 export function arraySpread(expression) {
   return { arraySpread: expression };
 }
+
+export function objectSpread(expression) {
+  return { objectSpread: expression };
+}

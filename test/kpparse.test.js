@@ -7,6 +7,7 @@ import {
   literal,
   name,
   object,
+  objectSpread,
   unquote,
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -40,4 +41,13 @@ test("An array spread operator parses to an arraySpread node", (t) => {
   const code = "[1, *foo, 3]";
   const result = kpparseSugared(code);
   t.deepEqual(result, array(literal(1), arraySpread(name("foo")), literal(3)));
+});
+
+test("An object spread operator parses to an objectSpread node", (t) => {
+  const code = "{question: 42, **foo}";
+  const result = kpparseSugared(code);
+  t.deepEqual(
+    result,
+    object([name("question"), literal(42)], objectSpread(name("foo")))
+  );
 });

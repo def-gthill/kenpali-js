@@ -173,6 +173,20 @@ const rawBuiltins = [
     }
   }),
   builtin(
+    "keys",
+    { params: [{ name: "object", type: "object" }] },
+    function ([object]) {
+      return [...object.keys()];
+    }
+  ),
+  builtin(
+    "toObject",
+    { params: [{ name: "properties", type: arrayOf(["string", "any"]) }] },
+    function ([properties]) {
+      return kpobject(...properties);
+    }
+  ),
+  builtin(
     "matches",
     { params: ["value", "schema"] },
     function ([value, schema]) {
@@ -473,6 +487,8 @@ function loop(functionName, start, step, callback) {
 export function matches(value, schema) {
   if (isString(schema)) {
     if (typeOf(value) === schema) {
+      return true;
+    } else if (schema === "any") {
       return true;
     } else if (schema === "object") {
       return isObject(value);
