@@ -47,6 +47,9 @@ function desugarArray(expression) {
   if (!expression.array.some((element) => "arraySpread" in element)) {
     return array(...expression.array.map(desugar));
   }
+  if (expression.array.length === 1) {
+    return desugar(expression.array[0].arraySpread);
+  }
   const subArrays = [];
   let currentSubArray = [];
   for (const element of expression.array) {
