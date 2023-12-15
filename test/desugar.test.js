@@ -83,6 +83,24 @@ test("An array starting with a spread desugars to a flatten call", (t) => {
   );
 });
 
+test("An argument list containing array spreads desugars to a flatten call on the arguments", (t) => {
+  const expression = calling(name("foo"), [
+    literal(1),
+    arraySpread(name("bar")),
+    literal(3),
+  ]);
+  const result = desugar(expression);
+  t.deepEqual(
+    result,
+    calling(
+      name("foo"),
+      calling(name("flatten"), [
+        array(array(literal(1)), name("bar"), array(literal(3))),
+      ])
+    )
+  );
+});
+
 test("An object containing spreads desugars to a merge call", (t) => {
   const expression = object(
     [name("answer"), literal(42)],

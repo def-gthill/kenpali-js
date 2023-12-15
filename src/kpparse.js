@@ -264,7 +264,11 @@ function parseArgumentList(tokens, start) {
 }
 
 function parseArgument(tokens, start) {
-  return parseAnyOf(parseNamedArgument, parsePositionalArgument)(tokens, start);
+  return parseAnyOf(
+    parseNamedArgument,
+    parsePositionalArgument,
+    parseArraySpread
+  )(tokens, start);
 }
 
 function parsePositionalArgument(tokens, start) {

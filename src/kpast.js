@@ -28,7 +28,7 @@ export function given(params, result) {
 
 export function calling(f, args = [], namedArgs = kpobject()) {
   const result = { calling: f };
-  if (args.length > 0) {
+  if (!Array.isArray(args) || args.length > 0) {
     result.args = args;
   }
   if (namedArgs.size > 0) {

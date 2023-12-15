@@ -183,7 +183,7 @@ function callOnExpressionsTracing(f, args, namedArgs, names) {
 }
 
 function callOnExpressions(f, args, namedArgs, names) {
-  const allArgs = { args, namedArgs };
+  const allArgs = { args: evalExpressionArgs(args, names), namedArgs };
   if (f instanceof Map && f.has("#given")) {
     return callGiven(f, allArgs, names);
   } else if (typeof f === "function") {
@@ -194,6 +194,14 @@ function callOnExpressions(f, args, namedArgs, names) {
     }
   } else {
     return callNonFunction(f, allArgs);
+  }
+}
+
+function evalExpressionArgs(args, names) {
+  if (Array.isArray(args)) {
+    return args;
+  } else {
+    return evalWithBuiltins(args, names).map(literal);
   }
 }
 

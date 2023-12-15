@@ -3,6 +3,7 @@ import {
   access,
   array,
   arraySpread,
+  calling,
   group,
   literal,
   name,
@@ -37,10 +38,19 @@ test("Property access parses to an access node", (t) => {
   t.deepEqual(result, access(name("a"), name("b")));
 });
 
-test("An array spread operator parses to an arraySpread node", (t) => {
+test("An array spread operator in an array parses to an arraySpread node", (t) => {
   const code = "[1, *foo, 3]";
   const result = kpparseSugared(code);
   t.deepEqual(result, array(literal(1), arraySpread(name("foo")), literal(3)));
+});
+
+test("An array spread operator in an argument list parses to an arraySpread node", (t) => {
+  const code = "foo(1, *bar, 3)";
+  const result = kpparseSugared(code);
+  t.deepEqual(
+    result,
+    calling(name("foo"), [literal(1), arraySpread(name("bar")), literal(3)])
+  );
 });
 
 test("An object spread operator parses to an objectSpread node", (t) => {

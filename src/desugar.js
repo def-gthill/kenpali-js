@@ -121,12 +121,21 @@ function desugarGiven(expression) {
 function desugarCalling(expression) {
   return calling(
     desugar(expression.calling),
-    expression.args?.map(desugar) ?? [],
+    desugarArgs(expression.args ?? []),
     kpoMap(expression.namedArgs ?? kpobject(), ([name, arg]) => [
       name,
       desugar(arg),
     ])
   );
+}
+
+function desugarArgs(args) {
+  const desugaredArgs = desugarArray({ array: args });
+  if ("array" in desugaredArgs) {
+    return desugaredArgs.array;
+  } else {
+    return desugaredArgs;
+  }
 }
 
 function desugarOptional(expression) {
