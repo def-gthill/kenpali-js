@@ -1,6 +1,6 @@
 import { given, literal } from "./kpast.js";
 import kperror from "./kperror.js";
-import { callOnValues } from "./kpeval.js";
+import { callOnValues, evalWithBuiltins } from "./kpeval.js";
 import kpobject, { kpoEntries, kpoMerge } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -187,7 +187,7 @@ const rawBuiltins = [
     }
   ),
   builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
-    return bind(value, schema);
+    return eagerBind(value, schema);
   }),
   builtin(
     "matches",
@@ -487,28 +487,121 @@ function loop(functionName, start, step, callback) {
   );
 }
 
-export function bind(value, schema) {
+export function eagerBind(value, schema) {
+  const forcedValue = force(value);
+  const bindings = lazyBind(forcedValue, schema);
+  if ("force" in bindings) {
+    return bindings.force();
+  } else {
+    return bindings;
+  }
+}
+
+export function force(value) {
+  if (value === null) {
+    return value;
+  } else if (typeof value === "object" && "expression" in value) {
+    return evalWithBuiltins(value.expression, value.context);
+  } else if (typeof value === "object" && "thunk" in value) {
+    return value.thunk();
+  } else {
+    return value;
+  }
+}
+
+export function lazyBind(value, schema) {
   if (isString(schema)) {
-    if (typeOf(value) === schema) {
-      return kpobject();
-    } else if (schema === "any") {
-      return kpobject();
-    } else if (schema === "object" && isObject(value)) {
-      return kpobject();
-    } else if (schema === "function" && isFunction(value)) {
-      return kpobject();
-    } else if (schema === "sequence" && isSequence(value)) {
-      return kpobject();
-    }
+    return bindTypeSchema(value, schema);
   } else if (isArray(schema)) {
-    if (!isArray(value)) {
-      return kperror("wrongType", ["value", value], ["expectedType", "array"]);
+    return bindArraySchema(value, schema);
+  } else if (isObject(schema)) {
+    if (schema.has("#either")) {
+      return bindUnionSchema(value, schema);
+    } else if (schema.has("#oneOf")) {
+      return bindLiteralListSchema(value, schema);
+    } else if (schema.has("#type")) {
+      return bindTypeWithConditionsSchema(value, schema);
+    } else {
+      return bindObjectSchema(value, schema);
     }
-    if (value.length < schema.length) {
-      return kperror("missingElement", ["value", value], ["schema", schema]);
+  } else {
+    return kperror("invalidSchema", ["schema", schema]);
+  }
+}
+
+function bindTypeSchema(value, schema) {
+  if (typeof value === "object" && value !== null && "expression" in value) {
+    return kpobject();
+  } else if (typeOf(value) === schema) {
+    return kpobject();
+  } else if (schema === "any") {
+    return kpobject();
+  } else if (schema === "object" && isObject(value)) {
+    return kpobject();
+  } else if (schema === "function" && isFunction(value)) {
+    return kpobject();
+  } else if (schema === "sequence" && isSequence(value)) {
+    return kpobject();
+  } else {
+    return kperror("wrongType", ["value", value], ["expectedType", schema]);
+  }
+}
+
+function bindArraySchema(value, schema) {
+  if (!isArray(value)) {
+    return kperror("wrongType", ["value", value], ["expectedType", "array"]);
+  }
+  if (value.length < schema.length) {
+    return kperror("missingElement", ["value", value], ["schema", schema]);
+  }
+  for (let i = 0; i < schema.length; i++) {
+    const bindings = eagerBind(value[i], schema[i]);
+    if (isError(bindings)) {
+      return kperror(
+        "badElement",
+        ["value", value],
+        ["index", i + 1],
+        ["reason", bindings]
+      );
     }
-    for (let i = 0; i < schema.length; i++) {
-      const bindings = bind(value[i], schema[i]);
+  }
+  return kpobject();
+}
+
+function bindUnionSchema(value, schema) {
+  const errors = [];
+  for (const option of schema.get("#either")) {
+    const bindings = eagerBind(value, option);
+    if (isError(bindings)) {
+      errors.push([option, bindings]);
+    } else {
+      return bindings;
+    }
+  }
+  return kperror("badValue", ["value", value], ["errors", errors]);
+}
+
+function bindLiteralListSchema(value, schema) {
+  for (const option of schema.get("#oneOf")) {
+    if (equals(value, option)) {
+      return kpobject();
+    }
+  }
+  return kperror(
+    "badValue",
+    ["value", value],
+    ["options", schema.get("#oneOf")]
+  );
+}
+
+function bindTypeWithConditionsSchema(value, schema) {
+  const typeBindings = eagerBind(value, schema.get("#type"));
+  if (isError(typeBindings)) {
+    return typeBindings;
+  }
+  if (schema.has("elements")) {
+    for (let i = 0; i < value.length; i++) {
+      const bindings = eagerBind(value[i], schema.get("elements"));
       if (isError(bindings)) {
         return kperror(
           "badElement",
@@ -518,114 +611,101 @@ export function bind(value, schema) {
         );
       }
     }
-    return kpobject();
-  } else if (isObject(schema)) {
-    if (schema.has("#either")) {
-      const errors = [];
-      for (const option of schema.get("#either")) {
-        const bindings = bind(value, option);
-        if (isError(bindings)) {
-          errors.push([option, bindings]);
-        } else {
-          return bindings;
-        }
+  }
+  if (schema.has("keys")) {
+    for (const key of value.keys()) {
+      const bindings = eagerBind(key, schema.get("keys"));
+      if (isError(bindings)) {
+        return kperror("badKey", ["key", key], ["reason", bindings]);
       }
-      return kperror("badValue", ["value", value], ["errors", errors]);
-    } else if (schema.has("#oneOf")) {
-      for (const option of schema.get("#oneOf")) {
-        if (equals(value, option)) {
-          return kpobject();
-        }
-      }
-      return kperror(
-        "badValue",
-        ["value", value],
-        ["options", schema.get("#oneOf")]
-      );
-    } else if (schema.has("#type")) {
-      const typeBindings = bind(value, schema.get("#type"));
-      if (isError(typeBindings)) {
-        return typeBindings;
-      }
-      if (schema.has("elements")) {
-        for (let i = 0; i < value.length; i++) {
-          const bindings = bind(value[i], schema.get("elements"));
-          if (isError(bindings)) {
-            return kperror(
-              "badElement",
-              ["value", value],
-              ["index", i + 1],
-              ["reason", bindings]
-            );
-          }
-        }
-      }
-      if (schema.has("keys")) {
-        for (const key of value.keys()) {
-          const bindings = bind(key, schema.get("keys"));
-          if (isError(bindings)) {
-            return kperror("badKey", ["key", key], ["reason", bindings]);
-          }
-        }
-      }
-      if (schema.has("values")) {
-        for (const [key, propertyValue] of value.entries()) {
-          const bindings = bind(propertyValue, schema.get("values"));
-          if (isError(bindings)) {
-            return kperror(
-              "badProperty",
-              ["key", key],
-              ["value", propertyValue],
-              ["reason", bindings]
-            );
-          }
-        }
-      }
-      if (schema.has("where") && !callOnValues(schema.get("where"), [value])) {
-        return kperror(
-          "badValue",
-          ["value", value],
-          ["condition", schema.get("where")]
-        );
-      }
-      return kpobject();
-    } else {
-      if (!isObject(value)) {
-        return kperror(
-          "wrongType",
-          ["value", value],
-          ["expectedType", "object"]
-        );
-      }
-      const result = kpobject();
-      for (const key of schema.keys()) {
-        let propertySchema = schema.get(key);
-        if (isObject(propertySchema) && propertySchema.has("#optional")) {
-          propertySchema = propertySchema.get("#optional");
-        } else if (!value.has(key)) {
-          return kperror("missingProperty", ["value", value], ["key", key]);
-        }
-        if (value.has(key)) {
-          const bindings = bind(value.get(key), propertySchema);
-          if (isError(bindings)) {
-            return kperror(
-              "badProperty",
-              ["value", value],
-              ["key", key],
-              ["reason", bindings]
-            );
-          }
-        }
-        result.set(key, value.get(key));
-      }
-      return result;
     }
   }
-  return kperror("wrongType", ["value", value], ["expectedType", schema]);
+  if (schema.has("values")) {
+    for (const [key, propertyValue] of value.entries()) {
+      const bindings = eagerBind(propertyValue, schema.get("values"));
+      if (isError(bindings)) {
+        return kperror(
+          "badProperty",
+          ["key", key],
+          ["value", propertyValue],
+          ["reason", bindings]
+        );
+      }
+    }
+  }
+  if (schema.has("where") && !callOnValues(schema.get("where"), [value])) {
+    return kperror(
+      "badValue",
+      ["value", value],
+      ["condition", schema.get("where")]
+    );
+  }
+  return kpobject();
+}
+
+function bindObjectSchema(value, schema) {
+  if (!isObject(value)) {
+    return kperror("wrongType", ["value", value], ["expectedType", "object"]);
+  }
+  const schemasForPresentKeys = kpobject();
+  for (const key of schema.keys()) {
+    let propertySchema = schema.get(key);
+    if (isObject(propertySchema) && propertySchema.has("#optional")) {
+      propertySchema = propertySchema.get("#optional");
+    } else if (!value.has(key)) {
+      return kperror("missingProperty", ["value", value], ["key", key]);
+    }
+    if (value.has(key)) {
+      schemasForPresentKeys.set(key, propertySchema);
+    }
+  }
+  const wrapper = {
+    get(key) {
+      const propertyValue = value.get(key);
+      const forcedValue = force(propertyValue);
+      const propertySchema = schemasForPresentKeys.get(key);
+      const bindings = eagerBind(forcedValue, propertySchema);
+      if (isError(bindings)) {
+        return kperror(
+          "badProperty",
+          ["value", value],
+          ["key", key],
+          ["reason", bindings]
+        );
+      } else {
+        return forcedValue;
+      }
+    },
+    force() {
+      const forcedValue = kpobject();
+      for (const key of schemasForPresentKeys.keys()) {
+        const propertyValue = this.get(key);
+        if (isError(propertyValue)) {
+          return propertyValue;
+        } else {
+          forcedValue.set(key, propertyValue);
+        }
+      }
+      return forcedValue;
+    },
+  };
+  return wrapper;
+}
+
+function isPending(value) {
+  if (value === null) {
+    return false;
+  } else if (typeof value === "object" && "expression" in value) {
+    return true;
+  } else if (typeof value === "object" && "thunk" in value) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 export function matches(value, schema) {
-  if (isError(bind(value, schema))) {
+  if (isError(eagerBind(value, schema))) {
     return false;
   } else {
     return true;
