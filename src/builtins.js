@@ -186,6 +186,9 @@ const rawBuiltins = [
       return kpobject(...properties);
     }
   ),
+  builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
+    return bind(value, schema);
+  }),
   builtin(
     "matches",
     { params: ["value", "schema"] },
@@ -238,7 +241,7 @@ const rawBuiltins = [
     "objectOf",
     {
       namedParams: [
-        { name: "names", defaultValue: "string" },
+        { name: "keys", defaultValue: "string" },
         "values",
         {
           name: "where",
@@ -484,92 +487,149 @@ function loop(functionName, start, step, callback) {
   );
 }
 
-export function matches(value, schema) {
+export function bind(value, schema) {
   if (isString(schema)) {
     if (typeOf(value) === schema) {
-      return true;
+      return kpobject();
     } else if (schema === "any") {
-      return true;
-    } else if (schema === "object") {
-      return isObject(value);
-    } else if (schema === "function") {
-      return isFunction(value);
-    } else if (schema === "sequence") {
-      return isSequence(value);
+      return kpobject();
+    } else if (schema === "object" && isObject(value)) {
+      return kpobject();
+    } else if (schema === "function" && isFunction(value)) {
+      return kpobject();
+    } else if (schema === "sequence" && isSequence(value)) {
+      return kpobject();
     }
   } else if (isArray(schema)) {
     if (!isArray(value)) {
-      return false;
+      return kperror("wrongType", ["value", value], ["expectedType", "array"]);
     }
     if (value.length < schema.length) {
-      return false;
+      return kperror("missingElement", ["value", value], ["schema", schema]);
     }
     for (let i = 0; i < schema.length; i++) {
-      if (!matches(value[i], schema[i])) {
-        return false;
+      const bindings = bind(value[i], schema[i]);
+      if (isError(bindings)) {
+        return kperror(
+          "badElement",
+          ["value", value],
+          ["index", i + 1],
+          ["reason", bindings]
+        );
       }
     }
-    return true;
+    return kpobject();
   } else if (isObject(schema)) {
     if (schema.has("#either")) {
+      const errors = [];
       for (const option of schema.get("#either")) {
-        if (matches(value, option)) {
-          return true;
+        const bindings = bind(value, option);
+        if (isError(bindings)) {
+          errors.push([option, bindings]);
+        } else {
+          return bindings;
         }
       }
-      return false;
+      return kperror("badValue", ["value", value], ["errors", errors]);
     } else if (schema.has("#oneOf")) {
       for (const option of schema.get("#oneOf")) {
         if (equals(value, option)) {
-          return true;
+          return kpobject();
         }
       }
-      return false;
+      return kperror(
+        "badValue",
+        ["value", value],
+        ["options", schema.get("#oneOf")]
+      );
     } else if (schema.has("#type")) {
-      if (!matches(value, schema.get("#type"))) {
-        return false;
+      const typeBindings = bind(value, schema.get("#type"));
+      if (isError(typeBindings)) {
+        return typeBindings;
       }
       if (schema.has("elements")) {
-        for (const element of value) {
-          if (!matches(element, schema.get("elements"))) {
-            return false;
+        for (let i = 0; i < value.length; i++) {
+          const bindings = bind(value[i], schema.get("elements"));
+          if (isError(bindings)) {
+            return kperror(
+              "badElement",
+              ["value", value],
+              ["index", i + 1],
+              ["reason", bindings]
+            );
           }
         }
       }
-      if (schema.has("names")) {
-        for (const name of value.keys()) {
-          if (!matches(name, schema.get("names"))) {
-            return false;
+      if (schema.has("keys")) {
+        for (const key of value.keys()) {
+          const bindings = bind(key, schema.get("keys"));
+          if (isError(bindings)) {
+            return kperror("badKey", ["key", key], ["reason", bindings]);
           }
         }
       }
       if (schema.has("values")) {
-        for (const element of value.values()) {
-          if (!matches(element, schema.get("values"))) {
-            return false;
+        for (const [key, propertyValue] of value.entries()) {
+          const bindings = bind(propertyValue, schema.get("values"));
+          if (isError(bindings)) {
+            return kperror(
+              "badProperty",
+              ["key", key],
+              ["value", propertyValue],
+              ["reason", bindings]
+            );
           }
         }
       }
-      return callOnValues(schema.get("where"), [value]);
+      if (schema.has("where") && !callOnValues(schema.get("where"), [value])) {
+        return kperror(
+          "badValue",
+          ["value", value],
+          ["condition", schema.get("where")]
+        );
+      }
+      return kpobject();
     } else {
       if (!isObject(value)) {
-        return false;
+        return kperror(
+          "wrongType",
+          ["value", value],
+          ["expectedType", "object"]
+        );
       }
-      for (const name of schema.keys()) {
-        let propertySchema = schema.get(name);
+      const result = kpobject();
+      for (const key of schema.keys()) {
+        let propertySchema = schema.get(key);
         if (isObject(propertySchema) && propertySchema.has("#optional")) {
           propertySchema = propertySchema.get("#optional");
-        } else if (!value.has(name)) {
-          return false;
+        } else if (!value.has(key)) {
+          return kperror("missingProperty", ["value", value], ["key", key]);
         }
-        if (value.has(name) && !matches(value.get(name), propertySchema)) {
-          return false;
+        if (value.has(key)) {
+          const bindings = bind(value.get(key), propertySchema);
+          if (isError(bindings)) {
+            return kperror(
+              "badProperty",
+              ["value", value],
+              ["key", key],
+              ["reason", bindings]
+            );
+          }
         }
+        result.set(key, value.get(key));
       }
-      return true;
+      return result;
     }
   }
-  return false;
+  return kperror("wrongType", ["value", value], ["expectedType", schema]);
+}
+
+export function matches(value, schema) {
+  if (isError(bind(value, schema))) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 export function is(type, namedArgs = kpobject()) {
