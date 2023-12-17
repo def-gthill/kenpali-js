@@ -254,12 +254,20 @@ function parseArgumentList(tokens, start) {
       }),
       consume("CLOSE_PAREN", "unclosedArguments"),
     ],
-    (args) => ({
-      arguments: [
-        args.filter((argument) => !Array.isArray(argument)),
-        kpobject(...args.filter((argument) => Array.isArray(argument))),
-      ],
-    })
+    (args) => {
+      const posArgs = args.filter(
+        (argument) => !(Array.isArray(argument) || "objectSpread" in argument)
+      );
+      let namedArgs = args.filter(
+        (argument) => Array.isArray(argument) || "objectSpread" in argument
+      );
+      if (!namedArgs.some((arg) => "objectSpread" in arg)) {
+        namedArgs = kpobject(...namedArgs);
+      }
+      return {
+        arguments: [posArgs, namedArgs],
+      };
+    }
   )(tokens, start);
 }
 
@@ -267,7 +275,8 @@ function parseArgument(tokens, start) {
   return parseAnyOf(
     parseNamedArgument,
     parsePositionalArgument,
-    parseArraySpread
+    parseArraySpread,
+    parseObjectSpread
   )(tokens, start);
 }
 

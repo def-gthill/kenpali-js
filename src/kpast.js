@@ -31,7 +31,7 @@ export function calling(f, args = [], namedArgs = kpobject()) {
   if (!Array.isArray(args) || args.length > 0) {
     result.args = args;
   }
-  if (namedArgs.size > 0) {
+  if (!(namedArgs instanceof Map) || namedArgs.size > 0) {
     result.namedArgs = namedArgs;
   }
   return result;

@@ -78,6 +78,9 @@ function desugarObject(expression) {
       ])
     );
   }
+  if (expression.object.length === 1) {
+    return desugar(expression.object[0].objectSpread);
+  }
   const subObjects = [];
   let currentSubObject = [];
   for (const entry of expression.object) {
@@ -125,10 +128,7 @@ function desugarCalling(expression) {
   return calling(
     desugar(expression.calling),
     desugarArgs(expression.args ?? []),
-    kpoMap(expression.namedArgs ?? kpobject(), ([name, arg]) => [
-      name,
-      desugar(arg),
-    ])
+    desugarNamedArgs(expression.namedArgs ?? kpobject())
   );
 }
 
@@ -138,6 +138,30 @@ function desugarArgs(args) {
     return desugaredArgs.array;
   } else {
     return desugaredArgs;
+  }
+}
+
+function desugarNamedArgs(namedArgs) {
+  if (namedArgs instanceof Map) {
+    return kpoMap(namedArgs, ([name, arg]) => [name, desugar(arg)]);
+  } else {
+    return kpobject([
+      "#all",
+      desugarObject({
+        object: namedArgs.map((arg) => {
+          if (Array.isArray(arg)) {
+            const [key, value] = arg;
+            if (typeof key === "string") {
+              return [literal(key), value];
+            } else {
+              return arg;
+            }
+          } else {
+            return arg;
+          }
+        }),
+      }),
+    ]);
   }
 }
 

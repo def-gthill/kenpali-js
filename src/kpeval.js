@@ -183,7 +183,10 @@ function callOnExpressionsTracing(f, args, namedArgs, names) {
 }
 
 function callOnExpressions(f, args, namedArgs, names) {
-  const allArgs = { args: evalExpressionArgs(args, names), namedArgs };
+  const allArgs = {
+    args: evalExpressionArgs(args, names),
+    namedArgs: evalExpressionNamedArgs(namedArgs, names),
+  };
   if (f instanceof Map && f.has("#given")) {
     return callGiven(f, allArgs, names);
   } else if (typeof f === "function") {
@@ -202,6 +205,17 @@ function evalExpressionArgs(args, names) {
     return args;
   } else {
     return evalWithBuiltins(args, names).map(literal);
+  }
+}
+
+function evalExpressionNamedArgs(namedArgs, names) {
+  if (namedArgs.has("#all")) {
+    return kpoMap(
+      evalWithBuiltins(namedArgs.get("#all"), names),
+      ([name, value]) => [name, literal(value)]
+    );
+  } else {
+    return namedArgs;
   }
 }
 

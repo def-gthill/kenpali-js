@@ -83,6 +83,12 @@ test("An array starting with a spread desugars to a flatten call", (t) => {
   );
 });
 
+test("An argument list containing only an array spread desugars to an all-args expression", (t) => {
+  const expression = calling(name("foo"), [arraySpread(name("bar"))]);
+  const result = desugar(expression);
+  t.deepEqual(result, calling(name("foo"), name("bar")));
+});
+
 test("An argument list containing array spreads desugars to a flatten call on the arguments", (t) => {
   const expression = calling(name("foo"), [
     literal(1),
@@ -117,6 +123,37 @@ test("An object containing spreads desugars to a merge call", (t) => {
         object(["question", literal(97)])
       ),
     ])
+  );
+});
+
+test("An argument list containing only an object spread desugars to an all-named-args expression", (t) => {
+  const expression = calling(name("foo"), [], [objectSpread(name("bar"))]);
+  const result = desugar(expression);
+  t.deepEqual(
+    result,
+    calling(name("foo"), [], kpobject(["#all", name("bar")]))
+  );
+});
+
+test("An argument list containing object spreads desugars to a merge call on the arguments", (t) => {
+  const expression = calling(
+    name("foo"),
+    [],
+    [["answer", literal(42)], objectSpread(name("bar"))]
+  );
+  const result = desugar(expression);
+  t.deepEqual(
+    result,
+    calling(
+      name("foo"),
+      [],
+      kpobject([
+        "#all",
+        calling(name("merge"), [
+          array(object(["answer", literal(42)]), name("bar")),
+        ]),
+      ])
+    )
   );
 });
 

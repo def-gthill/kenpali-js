@@ -61,3 +61,16 @@ test("An object spread operator parses to an objectSpread node", (t) => {
     object([name("question"), literal(42)], objectSpread(name("foo")))
   );
 });
+
+test("An object spread operator in an argument list parses to an objectSpread node", (t) => {
+  const code = "foo(question: 42, **foo)";
+  const result = kpparseSugared(code);
+  t.deepEqual(
+    result,
+    calling(
+      name("foo"),
+      [],
+      [["question", literal(42)], objectSpread(name("foo"))]
+    )
+  );
+});
