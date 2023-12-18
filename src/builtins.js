@@ -272,6 +272,33 @@ const rawBuiltins = [
       return either(...schemas);
     }
   ),
+  builtin(
+    "as",
+    {
+      params: ["schema", { name: "name", type: "string" }],
+    },
+    function ([schema, name]) {
+      return as(schema, name);
+    }
+  ),
+  builtin(
+    "default",
+    {
+      params: ["schema", "defaultValue"],
+    },
+    function ([schema, defaultValue]) {
+      return default_(schema, defaultValue);
+    }
+  ),
+  builtin(
+    "rest",
+    {
+      params: ["schema"],
+    },
+    function ([schema]) {
+      return rest(schema);
+    }
+  ),
 ];
 
 export function builtin(name, paramSpec, f) {
@@ -521,6 +548,8 @@ export function lazyBind(value, schema) {
       return bindLiteralListSchema(value, schema);
     } else if (schema.has("#type")) {
       return bindTypeWithConditionsSchema(value, schema);
+    } else if (schema.has("#bind")) {
+      return explicitBind(value, schema);
     } else {
       return bindObjectSchema(value, schema);
     }
@@ -551,21 +580,37 @@ function bindArraySchema(value, schema) {
   if (!isArray(value)) {
     return kperror("wrongType", ["value", value], ["expectedType", "array"]);
   }
-  if (value.length < schema.length) {
-    return kperror("missingElement", ["value", value], ["schema", schema]);
-  }
+  const elementBindings = [];
   for (let i = 0; i < schema.length; i++) {
-    const bindings = eagerBind(value[i], schema[i]);
-    if (isError(bindings)) {
-      return kperror(
-        "badElement",
-        ["value", value],
-        ["index", i + 1],
-        ["reason", bindings]
+    if (isObject(schema[i]) && schema[i].has("#rest")) {
+      const bindings = eagerBind(
+        value.slice(i),
+        arrayOf(schema[i].get("#rest"))
       );
+      elementBindings.push(bindings);
+    } else if (i >= value.length) {
+      if (isObject(schema[i]) && schema[i].has("#default")) {
+        const forSchema = schema[i].get("for");
+        elementBindings.push(
+          kpobject([forSchema.get("as"), schema[i].get("#default")])
+        );
+      } else {
+        return kperror("missingElement", ["value", value], ["schema", schema]);
+      }
+    } else {
+      const bindings = eagerBind(value[i], schema[i]);
+      if (isError(bindings)) {
+        return kperror(
+          "badElement",
+          ["value", value],
+          ["index", i + 1],
+          ["reason", bindings]
+        );
+      }
+      elementBindings.push(bindings);
     }
   }
-  return kpobject();
+  return kpoMerge(...elementBindings);
 }
 
 function bindUnionSchema(value, schema) {
@@ -599,6 +644,7 @@ function bindTypeWithConditionsSchema(value, schema) {
   if (isError(typeBindings)) {
     return typeBindings;
   }
+  const elementBindings = kpobject();
   if (schema.has("elements")) {
     for (let i = 0; i < value.length; i++) {
       const bindings = eagerBind(value[i], schema.get("elements"));
@@ -609,6 +655,12 @@ function bindTypeWithConditionsSchema(value, schema) {
           ["index", i + 1],
           ["reason", bindings]
         );
+      }
+      for (const [key, elementValue] of bindings) {
+        if (!elementBindings.has(key)) {
+          elementBindings.set(key, []);
+        }
+        elementBindings.get(key).push(elementValue);
       }
     }
   }
@@ -640,30 +692,63 @@ function bindTypeWithConditionsSchema(value, schema) {
       ["condition", schema.get("where")]
     );
   }
-  return kpobject();
+  return elementBindings;
+}
+
+function explicitBind(value, schema) {
+  const bindSchema = schema.get("#bind");
+  const bindings = eagerBind(value, bindSchema);
+  if (isError(bindings)) {
+    return bindings;
+  }
+  return kpoMerge(bindings, kpobject([schema.get("as"), value]));
 }
 
 function bindObjectSchema(value, schema) {
   if (!isObject(value)) {
     return kperror("wrongType", ["value", value], ["expectedType", "object"]);
   }
-  const schemasForPresentKeys = kpobject();
-  for (const key of schema.keys()) {
-    let propertySchema = schema.get(key);
+  let restName;
+  const properties = kpobject();
+  for (const [key, propertySchema] of schema) {
+    if (isObject(propertySchema) && propertySchema.has("#rest")) {
+      restName = key;
+      break;
+    }
     if (isObject(propertySchema) && propertySchema.has("#optional")) {
       propertySchema = propertySchema.get("#optional");
     } else if (!value.has(key)) {
-      return kperror("missingProperty", ["value", value], ["key", key]);
+      if (isObject(propertySchema) && propertySchema.has("#default")) {
+        properties.set(key, [propertySchema.get("#default"), "any"]);
+      } else {
+        return kperror("missingProperty", ["value", value], ["key", key]);
+      }
     }
     if (value.has(key)) {
-      schemasForPresentKeys.set(key, propertySchema);
+      properties.set(key, [value.get(key), propertySchema]);
     }
+  }
+  if (restName !== undefined) {
+    const rest = kpobject();
+    for (const [key, property] of value) {
+      if (!properties.has(key)) {
+        rest.set(key, property);
+      }
+    }
+    properties.set(restName, [
+      rest,
+      objectOf(
+        kpobject(
+          ["keys", "string"],
+          ["values", schema.get(restName).get("#rest")]
+        )
+      ),
+    ]);
   }
   const wrapper = {
     get(key) {
-      const propertyValue = value.get(key);
+      const [propertyValue, propertySchema] = properties.get(key);
       const forcedValue = force(propertyValue);
-      const propertySchema = schemasForPresentKeys.get(key);
       const bindings = eagerBind(forcedValue, propertySchema);
       if (isError(bindings)) {
         return kperror(
@@ -678,7 +763,7 @@ function bindObjectSchema(value, schema) {
     },
     force() {
       const forcedValue = kpobject();
-      for (const key of schemasForPresentKeys.keys()) {
+      for (const key of properties.keys()) {
         const propertyValue = this.get(key);
         if (isError(propertyValue)) {
           return propertyValue;
@@ -737,6 +822,22 @@ export function optional(schema) {
 
 export function either(...schemas) {
   return kpobject(["#either", schemas]);
+}
+
+export function as(schema, name) {
+  if (isObject(schema) && schema.has("#rest")) {
+    return kpobject(["#rest", as(schema.get("#rest"), name)]);
+  } else {
+    return kpobject(["#bind", schema], ["as", name]);
+  }
+}
+
+export function default_(schema, defaultValue) {
+  return kpobject(["#default", defaultValue], ["for", schema]);
+}
+
+export function rest(schema) {
+  return kpobject(["#rest", schema]);
 }
 
 export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
