@@ -710,7 +710,7 @@ function bindObjectSchema(value, schema) {
   }
   let restName;
   const properties = kpobject();
-  for (const [key, propertySchema] of schema) {
+  for (let [key, propertySchema] of schema) {
     if (isObject(propertySchema) && propertySchema.has("#rest")) {
       restName = key;
       break;
