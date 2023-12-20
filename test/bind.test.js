@@ -1,5 +1,5 @@
 import test from "ava";
-import { eagerBind, lazyBind } from "../src/builtins.js";
+import { as, eagerBind, lazyBind } from "../src/builtins.js";
 import { literal } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
 import assertIsError from "./assertIsError.js";
@@ -52,6 +52,16 @@ test("Eager binding forces evaluation", (t) => {
   const result = eagerBind(value, schema);
 
   assertIsError(t, result, "wrongType");
+});
+
+test("Eager binding can bind expressions inside arrays", (t) => {
+  const value = [expression(literal("foo"))];
+  const schema = [as("string", "word")];
+
+  const bindings = eagerBind(value, schema);
+  const word = bindings.get("word");
+
+  t.is(word, "foo");
 });
 
 function expression(expr) {

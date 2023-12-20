@@ -536,6 +536,18 @@ export function force(value) {
   }
 }
 
+export function requiredNames(schema) {
+  if (isObject(schema)) {
+    if (schema.has("#bind")) {
+      return [schema.get("as")];
+    } else {
+      return [];
+    }
+  } else {
+    return [];
+  }
+}
+
 export function lazyBind(value, schema) {
   if (isString(schema)) {
     return bindTypeSchema(value, schema);
@@ -550,6 +562,8 @@ export function lazyBind(value, schema) {
       return bindTypeWithConditionsSchema(value, schema);
     } else if (schema.has("#bind")) {
       return explicitBind(value, schema);
+    } else if (schema.has("#default")) {
+      return lazyBind(value, schema.get("for"));
     } else {
       return bindObjectSchema(value, schema);
     }
@@ -580,14 +594,11 @@ function bindArraySchema(value, schema) {
   if (!isArray(value)) {
     return kperror("wrongType", ["value", value], ["expectedType", "array"]);
   }
+  const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
   const elementBindings = [];
   for (let i = 0; i < schema.length; i++) {
     if (isObject(schema[i]) && schema[i].has("#rest")) {
-      const bindings = eagerBind(
-        value.slice(i),
-        arrayOf(schema[i].get("#rest"))
-      );
-      elementBindings.push(bindings);
+      break;
     } else if (i >= value.length) {
       if (isObject(schema[i]) && schema[i].has("#default")) {
         const forSchema = schema[i].get("for");
@@ -609,6 +620,13 @@ function bindArraySchema(value, schema) {
       }
       elementBindings.push(bindings);
     }
+  }
+  if (hasRest) {
+    const bindings = eagerBind(
+      value.slice(schema.length - 1),
+      arrayOf(schema.at(-1).get("#rest"))
+    );
+    elementBindings.push(bindings);
   }
   return kpoMerge(...elementBindings);
 }
@@ -645,6 +663,9 @@ function bindTypeWithConditionsSchema(value, schema) {
     return typeBindings;
   }
   const elementBindings = kpobject();
+  for (const requiredName of requiredNames(schema.get("elements"))) {
+    elementBindings.set(requiredName, []);
+  }
   if (schema.has("elements")) {
     for (let i = 0; i < value.length; i++) {
       const bindings = eagerBind(value[i], schema.get("elements"));

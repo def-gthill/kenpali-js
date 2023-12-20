@@ -1,4 +1,13 @@
-import { builtins, isError, matches, toString } from "./builtins.js";
+import {
+  as,
+  builtins,
+  default_,
+  isError,
+  lazyBind,
+  matches,
+  rest,
+  toString,
+} from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kperror from "./kperror.js";
@@ -182,6 +191,8 @@ function callOnExpressionsTracing(f, args, namedArgs, names) {
   return result;
 }
 
+const newBinding = true;
+
 function callOnExpressions(f, args, namedArgs, names) {
   const allArgs = {
     args: evalExpressionArgs(args, names),
@@ -193,7 +204,11 @@ function callOnExpressions(f, args, namedArgs, names) {
     if (f.isLazy) {
       return callLazyBuiltin(f, allArgs, names);
     } else {
-      return callBuiltin(f, allArgs, names);
+      if (newBinding) {
+        return callBuiltin_NEW(f, allArgs, names);
+      } else {
+        return callBuiltin(f, allArgs, names);
+      }
     }
   } else {
     return callNonFunction(f, allArgs);
@@ -315,6 +330,53 @@ function callBuiltin(f, allArgs, names) {
     paramObjects,
     bindingValues
   );
+  return f(argValues, namedArgValues);
+}
+
+function callBuiltin_NEW(f, allArgs, names) {
+  const allParams = paramsFromBuiltin(f);
+  // console.log(allParams);
+  console.log("All args");
+  console.log(allArgs);
+  const paramObjects = normalizeAllParams(allParams);
+  // console.log(paramObjects);
+  const paramSchema = paramObjects.params.map((param) => as("any", param.name));
+  if (paramObjects.restParam) {
+    paramSchema.push(as(rest("any"), paramObjects.restParam.name));
+  }
+  const namedParamSchema = kpobject(
+    ...paramObjects.namedParams.map((param) => {
+      let valueSchema = "any";
+      if ("defaultValue" in param) {
+        valueSchema = default_(valueSchema, param.defaultValue);
+      }
+      return [param.name, valueSchema];
+    })
+  );
+  console.log("Named Param Schema");
+  console.log(namedParamSchema);
+  const schema = [paramSchema, namedParamSchema];
+  const bindings = lazyBind([allArgs.args, allArgs.namedArgs], schema);
+  console.log("Bindings");
+  console.log(bindings);
+  const argValues = paramObjects.params.map((param) =>
+    evalWithBuiltins(bindings.get(param.name), names)
+  );
+  if (paramObjects.restParam) {
+    argValues.push(
+      ...bindings
+        .get(paramObjects.restParam.name)
+        .map((arg) => evalWithBuiltins(arg, names))
+    );
+  }
+  const namedArgValues = kpobject(
+    ...paramObjects.namedParams.map((param) => [
+      param.name,
+      evalWithBuiltins(bindings.get(param.name), names),
+    ])
+  );
+  // console.log(argValues);
+  // console.log(namedArgValues);
   return f(argValues, namedArgValues);
 }
 
