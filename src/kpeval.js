@@ -346,6 +346,7 @@ function callBuiltin_NEW(f, allArgs, names) {
   // console.log("Named Args");
   // console.log(namedArgs);
   const paramObjects = normalizeAllParams(allParams);
+  // console.log("Param Objects");
   // console.log(paramObjects);
   const paramSchema = paramObjects.params.map((param) =>
     as(param.type ?? "any", param.name)
@@ -376,7 +377,7 @@ function callBuiltin_NEW(f, allArgs, names) {
   // console.log("Bindings");
   // console.log(bindings);
   if (isError(bindings)) {
-    return argumentError(bindings);
+    return argumentError(paramObjects, bindings);
   }
   const argValues = paramObjects.params.map((param) =>
     force(bindings.get(param.name))
@@ -407,7 +408,7 @@ function captureContext(expression, names) {
   return { expression, context: names };
 }
 
-function argumentError(err) {
+function argumentError(paramObjects, err) {
   let updatedErr = err;
   if (updatedErr.get("#error") === "badElement") {
     updatedErr = updatedErr.get("reason");
@@ -415,7 +416,9 @@ function argumentError(err) {
   if (updatedErr.get("#error") === "badElement") {
     updatedErr = updatedErr.get("reason");
   }
-  if (updatedErr.get("#error") === "wrongType") {
+  if (updatedErr.get("#error") === "badElement") {
+    updatedErr = kpoMerge(updatedErr, kpobject(["#error", "badArgumentValue"]));
+  } else if (updatedErr.get("#error") === "wrongType") {
     updatedErr = kpoMerge(
       updatedErr,
       kpobject(["#error", "wrongArgumentType"])
@@ -423,7 +426,13 @@ function argumentError(err) {
   } else if (updatedErr.get("#error") === "badValue") {
     updatedErr = kpoMerge(updatedErr, kpobject(["#error", "badArgumentValue"]));
   } else if (updatedErr.get("#error") === "missingElement") {
-    updatedErr = kpoMerge(updatedErr, kpobject(["#error", "missingArgument"]));
+    updatedErr = kpoMerge(
+      updatedErr,
+      kpobject(
+        ["#error", "missingArgument"],
+        ["name", paramObjects.params[updatedErr.get("index") - 1].name]
+      )
+    );
   }
   return updatedErr;
 }

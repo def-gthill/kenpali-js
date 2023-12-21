@@ -606,7 +606,12 @@ function bindArraySchema(value, schema) {
           kpobject([forSchema.get("as"), schema[i].get("#default")])
         );
       } else {
-        return kperror("missingElement", ["value", value], ["schema", schema]);
+        return kperror(
+          "missingElement",
+          ["value", value],
+          ["index", i + 1],
+          ["schema", schema]
+        );
       }
     } else {
       const bindings = eagerBind(value[i], schema[i]);
@@ -649,7 +654,7 @@ function bindUnionSchema(value, schema) {
       ["value", value],
       [
         "expectedType",
-        either(errors.map(([_, err]) => err.get("expectedType"))),
+        either(...errors.map(([_, err]) => err.get("expectedType"))),
       ]
     );
   } else {
