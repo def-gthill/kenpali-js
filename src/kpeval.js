@@ -2,6 +2,7 @@ import {
   as,
   builtins,
   default_,
+  force,
   isError,
   lazyBind,
   matches,
@@ -336,8 +337,14 @@ function callBuiltin(f, allArgs, names) {
 function callBuiltin_NEW(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   // console.log(allParams);
-  console.log("All args");
-  console.log(allArgs);
+  // console.log("All args");
+  // console.log(allArgs);
+  const args = captureArgContext(allArgs.args, names);
+  // console.log("Args");
+  // console.log(args);
+  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
+  // console.log("Named Args");
+  // console.log(namedArgs);
   const paramObjects = normalizeAllParams(allParams);
   // console.log(paramObjects);
   const paramSchema = paramObjects.params.map((param) =>
@@ -355,39 +362,49 @@ function callBuiltin_NEW(f, allArgs, names) {
     ...paramObjects.namedParams.map((param) => {
       let valueSchema = param.type ?? "any";
       if ("defaultValue" in param) {
-        valueSchema = default_(valueSchema, param.defaultValue);
+        valueSchema = default_(valueSchema, captureContext(param.defaultValue));
       }
       return [param.name, valueSchema];
     })
   );
-  console.log("Named Param Schema");
-  console.log(namedParamSchema);
+  // console.log("Param Schema");
+  // console.log(paramSchema);
+  // console.log("Named Param Schema");
+  // console.log(namedParamSchema);
   const schema = [paramSchema, namedParamSchema];
-  const bindings = lazyBind([allArgs.args, allArgs.namedArgs], schema);
-  console.log("Bindings");
-  console.log(bindings);
-  // if (isError(bindings)) {
-  //   return argumentError(bindings);
-  // }
+  const bindings = lazyBind([args, namedArgs], schema);
+  // console.log("Bindings");
+  // console.log(bindings);
+  if (isError(bindings)) {
+    return argumentError(bindings);
+  }
   const argValues = paramObjects.params.map((param) =>
-    evalWithBuiltins(bindings.get(param.name), names)
+    force(bindings.get(param.name))
   );
   if (paramObjects.restParam) {
-    argValues.push(
-      ...bindings
-        .get(paramObjects.restParam.name)
-        .map((arg) => evalWithBuiltins(arg, names))
-    );
+    argValues.push(...bindings.get(paramObjects.restParam.name).map(force));
   }
   const namedArgValues = kpobject(
     ...paramObjects.namedParams.map((param) => [
       param.name,
-      evalWithBuiltins(bindings.get(param.name), names),
+      force(bindings.get(param.name)),
     ])
   );
   // console.log(argValues);
   // console.log(namedArgValues);
   return f(argValues, namedArgValues);
+}
+
+function captureArgContext(args, names) {
+  return args.map((arg) => captureContext(arg, names));
+}
+
+function captureNamedArgContext(namedArgs, names) {
+  return kpoMap(namedArgs, ([name, arg]) => [name, captureContext(arg, names)]);
+}
+
+function captureContext(expression, names) {
+  return { expression, context: names };
 }
 
 function argumentError(err) {
