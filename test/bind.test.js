@@ -1,5 +1,12 @@
 import test from "ava";
-import { as, eagerBind, lazyBind } from "../src/builtins.js";
+import {
+  arrayOf,
+  as,
+  eagerBind,
+  force,
+  lazyBind,
+  rest,
+} from "../src/builtins.js";
 import { literal } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
 import assertIsError from "./assertIsError.js";
@@ -27,7 +34,7 @@ test("Lazy binding validates names that the caller retrieves", (t) => {
   const schema = kpobject(["foo", "number"]);
 
   const bindings = lazyBind(value, schema);
-  const foo = bindings.get("foo");
+  const foo = force(bindings.get("foo"));
 
   assertIsError(t, foo, "badProperty");
 });
@@ -40,9 +47,39 @@ test("Lazy binding ignores names that the caller doesn't retrieve", (t) => {
   const schema = kpobject(["foo", "string"], ["spam", "number"]);
 
   const bindings = lazyBind(value, schema);
-  const foo = bindings.get("foo");
+  const foo = force(bindings.get("foo"));
 
   t.is(foo, "bar");
+});
+
+test("Lazy binding can bind expressions inside fixed arrays", (t) => {
+  const value = [expression(literal(42))];
+  const schema = [as("number", "answer")];
+
+  const bindings = lazyBind(value, schema);
+  const answer = force(bindings.get("answer"));
+
+  t.is(answer, 42);
+});
+
+test("Lazy binding can bind expressions to rest elements in arrays", (t) => {
+  const value = [expression(literal(42))];
+  const schema = [rest(as("number", "answers"))];
+
+  const bindings = lazyBind(value, schema);
+  const answers = force(bindings.get("answers"));
+
+  t.deepEqual(answers, [42]);
+});
+
+test("Lazy binding can bind expressions inside uniform arrays", (t) => {
+  const value = [expression(literal(42))];
+  const schema = arrayOf(as("number", "answer"));
+
+  const bindings = lazyBind(value, schema);
+  const answer = force(bindings.get("answer"));
+
+  t.deepEqual(answer, [42]);
 });
 
 test("Eager binding forces evaluation", (t) => {

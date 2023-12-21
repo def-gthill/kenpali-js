@@ -573,6 +573,10 @@ export function lazyBind(value, schema) {
 }
 
 function bindTypeSchema(value, schema) {
+  // TEMPORARY fix for type-checking bare expressions
+  if (typeof value === "object" && value !== null && "literal" in value) {
+    value = evalWithBuiltins(value, kpobject());
+  }
   if (typeof value === "object" && value !== null && "expression" in value) {
     return kpobject();
   } else if (typeOf(value) === schema) {
@@ -641,7 +645,20 @@ function bindUnionSchema(value, schema) {
       return bindings;
     }
   }
-  return kperror("badValue", ["value", value], ["errors", errors]);
+  console.log("Errors are");
+  console.log(errors);
+  if (errors.every(([_, err]) => err.get("#error") === "wrongType")) {
+    return kperror(
+      "wrongType",
+      ["value", value],
+      [
+        "expectedType",
+        either(errors.map(([_, err]) => err.get("expectedType"))),
+      ]
+    );
+  } else {
+    return kperror("badValue", ["value", value], ["errors", errors]);
+  }
 }
 
 function bindLiteralListSchema(value, schema) {

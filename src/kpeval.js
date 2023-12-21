@@ -340,13 +340,20 @@ function callBuiltin_NEW(f, allArgs, names) {
   console.log(allArgs);
   const paramObjects = normalizeAllParams(allParams);
   // console.log(paramObjects);
-  const paramSchema = paramObjects.params.map((param) => as("any", param.name));
+  const paramSchema = paramObjects.params.map((param) =>
+    as(param.type ?? "any", param.name)
+  );
   if (paramObjects.restParam) {
-    paramSchema.push(as(rest("any"), paramObjects.restParam.name));
+    paramSchema.push(
+      as(
+        rest(paramObjects.restParam.type ?? "any"),
+        paramObjects.restParam.name
+      )
+    );
   }
   const namedParamSchema = kpobject(
     ...paramObjects.namedParams.map((param) => {
-      let valueSchema = "any";
+      let valueSchema = param.type ?? "any";
       if ("defaultValue" in param) {
         valueSchema = default_(valueSchema, param.defaultValue);
       }
@@ -359,6 +366,9 @@ function callBuiltin_NEW(f, allArgs, names) {
   const bindings = lazyBind([allArgs.args, allArgs.namedArgs], schema);
   console.log("Bindings");
   console.log(bindings);
+  // if (isError(bindings)) {
+  //   return argumentError(bindings);
+  // }
   const argValues = paramObjects.params.map((param) =>
     evalWithBuiltins(bindings.get(param.name), names)
   );
@@ -378,6 +388,27 @@ function callBuiltin_NEW(f, allArgs, names) {
   // console.log(argValues);
   // console.log(namedArgValues);
   return f(argValues, namedArgValues);
+}
+
+function argumentError(err) {
+  let updatedErr = err;
+  if (updatedErr.get("#error") === "badElement") {
+    updatedErr = updatedErr.get("reason");
+  }
+  if (updatedErr.get("#error") === "badElement") {
+    updatedErr = updatedErr.get("reason");
+  }
+  if (updatedErr.get("#error") === "wrongType") {
+    updatedErr = kpoMerge(
+      updatedErr,
+      kpobject(["#error", "wrongArgumentType"])
+    );
+  } else if (updatedErr.get("#error") === "badValue") {
+    updatedErr = kpoMerge(updatedErr, kpobject(["#error", "badArgumentValue"]));
+  } else if (updatedErr.get("#error") === "missingElement") {
+    updatedErr = kpoMerge(updatedErr, kpobject(["#error", "missingArgument"]));
+  }
+  return updatedErr;
 }
 
 function evalBindings(bindings, names) {
