@@ -207,11 +207,7 @@ function callOnExpressions(f, args, namedArgs, names) {
     if (f.isLazy) {
       return callLazyBuiltin(f, allArgs, names);
     } else {
-      if (newBinding) {
-        return callBuiltin_NEW(f, allArgs, names);
-      } else {
-        return callBuiltin(f, allArgs, names);
-      }
+      return callBuiltin(f, allArgs, names);
     }
   } else {
     return callNonFunction(f, allArgs);
@@ -316,40 +312,31 @@ class Scope {
   }
 }
 
+// function callBuiltin(f, allArgs, names) {
+//   const allParams = paramsFromBuiltin(f);
+//   const paramObjects = normalizeAllParams(allParams);
+//   const argObjects = normalizeAllArgs(allArgs);
+//   const bindings = bindArgs(argObjects, paramObjects);
+//   if (isThrown(bindings)) {
+//     return bindings;
+//   }
+//   const bindingValues = evalBindings(bindings, names);
+//   const validationError = validateBindings(paramObjects, bindingValues);
+//   if (validationError) {
+//     return validationError;
+//   }
+//   const [argValues, namedArgValues] = bindingValuesToBuiltinArgs(
+//     paramObjects,
+//     bindingValues
+//   );
+//   return f(argValues, namedArgValues);
+// }
+
 function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const argObjects = normalizeAllArgs(allArgs);
-  const bindings = bindArgs(argObjects, paramObjects);
-  if (isThrown(bindings)) {
-    return bindings;
-  }
-  const bindingValues = evalBindings(bindings, names);
-  const validationError = validateBindings(paramObjects, bindingValues);
-  if (validationError) {
-    return validationError;
-  }
-  const [argValues, namedArgValues] = bindingValuesToBuiltinArgs(
-    paramObjects,
-    bindingValues
-  );
-  return f(argValues, namedArgValues);
-}
-
-function callBuiltin_NEW(f, allArgs, names) {
-  const allParams = paramsFromBuiltin(f);
-  // console.log(allParams);
-  // console.log("All args");
-  // console.log(allArgs);
   const args = captureArgContext(allArgs.args, names);
-  // console.log("Args");
-  // console.log(args);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  // console.log("Named Args");
-  // console.log(namedArgs);
   const paramObjects = normalizeAllParams(allParams);
-  // console.log("Param Objects");
-  // console.log(paramObjects);
   const paramSchema = paramObjects.params.map((param) =>
     as(param.type ?? "any", param.name)
   );
@@ -376,14 +363,8 @@ function callBuiltin_NEW(f, allArgs, names) {
       rest(paramObjects.namedRestParam.type ?? "any")
     );
   }
-  // console.log("Param Schema");
-  // console.log(paramSchema);
-  // console.log("Named Param Schema");
-  // console.log(namedParamSchema);
   const schema = [paramSchema, namedParamSchema];
   const bindings = lazyBind([args, namedArgs], schema);
-  // console.log("Bindings");
-  // console.log(bindings);
   if (isThrown(bindings)) {
     return argumentError(paramObjects, bindings);
   }
@@ -406,8 +387,6 @@ function callBuiltin_NEW(f, allArgs, names) {
       namedArgValues.set(name, force(param));
     }
   }
-  // console.log(argValues);
-  // console.log(namedArgValues);
   return f(argValues, namedArgValues);
 }
 
@@ -458,12 +437,13 @@ function argumentError(paramObjects, err) {
   return updatedErr;
 }
 
-function evalBindings(bindings, names) {
-  return kpoMap(bindings, ([name, binding]) => [
-    name,
-    evalBinding(binding, names),
-  ]);
-}
+// REMOVE WHEN BINDING IS UNIFIED
+// function evalBindings(bindings, names) {
+//   return kpoMap(bindings, ([name, binding]) => [
+//     name,
+//     evalBinding(binding, names),
+//   ]);
+// }
 
 function evalBinding(binding, names) {
   if (binding instanceof Map) {
@@ -482,23 +462,24 @@ function evalArg(arg, names) {
   return { ...arg, value: evalWithBuiltins(arg.value, names) };
 }
 
-function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
-  const argValues = [
-    ...paramObjects.params.map((param) => bindingValues.get(param.name)),
-    ...(bindingValues.get(paramObjects.restParam?.name) ?? []),
-  ].map((binding) => binding.value);
-  const namedArgValues = kpoMap(
-    kpobject(
-      ...paramObjects.namedParams.map((param) => [
-        param.name,
-        bindingValues.get(param.name),
-      ]),
-      ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
-    ),
-    ([name, binding]) => [name, binding.value]
-  );
-  return [argValues, namedArgValues];
-}
+// REMOVE WHEN BINDING IS UNIFIED
+// function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
+//   const argValues = [
+//     ...paramObjects.params.map((param) => bindingValues.get(param.name)),
+//     ...(bindingValues.get(paramObjects.restParam?.name) ?? []),
+//   ].map((binding) => binding.value);
+//   const namedArgValues = kpoMap(
+//     kpobject(
+//       ...paramObjects.namedParams.map((param) => [
+//         param.name,
+//         bindingValues.get(param.name),
+//       ]),
+//       ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
+//     ),
+//     ([name, binding]) => [name, binding.value]
+//   );
+//   return [argValues, namedArgValues];
+// }
 
 function callLazyBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
@@ -753,22 +734,23 @@ function bindNamedArgObjects(args, params, restParam) {
   return kpoMerge(argsToBind, defaults);
 }
 
-function validateBindings(paramObjects, bindings) {
-  for (const param of paramObjects.params) {
-    const error = validateBinding(param, bindings.get(param.name));
-    if (error) {
-      return error;
-    }
-  }
-  if (paramObjects.restParam) {
-    for (const binding of bindings.get(paramObjects.restParam.name)) {
-      const error = validateBinding(paramObjects.restParam, binding);
-      if (error) {
-        return error;
-      }
-    }
-  }
-}
+// REMOVE WHEN BINDING IS UNIFIED
+// function validateBindings(paramObjects, bindings) {
+//   for (const param of paramObjects.params) {
+//     const error = validateBinding(param, bindings.get(param.name));
+//     if (error) {
+//       return error;
+//     }
+//   }
+//   if (paramObjects.restParam) {
+//     for (const binding of bindings.get(paramObjects.restParam.name)) {
+//       const error = validateBinding(paramObjects.restParam, binding);
+//       if (error) {
+//         return error;
+//       }
+//     }
+//   }
+// }
 
 function validateBinding(paramObject, binding) {
   const errorShortCircuit = checkErrorShortCircuit(binding, paramObject);
