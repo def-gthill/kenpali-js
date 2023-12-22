@@ -368,6 +368,12 @@ function callBuiltin_NEW(f, allArgs, names) {
       return [param.name, valueSchema];
     })
   );
+  if (paramObjects.namedRestParam) {
+    namedParamSchema.set(
+      paramObjects.namedRestParam.name,
+      rest(paramObjects.namedRestParam.type ?? "any")
+    );
+  }
   // console.log("Param Schema");
   // console.log(paramSchema);
   // console.log("Named Param Schema");
@@ -391,6 +397,13 @@ function callBuiltin_NEW(f, allArgs, names) {
       force(bindings.get(param.name)),
     ])
   );
+  if (paramObjects.namedRestParam) {
+    for (const [name, param] of bindings.get(
+      paramObjects.namedRestParam.name
+    )) {
+      namedArgValues.set(name, force(param));
+    }
+  }
   // console.log(argValues);
   // console.log(namedArgValues);
   return f(argValues, namedArgValues);
