@@ -119,13 +119,11 @@ function parsePipeline(tokens, start) {
     [
       parsePipelineElement,
       parseZeroOrMore(
-        parseAllOf([
-          parseAnyOf(
-            parseSingle("PIPE", () => "PIPE"),
-            parseSingle("AT", () => "AT")
-          ),
-          parsePipelineElement,
-        ])
+        parseAnyOf(
+          parseAllOf([parseSingle("PIPE", () => "PIPE"), parsePipelineElement]),
+          parseAllOf([parseSingle("AT", () => "AT"), parsePipelineElement]),
+          parseSingle("BANG", () => "BANG")
+        )
       ),
     ],
     (expression, calls) => {

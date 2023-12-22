@@ -1,6 +1,7 @@
 import {
   array,
   calling,
+  catching,
   defining,
   errorPassing,
   given,
@@ -204,19 +205,24 @@ function desugarProperty(expression) {
 
 function desugarPipeline(expression) {
   let axis = desugar(expression.start);
-  for (const [op, call] of expression.calls) {
-    if (op === "AT") {
-      axis = calling(name("at"), [axis, desugar(call)]);
+  for (const step of expression.calls) {
+    if (step === "BANG") {
+      axis = catching(axis);
     } else {
-      if ("calling" in call) {
-        const args = call.args?.map(desugar) ?? [];
-        const namedArgs = kpoMap(
-          call.namedArgs ?? kpobject(),
-          ([name, arg]) => [name, desugar(arg)]
-        );
-        axis = calling(desugar(call.calling), [axis, ...args], namedArgs);
+      const [op, call] = step;
+      if (op === "AT") {
+        axis = calling(name("at"), [axis, desugar(call)]);
       } else {
-        axis = calling(desugar(call), [axis]);
+        if ("calling" in call) {
+          const args = call.args?.map(desugar) ?? [];
+          const namedArgs = kpoMap(
+            call.namedArgs ?? kpobject(),
+            ([name, arg]) => [name, desugar(arg)]
+          );
+          axis = calling(desugar(call.calling), [axis, ...args], namedArgs);
+        } else {
+          axis = calling(desugar(call), [axis]);
+        }
       }
     }
   }

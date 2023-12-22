@@ -9,7 +9,7 @@ import {
 } from "../src/builtins.js";
 import { literal } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
-import assertIsError from "./assertIsError.js";
+import assertIsThrown from "./assertIsError.js";
 
 test("Lazy binding validates anything that's already evaluated", (t) => {
   const value = "foo";
@@ -17,7 +17,7 @@ test("Lazy binding validates anything that's already evaluated", (t) => {
 
   const result = lazyBind(value, schema);
 
-  assertIsError(t, result, "wrongType");
+  assertIsThrown(t, result, "wrongType");
 });
 
 test("Lazy binding doesn't evaluate anything if there are no names bound", (t) => {
@@ -36,7 +36,7 @@ test("Lazy binding validates names that the caller retrieves", (t) => {
   const bindings = lazyBind(value, schema);
   const foo = force(bindings.get("foo"));
 
-  assertIsError(t, foo, "badProperty");
+  assertIsThrown(t, foo, "badProperty");
 });
 
 test("Lazy binding ignores names that the caller doesn't retrieve", (t) => {
@@ -88,7 +88,7 @@ test("Eager binding forces evaluation", (t) => {
 
   const result = eagerBind(value, schema);
 
-  assertIsError(t, result, "wrongType");
+  assertIsThrown(t, result, "wrongType");
 });
 
 test("Eager binding can bind expressions inside arrays", (t) => {

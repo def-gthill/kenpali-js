@@ -9,6 +9,7 @@ import {
   name,
   object,
   objectSpread,
+  pipeline,
   unquote,
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -36,6 +37,15 @@ test("Property access parses to an access node", (t) => {
   const code = "a.b";
   const result = kpparseSugared(code);
   t.deepEqual(result, access(name("a"), name("b")));
+});
+
+test("A pipeline parses to a pipeline node", (t) => {
+  const code = "a | b ! @ c !";
+  const result = kpparseSugared(code);
+  t.deepEqual(
+    result,
+    pipeline(name("a"), ["PIPE", name("b")], "BANG", ["AT", name("c")], "BANG")
+  );
 });
 
 test("An array spread operator in an array parses to an arraySpread node", (t) => {

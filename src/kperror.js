@@ -1,5 +1,5 @@
 import kpobject from "./kpobject.js";
 
-export default function kperror(type, ...properties) {
-  return kpobject(["#error", type], ...properties);
+export default function kpthrow(type, ...properties) {
+  return kpobject(["#thrown", type], ...properties);
 }

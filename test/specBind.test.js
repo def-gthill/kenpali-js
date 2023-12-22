@@ -13,7 +13,6 @@ runSpecFile(
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
   (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {
-    console.log(actualOutputValue);
     t.assert(
       isError(actualOutputValue),
       `${actualOutputValue} isn't an error object`

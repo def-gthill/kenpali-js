@@ -37,12 +37,18 @@ export function calling(f, args = [], namedArgs = kpobject()) {
   return result;
 }
 
+// REMOVE ME
 export function optional(expression) {
   return { optional: expression };
 }
 
+// REMOVE ME
 export function errorPassing(expression) {
   return { errorPassing: expression };
+}
+
+export function catching(expression) {
+  return { catching: expression };
 }
 
 export function quote(expression) {
