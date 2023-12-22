@@ -255,6 +255,14 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
 }
 
 function callGiven(f, allArgs, names) {
+  if (newBinding) {
+    return callGiven_NEW(f, allArgs, names);
+  } else {
+    return callGiven_OLD(f, allArgs, names);
+  }
+}
+
+function callGiven_OLD(f, allArgs, names) {
   const allParams = paramsFromGiven(f);
   const paramObjects = normalizeAllParams(allParams);
   const argObjects = normalizeAllArgs(allArgs);
@@ -264,6 +272,19 @@ function callGiven(f, allArgs, names) {
   }
   const thunks = bindingsToThunks(paramObjects, bindings, names);
   return evalWithBuiltins(f.get("result"), new Scope(f.get("closure"), thunks));
+}
+
+function callGiven_NEW(f, allArgs, names) {
+  // const allParams = paramsFromGiven(f);
+  // const paramObjects = normalizeAllParams(allParams);
+  // const argObjects = normalizeAllArgs(allArgs);
+  // const bindings = bindArgs(argObjects, paramObjects);
+  // if (isThrown(bindings)) {
+  //   return bindings;
+  // }
+  // const thunks = bindingsToThunks(paramObjects, bindings, names);
+  // return evalWithBuiltins(f.get("result"), new Scope(f.get("closure"), thunks));
+  return 42;
 }
 
 export function paramsFromGiven(f) {
