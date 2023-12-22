@@ -620,14 +620,10 @@ export function normalizeAllArgs(args) {
 
 export function normalizeArg(arg) {
   let value = arg;
-  const result = { optional: false, errorPassing: false };
+  const result = { optional: false };
   if ("optional" in value) {
     value = value.optional;
     result.optional = true;
-  }
-  if ("errorPassing" in value) {
-    value = value.errorPassing;
-    result.errorPassing = true;
   }
   result.value = value;
   return result;
@@ -685,11 +681,6 @@ function bindArgObjects(args, params, restParam) {
     }
   }
   const argsToBind = hasRest ? args : args.slice(0, params.length);
-  for (const arg of argsToBind) {
-    if (!arg.errorPassing && isThrown(arg.value)) {
-      return arg.value;
-    }
-  }
   const defaults = hasRest
     ? []
     : params.slice(args.length).map((param) => ({ value: param.defaultValue }));
@@ -753,10 +744,6 @@ function bindNamedArgObjects(args, params, restParam) {
 // }
 
 function validateBinding(paramObject, binding) {
-  const errorShortCircuit = checkErrorShortCircuit(binding, paramObject);
-  if (errorShortCircuit) {
-    return errorShortCircuit;
-  }
   const typeError = checkType(binding.value, paramObject);
   if (typeError) {
     return typeError;
@@ -774,18 +761,8 @@ function checkType(arg, param) {
   }
 }
 
-function checkErrorShortCircuit(arg) {
-  if (isThrown(arg.value) && !arg.errorPassing) {
-    return arg.value;
-  }
-}
-
 function catch_(expression) {
   if (isThrown(expression)) {
-    // return kpoMerge(
-    //   expression,
-    //   kpobject(["#error", expression.get("#thrown")])
-    // );
     return kpobject(
       ["#error", expression.get("#thrown")],
       ...kpoFilter(expression, ([name, _]) => name !== "#thrown")

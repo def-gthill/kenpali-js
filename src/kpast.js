@@ -42,11 +42,6 @@ export function optional(expression) {
   return { optional: expression };
 }
 
-// REMOVE ME
-export function errorPassing(expression) {
-  return { errorPassing: expression };
-}
-
 export function catching(expression) {
   return { catching: expression };
 }

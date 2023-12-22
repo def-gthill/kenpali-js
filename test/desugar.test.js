@@ -7,7 +7,6 @@ import {
   calling,
   catching,
   defining,
-  errorPassing,
   given,
   group,
   literal,
@@ -209,24 +208,16 @@ test("Desugaring propagates through function definitions", (t) => {
 test("Desugaring propagates through function calls", (t) => {
   const expression = calling(
     pipeSugared,
-    [pipeSugared, optional(pipeSugared), errorPassing(pipeSugared)],
-    kpobject(
-      ["foo", pipeSugared],
-      ["bar", optional(pipeSugared)],
-      ["baz", errorPassing(pipeSugared)]
-    )
+    [pipeSugared, optional(pipeSugared)],
+    kpobject(["foo", pipeSugared], ["bar", optional(pipeSugared)])
   );
   const result = desugar(expression);
   t.deepEqual(
     result,
     calling(
       pipeDesugared,
-      [pipeDesugared, optional(pipeDesugared), errorPassing(pipeDesugared)],
-      kpobject(
-        ["foo", pipeDesugared],
-        ["bar", optional(pipeDesugared)],
-        ["baz", errorPassing(pipeDesugared)]
-      )
+      [pipeDesugared, optional(pipeDesugared)],
+      kpobject(["foo", pipeDesugared], ["bar", optional(pipeDesugared)])
     )
   );
 });

@@ -5,7 +5,6 @@ import {
   arraySpread,
   calling,
   defining,
-  errorPassing,
   given,
   group,
   literal,
@@ -296,21 +295,8 @@ function parseNamedArgument(tokens, start) {
 function parsePossiblyOptionalArgument(tokens, start) {
   return parseAnyOf(
     parseAllOf(
-      [
-        parsePossiblyErrorPassingArgument,
-        consume("QUESTION_MARK", "expectedOptionalArgument"),
-      ],
+      [parse, consume("QUESTION_MARK", "expectedOptionalArgument")],
       optional
-    ),
-    parsePossiblyErrorPassingArgument
-  )(tokens, start);
-}
-
-function parsePossiblyErrorPassingArgument(tokens, start) {
-  return parseAnyOf(
-    parseAllOf(
-      [parse, consume("BANG", "expectedErrorPassingArgument")],
-      errorPassing
     ),
     parse
   )(tokens, start);

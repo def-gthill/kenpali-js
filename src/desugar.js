@@ -3,7 +3,6 @@ import {
   calling,
   catching,
   defining,
-  errorPassing,
   given,
   literal,
   name,
@@ -27,8 +26,6 @@ export default function desugar(expression) {
     return desugarCalling(expression);
   } else if ("optional" in expression) {
     return desugarOptional(expression);
-  } else if ("errorPassing" in expression) {
-    return desugarErrorPassing(expression);
   } else if ("quote" in expression) {
     return desugarQuote(expression);
   } else if ("unquote" in expression) {
@@ -168,10 +165,6 @@ function desugarNamedArgs(namedArgs) {
 
 function desugarOptional(expression) {
   return optional(desugar(expression.optional));
-}
-
-function desugarErrorPassing(expression) {
-  return errorPassing(desugar(expression.errorPassing));
 }
 
 function desugarQuote(expression) {
