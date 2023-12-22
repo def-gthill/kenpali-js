@@ -516,6 +516,9 @@ function loop(functionName, start, step, callback) {
 
 export function eagerBind(value, schema) {
   const forcedValue = force(value);
+  if (isError(forcedValue)) {
+    return kperror("errorPassed", ["reason", forcedValue]);
+  }
   const bindings = lazyBind(forcedValue, schema);
   if ("force" in bindings) {
     return bindings.force();
@@ -549,6 +552,8 @@ export function requiredNames(schema) {
 }
 
 export function lazyBind(value, schema) {
+  console.log("Schema");
+  console.log(schema);
   if (isString(schema)) {
     return bindTypeSchema(value, schema);
   } else if (isArray(schema)) {
@@ -616,12 +621,16 @@ function bindArraySchema(value, schema) {
     } else {
       const bindings = eagerBind(value[i], schema[i]);
       if (isError(bindings)) {
-        return kperror(
-          "badElement",
-          ["value", value],
-          ["index", i + 1],
-          ["reason", bindings]
-        );
+        if (bindings.get("#error") === "errorPassed") {
+          return bindings.get("reason");
+        } else {
+          return kperror(
+            "badElement",
+            ["value", value],
+            ["index", i + 1],
+            ["reason", bindings]
+          );
+        }
       }
       elementBindings.push(bindings);
     }
@@ -688,12 +697,16 @@ function bindTypeWithConditionsSchema(value, schema) {
     for (let i = 0; i < value.length; i++) {
       const bindings = eagerBind(value[i], schema.get("elements"));
       if (isError(bindings)) {
-        return kperror(
-          "badElement",
-          ["value", value],
-          ["index", i + 1],
-          ["reason", bindings]
-        );
+        if (bindings.get("#error") === "errorPassed") {
+          return bindings.get("reason");
+        } else {
+          return kperror(
+            "badElement",
+            ["value", value],
+            ["index", i + 1],
+            ["reason", bindings]
+          );
+        }
       }
       for (const [key, elementValue] of bindings) {
         if (!elementBindings.has(key)) {

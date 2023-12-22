@@ -374,14 +374,14 @@ function callBuiltin_NEW(f, allArgs, names) {
       rest(paramObjects.namedRestParam.type ?? "any")
     );
   }
-  // console.log("Param Schema");
-  // console.log(paramSchema);
-  // console.log("Named Param Schema");
-  // console.log(namedParamSchema);
+  console.log("Param Schema");
+  console.log(paramSchema);
+  console.log("Named Param Schema");
+  console.log(namedParamSchema);
   const schema = [paramSchema, namedParamSchema];
   const bindings = lazyBind([args, namedArgs], schema);
-  // console.log("Bindings");
-  // console.log(bindings);
+  console.log("Bindings");
+  console.log(bindings);
   if (isError(bindings)) {
     return argumentError(paramObjects, bindings);
   }
