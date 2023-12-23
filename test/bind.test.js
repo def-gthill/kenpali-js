@@ -39,12 +39,22 @@ test("Lazy binding validates names that the caller retrieves", (t) => {
   assertIsThrown(t, foo, "badProperty");
 });
 
-test("Lazy binding ignores names that the caller doesn't retrieve", (t) => {
+test("Lazy binding ignores unused names from fixed objects", (t) => {
   const value = kpobject(
     ["foo", expression(literal("bar"))],
     ["spam", expression(literal("eggs"))]
   );
   const schema = kpobject(["foo", "string"], ["spam", "number"]);
+
+  const bindings = lazyBind(value, schema);
+  const foo = force(bindings.get("foo"));
+
+  t.is(foo, "bar");
+});
+
+test("Lazy binding ignores unused names from fixed arrays", (t) => {
+  const value = [expression(literal("bar")), expression(literal("eggs"))];
+  const schema = [as("string", "foo"), as("number", "spam")];
 
   const bindings = lazyBind(value, schema);
   const foo = force(bindings.get("foo"));

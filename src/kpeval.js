@@ -2,6 +2,7 @@ import {
   as,
   builtins,
   default_,
+  eagerBind,
   force,
   isThrown,
   lazyBind,
@@ -275,16 +276,19 @@ function callGiven_OLD(f, allArgs, names) {
 }
 
 function callGiven_NEW(f, allArgs, names) {
-  // const allParams = paramsFromGiven(f);
-  // const paramObjects = normalizeAllParams(allParams);
-  // const argObjects = normalizeAllArgs(allArgs);
-  // const bindings = bindArgs(argObjects, paramObjects);
-  // if (isThrown(bindings)) {
-  //   return bindings;
-  // }
-  // const thunks = bindingsToThunks(paramObjects, bindings, names);
-  // return evalWithBuiltins(f.get("result"), new Scope(f.get("closure"), thunks));
-  return 42;
+  const allParams = paramsFromGiven(f);
+  const args = captureArgContext(allArgs.args, names);
+  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
+  const paramObjects = normalizeAllParams(allParams);
+  const schema = createParamSchema(paramObjects);
+  const bindings = lazyBind([args, namedArgs], schema);
+  if (isThrown(bindings)) {
+    return argumentError(paramObjects, bindings);
+  }
+  return evalWithBuiltins(
+    f.get("result"),
+    new Scope(f.get("closure"), bindings)
+  );
 }
 
 export function paramsFromGiven(f) {
@@ -358,34 +362,8 @@ function callBuiltin(f, allArgs, names) {
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   const paramObjects = normalizeAllParams(allParams);
-  const paramSchema = paramObjects.params.map((param) =>
-    as(param.type ?? "any", param.name)
-  );
-  if (paramObjects.restParam) {
-    paramSchema.push(
-      as(
-        rest(paramObjects.restParam.type ?? "any"),
-        paramObjects.restParam.name
-      )
-    );
-  }
-  const namedParamSchema = kpobject(
-    ...paramObjects.namedParams.map((param) => {
-      let valueSchema = param.type ?? "any";
-      if ("defaultValue" in param) {
-        valueSchema = default_(valueSchema, captureContext(param.defaultValue));
-      }
-      return [param.name, valueSchema];
-    })
-  );
-  if (paramObjects.namedRestParam) {
-    namedParamSchema.set(
-      paramObjects.namedRestParam.name,
-      rest(paramObjects.namedRestParam.type ?? "any")
-    );
-  }
-  const schema = [paramSchema, namedParamSchema];
-  const bindings = lazyBind([args, namedArgs], schema);
+  const schema = createParamSchema(paramObjects);
+  const bindings = eagerBind([args, namedArgs], schema);
   if (isThrown(bindings)) {
     return argumentError(paramObjects, bindings);
   }
@@ -393,7 +371,7 @@ function callBuiltin(f, allArgs, names) {
     force(bindings.get(param.name))
   );
   if (paramObjects.restParam) {
-    argValues.push(...bindings.get(paramObjects.restParam.name).map(force));
+    argValues.push(...force(bindings.get(paramObjects.restParam.name)));
   }
   const namedArgValues = kpobject(
     ...paramObjects.namedParams.map((param) => [
@@ -627,6 +605,40 @@ export function normalizeParam(param) {
   } else {
     return param;
   }
+}
+
+function createParamSchema(paramObjects) {
+  const paramSchema = paramObjects.params.map((param) => {
+    let schema = as(param.type ?? "any", param.name);
+    if ("defaultValue" in param) {
+      schema = default_(schema, captureContext(param.defaultValue));
+    }
+    return schema;
+  });
+  if (paramObjects.restParam) {
+    paramSchema.push(
+      as(
+        rest(paramObjects.restParam.type ?? "any"),
+        paramObjects.restParam.name
+      )
+    );
+  }
+  const namedParamSchema = kpobject(
+    ...paramObjects.namedParams.map((param) => {
+      let valueSchema = param.type ?? "any";
+      if ("defaultValue" in param) {
+        valueSchema = default_(valueSchema, captureContext(param.defaultValue));
+      }
+      return [param.name, valueSchema];
+    })
+  );
+  if (paramObjects.namedRestParam) {
+    namedParamSchema.set(
+      paramObjects.namedRestParam.name,
+      rest(paramObjects.namedRestParam.type ?? "any")
+    );
+  }
+  return [paramSchema, namedParamSchema];
 }
 
 export function normalizeAllArgs(args) {

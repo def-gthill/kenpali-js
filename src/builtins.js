@@ -1,7 +1,7 @@
 import { given, literal } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import { callOnValues, evalWithBuiltins } from "./kpeval.js";
-import kpobject, { kpoEntries, kpoMerge } from "./kpobject.js";
+import kpobject, { kpoEntries, kpoKeys, kpoMap, kpoMerge } from "./kpobject.js";
 
 const rawBuiltins = [
   builtin(
@@ -518,21 +518,46 @@ function loop(functionName, start, step, callback) {
   );
 }
 
-export function eagerBind(value, schema) {
-  const forcedValue = force(value);
+export function eagerBind(value, schema, isRecursiveCall = false) {
+  const forcedValue = deepForce(value);
+  // if (isThrown(forcedValue)) {
+  //   return kpthrow("errorPassed", ["reason", forcedValue]);
+  // }
   if (isThrown(forcedValue)) {
-    return kpthrow("errorPassed", ["reason", forcedValue]);
+    return unwrapErrorPassed(forcedValue);
   }
   const bindings = lazyBind(forcedValue, schema);
-  if ("force" in bindings) {
-    return bindings.force();
+  if (isThrown(bindings)) {
+    return unwrapErrorPassed(bindings, isRecursiveCall);
+  }
+  const forcedBindings = kpobject();
+  for (const key of bindings.keys()) {
+    const bindingValue = force(bindings.get(key));
+    if (isThrown(bindingValue)) {
+      return unwrapErrorPassed(bindingValue, isRecursiveCall);
+    } else {
+      forcedBindings.set(key, bindingValue);
+    }
+  }
+  return forcedBindings;
+}
+
+function unwrapErrorPassed(err, isRecursiveCall) {
+  if (isRecursiveCall && err.get("#thrown") === "errorPassed") {
+    return err.get("reason");
   } else {
-    return bindings;
+    return err;
   }
 }
 
 export function force(value) {
-  if (value === null) {
+  if (isThrown(value)) {
+    if (value.get("#thrown") === "errorPassed") {
+      return value;
+    } else {
+      return kpthrow("errorPassed", ["reason", value]);
+    }
+  } else if (value === null) {
     return value;
   } else if (typeof value === "object" && "expression" in value) {
     return evalWithBuiltins(value.expression, value.context);
@@ -540,6 +565,22 @@ export function force(value) {
     return value.thunk();
   } else {
     return value;
+  }
+}
+
+function deepForce(value) {
+  const forcedValue = force(value);
+  if (isThrown(forcedValue)) {
+    return forcedValue;
+  } else if (isArray(forcedValue)) {
+    return forcedValue.map(deepForce);
+  } else if (isObject(forcedValue)) {
+    return kpoMap(forcedValue, ([key, propertyValue]) => [
+      key,
+      deepForce(propertyValue),
+    ]);
+  } else {
+    return force(forcedValue);
   }
 }
 
@@ -555,9 +596,7 @@ export function requiredNames(schema) {
   }
 }
 
-export function lazyBind(value, schema) {
-  // console.log("Schema");
-  // console.log(schema);
+export function lazyBind(value, schema, isRecursiveCall = false) {
   if (isString(schema)) {
     return bindTypeSchema(value, schema);
   } else if (isArray(schema)) {
@@ -568,7 +607,8 @@ export function lazyBind(value, schema) {
     } else if (schema.has("#oneOf")) {
       return bindLiteralListSchema(value, schema);
     } else if (schema.has("#type")) {
-      return bindTypeWithConditionsSchema(value, schema);
+      const result = bindTypeWithConditionsSchema(value, schema);
+      return result;
     } else if (schema.has("#bind")) {
       return explicitBind(value, schema);
     } else if (schema.has("#default")) {
@@ -582,7 +622,15 @@ export function lazyBind(value, schema) {
 }
 
 function bindTypeSchema(value, schema) {
-  if (typeof value === "object" && value !== null && "expression" in value) {
+  if (isThrown(value)) {
+    if (value.get("#thrown") === "errorPassed") {
+      return value;
+    } else {
+      return kpthrow("errorPassed", ["reason", value]);
+    }
+  } else if (isPending(value)) {
+    // Type schemas *cannot* bind names, so if the argument
+    // hasn't been evaluated yet, we have to bail out.
     return kpobject();
   } else if (typeOf(value) === schema) {
     return kpobject();
@@ -623,7 +671,7 @@ function bindArraySchema(value, schema) {
         );
       }
     } else {
-      const bindings = eagerBind(value[i], schema[i]);
+      const bindings = lazyBind(value[i], schema[i]);
       if (isThrown(bindings)) {
         if (bindings.get("#thrown") === "errorPassed") {
           return bindings.get("reason");
@@ -636,7 +684,32 @@ function bindArraySchema(value, schema) {
           );
         }
       }
-      elementBindings.push(bindings);
+      elementBindings.push(
+        kpobject(
+          ...kpoEntries(bindings).map(([key, bindingValue]) => [
+            key,
+            {
+              thunk: () => {
+                const forcedValue = force(bindingValue);
+                if (isThrown(forcedValue)) {
+                  if (forcedValue.get("#thrown") === "errorPassed") {
+                    return forcedValue.get("reason");
+                  } else {
+                    return kpthrow(
+                      "badElement",
+                      ["value", value],
+                      ["index", i + 1],
+                      ["reason", forcedValue]
+                    );
+                  }
+                } else {
+                  return forcedValue;
+                }
+              },
+            },
+          ])
+        )
+      );
     }
   }
   if (hasRest) {
@@ -659,8 +732,6 @@ function bindUnionSchema(value, schema) {
       return bindings;
     }
   }
-  // console.log("Errors are");
-  // console.log(errors);
   if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
     return kpthrow(
       "wrongType",
@@ -753,10 +824,10 @@ function bindTypeWithConditionsSchema(value, schema) {
 
 function explicitBind(value, schema) {
   const bindSchema = schema.get("#bind");
-  const bindings = eagerBind(value, bindSchema);
-  if (isThrown(bindings)) {
-    return bindings;
-  }
+  const bindings = lazyBind(value, bindSchema);
+  // if (isThrown(bindings)) {
+  //   return bindings;
+  // }
   return kpoMerge(bindings, kpobject([schema.get("as"), value]));
 }
 
@@ -801,36 +872,28 @@ function bindObjectSchema(value, schema) {
       ),
     ]);
   }
-  const wrapper = {
-    get(key) {
-      const [propertyValue, propertySchema] = properties.get(key);
-      const forcedValue = force(propertyValue);
-      const bindings = eagerBind(forcedValue, propertySchema);
-      if (isThrown(bindings)) {
-        return kpthrow(
-          "badProperty",
-          ["value", value],
-          ["key", key],
-          ["reason", bindings]
-        );
-      } else {
-        return forcedValue;
-      }
-    },
-    force() {
-      const forcedValue = kpobject();
-      for (const key of properties.keys()) {
-        const propertyValue = this.get(key);
-        if (isThrown(propertyValue)) {
-          return propertyValue;
-        } else {
-          forcedValue.set(key, propertyValue);
-        }
-      }
-      return forcedValue;
-    },
-  };
-  return wrapper;
+  return kpobject(
+    ...kpoKeys(properties).map((key) => [
+      key,
+      {
+        thunk: () => {
+          const [propertyValue, propertySchema] = properties.get(key);
+          const forcedValue = force(propertyValue);
+          const bindings = eagerBind(forcedValue, propertySchema);
+          if (isThrown(bindings)) {
+            return kpthrow(
+              "badProperty",
+              ["value", value],
+              ["key", key],
+              ["reason", bindings]
+            );
+          } else {
+            return forcedValue;
+          }
+        },
+      },
+    ])
+  );
 }
 
 function isPending(value) {
