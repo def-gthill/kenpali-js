@@ -456,18 +456,6 @@ class ArgGetter {
     return argValue.value;
   }
 
-  restArgCatching(index) {
-    try {
-      return this.restArg(index);
-    } catch (error) {
-      if (isThrown(error)) {
-        return error;
-      } else {
-        throw error;
-      }
-    }
-  }
-
   arg(name) {
     const argBinding = this.bindings.get(name);
     const argValue = evalBinding(argBinding, this.names);
@@ -479,18 +467,6 @@ class ArgGetter {
       throw typeError;
     }
     return argValue.value;
-  }
-
-  argCatching(name) {
-    try {
-      return this.arg(name);
-    } catch (error) {
-      if (isThrown(error)) {
-        return error;
-      } else {
-        throw error;
-      }
-    }
   }
 }
 
