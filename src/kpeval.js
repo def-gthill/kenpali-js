@@ -399,6 +399,14 @@ function evalArg(arg, names) {
 }
 
 function callLazyBuiltin(f, allArgs, names) {
+  if (newBinding) {
+    return callLazyBuiltin_NEW(f, allArgs, names);
+  } else {
+    return callLazyBuiltin_OLD(f, allArgs, names);
+  }
+}
+
+function callLazyBuiltin_OLD(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const argObjects = normalizeAllArgs(allArgs);
@@ -408,6 +416,47 @@ function callLazyBuiltin(f, allArgs, names) {
   }
   try {
     return f(new ArgGetter(paramObjects, bindings, names));
+  } catch (error) {
+    if (isThrown(error)) {
+      return error;
+    } else {
+      throw error;
+    }
+  }
+}
+
+function callLazyBuiltin_NEW(f, allArgs, names) {
+  const allParams = paramsFromBuiltin(f);
+  const args = captureArgContext(allArgs.args, names);
+  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
+  const paramObjects = normalizeAllParams(allParams);
+  const schema = createParamSchema(paramObjects);
+  // console.log(schema[0]);
+  const bindings = lazyBind([args, namedArgs], schema);
+  if (isThrown(bindings)) {
+    return argumentError(paramObjects, bindings);
+  }
+  const restArgs = force(bindings.get(paramObjects.restParam.name));
+  // console.log(restArgs);
+  const argGetter = {
+    arg(name) {
+      const argValue = force(bindings.get(name));
+      if (isThrown(argValue)) {
+        throw argValue;
+      }
+      return argValue;
+    },
+    numRestArgs: restArgs.length,
+    restArg(index) {
+      const argValue = force(restArgs[index]);
+      if (isThrown(argValue)) {
+        throw argValue;
+      }
+      return argValue;
+    },
+  };
+  try {
+    return f(argGetter);
   } catch (error) {
     if (isThrown(error)) {
       return error;

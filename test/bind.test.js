@@ -2,12 +2,15 @@ import test from "ava";
 import {
   arrayOf,
   as,
+  deepForce,
   eagerBind,
+  either,
   force,
   lazyBind,
+  objectOf,
   rest,
 } from "../src/builtins.js";
-import { literal } from "../src/kpast.js";
+import { defining, literal, name } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
 import assertIsThrown from "./assertIsError.js";
 
@@ -21,7 +24,7 @@ test("Lazy binding validates anything that's already evaluated", (t) => {
 });
 
 test("Lazy binding doesn't evaluate anything if there are no names bound", (t) => {
-  const value = expression(literal("foo"));
+  const value = expression(blowUp());
   const schema = "number";
 
   const result = lazyBind(value, schema);
@@ -42,7 +45,7 @@ test("Lazy binding validates names that the caller retrieves", (t) => {
 test("Lazy binding ignores unused names from fixed objects", (t) => {
   const value = kpobject(
     ["foo", expression(literal("bar"))],
-    ["spam", expression(literal("eggs"))]
+    ["spam", expression(blowUp())]
   );
   const schema = kpobject(["foo", "string"], ["spam", "number"]);
 
@@ -53,11 +56,50 @@ test("Lazy binding ignores unused names from fixed objects", (t) => {
 });
 
 test("Lazy binding ignores unused names from fixed arrays", (t) => {
-  const value = [expression(literal("bar")), expression(literal("eggs"))];
+  const value = [expression(literal("bar")), expression(blowUp())];
   const schema = [as("string", "foo"), as("number", "spam")];
 
   const bindings = lazyBind(value, schema);
   const foo = force(bindings.get("foo"));
+
+  t.is(foo, "bar");
+});
+
+test("Lazy binding ignores unused elements of uniform arrays", (t) => {
+  const value = [expression(literal("bar")), expression(blowUp())];
+  const schema = as(arrayOf("string"), "foo");
+
+  const bindings = lazyBind(value, schema);
+  const foo1 = force(bindings.get("foo")[0]);
+
+  t.is(foo1, "bar");
+});
+
+test("Lazy binding ignores unused properties of uniform objects", (t) => {
+  const value = kpobject(
+    ["foo", expression(literal("bar"))],
+    ["spam", expression(blowUp())]
+  );
+  const schema = as(objectOf(kpobject(["values", "string"])), "obj");
+
+  const bindings = lazyBind(value, schema);
+  const foo = force(bindings.get("obj").get("foo"));
+
+  t.is(foo, "bar");
+});
+
+test("Lazy binding ignores unused union schemas", (t) => {
+  const value = kpobject(
+    ["foo", expression(literal("bar"))],
+    ["spam", expression(blowUp())]
+  );
+  const schema = as(
+    objectOf(kpobject(["values", either("string", "number")])),
+    "obj"
+  );
+
+  const bindings = lazyBind(value, schema);
+  const foo = force(bindings.get("obj").get("foo"));
 
   t.is(foo, "bar");
 });
@@ -77,7 +119,7 @@ test("Lazy binding can bind expressions to rest elements in arrays", (t) => {
   const schema = [rest(as("number", "answers"))];
 
   const bindings = lazyBind(value, schema);
-  const answers = force(bindings.get("answers"));
+  const answers = deepForce(bindings.get("answers"));
 
   t.deepEqual(answers, [42]);
 });
@@ -87,7 +129,7 @@ test("Lazy binding can bind expressions inside uniform arrays", (t) => {
   const schema = arrayOf(as("number", "answer"));
 
   const bindings = lazyBind(value, schema);
-  const answer = force(bindings.get("answer"));
+  const answer = deepForce(bindings.get("answer"));
 
   t.deepEqual(answer, [42]);
 });
@@ -113,4 +155,8 @@ test("Eager binding can bind expressions inside arrays", (t) => {
 
 function expression(expr) {
   return { expression: expr, context: new Map() };
+}
+
+function blowUp() {
+  return defining(["foo", name("foo")], name("foo"));
 }

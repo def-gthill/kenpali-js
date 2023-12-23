@@ -557,7 +557,7 @@ export function force(value) {
   }
 }
 
-function deepForce(value) {
+export function deepForce(value) {
   const forcedValue = force(value);
   if (isThrown(forcedValue)) {
     return forcedValue;
@@ -611,6 +611,10 @@ export function lazyBind(value, schema) {
 }
 
 function bindTypeSchema(value, schema) {
+  // console.log("Binding");
+  // console.log(value);
+  // console.log("To type schema");
+  // console.log(schema);
   if (isThrown(value)) {
     if (value.get("#thrown") === "errorPassed") {
       return value;
@@ -637,6 +641,10 @@ function bindTypeSchema(value, schema) {
 }
 
 function bindArraySchema(value, schema) {
+  // console.log("Binding");
+  // console.log(value);
+  // console.log("To array schema");
+  // console.log(schema);
   if (!isArray(value)) {
     return kpthrow("wrongType", ["value", value], ["expectedType", "array"]);
   }
@@ -702,10 +710,12 @@ function bindArraySchema(value, schema) {
     }
   }
   if (hasRest) {
-    const bindings = eagerBind(
+    const bindings = lazyBind(
       value.slice(schema.length - 1),
       arrayOf(schema.at(-1).get("#rest"))
     );
+    // console.log("Rest bindings");
+    // console.log(bindings);
     elementBindings.push(bindings);
   }
   return kpoMerge(...elementBindings);
@@ -714,7 +724,7 @@ function bindArraySchema(value, schema) {
 function bindUnionSchema(value, schema) {
   const errors = [];
   for (const option of schema.get("#either")) {
-    const bindings = eagerBind(value, option);
+    const bindings = lazyBind(value, option);
     if (isThrown(bindings)) {
       errors.push([option, bindings]);
     } else {
@@ -749,17 +759,17 @@ function bindLiteralListSchema(value, schema) {
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
-  const typeBindings = eagerBind(value, schema.get("#type"));
+  const typeBindings = bindTypeSchema(value, schema.get("#type"));
   if (isThrown(typeBindings)) {
     return typeBindings;
   }
   const elementBindings = kpobject();
-  for (const requiredName of requiredNames(schema.get("elements"))) {
-    elementBindings.set(requiredName, []);
-  }
   if (schema.has("elements")) {
+    for (const requiredName of requiredNames(schema.get("elements"))) {
+      elementBindings.set(requiredName, []);
+    }
     for (let i = 0; i < value.length; i++) {
-      const bindings = eagerBind(value[i], schema.get("elements"));
+      const bindings = lazyBind(value[i], schema.get("elements"));
       if (isThrown(bindings)) {
         if (bindings.get("#thrown") === "errorPassed") {
           return bindings.get("reason");
@@ -776,7 +786,25 @@ function bindTypeWithConditionsSchema(value, schema) {
         if (!elementBindings.has(key)) {
           elementBindings.set(key, []);
         }
-        elementBindings.get(key).push(elementValue);
+        elementBindings.get(key).push({
+          thunk: () => {
+            const forcedValue = force(elementValue);
+            if (isThrown(forcedValue)) {
+              if (forcedValue.get("#thrown") === "errorPassed") {
+                return forcedValue.get("reason");
+              } else {
+                return kpthrow(
+                  "badElement",
+                  ["value", value],
+                  ["index", i + 1],
+                  ["reason", forcedValue]
+                );
+              }
+            } else {
+              return forcedValue;
+            }
+          },
+        });
       }
     }
   }
@@ -790,7 +818,7 @@ function bindTypeWithConditionsSchema(value, schema) {
   }
   if (schema.has("values")) {
     for (const [key, propertyValue] of value.entries()) {
-      const bindings = eagerBind(propertyValue, schema.get("values"));
+      const bindings = lazyBind(propertyValue, schema.get("values"));
       if (isThrown(bindings)) {
         return kpthrow(
           "badProperty",
@@ -812,6 +840,10 @@ function bindTypeWithConditionsSchema(value, schema) {
 }
 
 function explicitBind(value, schema) {
+  // console.log("Binding");
+  // console.log(value);
+  // console.log("To name");
+  // console.log(schema.get("as"));
   const bindSchema = schema.get("#bind");
   const bindings = lazyBind(value, bindSchema);
   // if (isThrown(bindings)) {
