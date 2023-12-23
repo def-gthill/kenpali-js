@@ -28,7 +28,6 @@ const tokenSpec = [
   ["PIPE", r`\|`],
   ["AT", "@"],
   ["DOT", r`\.`],
-  ["QUESTION_MARK", r`\?`],
   ["BANG", "!"],
   ["DOUBLE_STAR", r`\*\*`],
   ["STAR", r`\*`],

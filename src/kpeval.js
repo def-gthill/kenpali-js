@@ -577,15 +577,16 @@ class ArgGetter {
 }
 
 function callNonFunction(f, allArgs) {
-  const argObjects = normalizeAllArgs(allArgs);
-  if (
-    argObjects.args.filter((arg) => !arg.optional).length === 0 &&
-    kpoFilter(argObjects.namedArgs, ([_, arg]) => !arg.optional).size === 0
-  ) {
-    return f;
-  } else {
-    return kpthrow("notCallable", ["value", f]);
-  }
+  // const argObjects = normalizeAllArgs(allArgs);
+  // if (
+  //   argObjects.args.filter((arg) => !arg.optional).length === 0 &&
+  //   kpoFilter(argObjects.namedArgs, ([_, arg]) => !arg.optional).size === 0
+  // ) {
+  //   return f;
+  // } else {
+  //   return kpthrow("notCallable", ["value", f]);
+  // }
+  return f;
 }
 
 export function normalizeAllParams(params) {
