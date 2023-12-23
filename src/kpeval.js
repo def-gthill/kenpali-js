@@ -211,7 +211,7 @@ function callOnExpressions(f, args, namedArgs, names) {
       return callBuiltin(f, allArgs, names);
     }
   } else {
-    return callNonFunction(f, allArgs);
+    return f;
   }
 }
 
@@ -251,7 +251,7 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
   } else if (typeof f === "function") {
     return callBuiltin(f, allArgs, kpobject());
   } else {
-    return callNonFunction(f, allArgs);
+    return f;
   }
 }
 
@@ -337,26 +337,6 @@ class Scope {
   }
 }
 
-// function callBuiltin(f, allArgs, names) {
-//   const allParams = paramsFromBuiltin(f);
-//   const paramObjects = normalizeAllParams(allParams);
-//   const argObjects = normalizeAllArgs(allArgs);
-//   const bindings = bindArgs(argObjects, paramObjects);
-//   if (isThrown(bindings)) {
-//     return bindings;
-//   }
-//   const bindingValues = evalBindings(bindings, names);
-//   const validationError = validateBindings(paramObjects, bindingValues);
-//   if (validationError) {
-//     return validationError;
-//   }
-//   const [argValues, namedArgValues] = bindingValuesToBuiltinArgs(
-//     paramObjects,
-//     bindingValues
-//   );
-//   return f(argValues, namedArgValues);
-// }
-
 function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   const args = captureArgContext(allArgs.args, names);
@@ -436,14 +416,6 @@ function argumentError(paramObjects, err) {
   return updatedErr;
 }
 
-// REMOVE WHEN BINDING IS UNIFIED
-// function evalBindings(bindings, names) {
-//   return kpoMap(bindings, ([name, binding]) => [
-//     name,
-//     evalBinding(binding, names),
-//   ]);
-// }
-
 function evalBinding(binding, names) {
   if (binding instanceof Map) {
     return kpoMap(binding, ([name, expression]) => [
@@ -460,25 +432,6 @@ function evalBinding(binding, names) {
 function evalArg(arg, names) {
   return { ...arg, value: evalWithBuiltins(arg.value, names) };
 }
-
-// REMOVE WHEN BINDING IS UNIFIED
-// function bindingValuesToBuiltinArgs(paramObjects, bindingValues) {
-//   const argValues = [
-//     ...paramObjects.params.map((param) => bindingValues.get(param.name)),
-//     ...(bindingValues.get(paramObjects.restParam?.name) ?? []),
-//   ].map((binding) => binding.value);
-//   const namedArgValues = kpoMap(
-//     kpobject(
-//       ...paramObjects.namedParams.map((param) => [
-//         param.name,
-//         bindingValues.get(param.name),
-//       ]),
-//       ...(bindingValues.get(paramObjects.namedRestParam?.name) ?? kpobject())
-//     ),
-//     ([name, binding]) => [name, binding.value]
-//   );
-//   return [argValues, namedArgValues];
-// }
 
 function callLazyBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
@@ -574,19 +527,6 @@ class ArgGetter {
       }
     }
   }
-}
-
-function callNonFunction(f, allArgs) {
-  // const argObjects = normalizeAllArgs(allArgs);
-  // if (
-  //   argObjects.args.filter((arg) => !arg.optional).length === 0 &&
-  //   kpoFilter(argObjects.namedArgs, ([_, arg]) => !arg.optional).size === 0
-  // ) {
-  //   return f;
-  // } else {
-  //   return kpthrow("notCallable", ["value", f]);
-  // }
-  return f;
 }
 
 export function normalizeAllParams(params) {
@@ -758,24 +698,6 @@ function bindNamedArgObjects(args, params, restParam) {
   }
   return kpoMerge(argsToBind, defaults);
 }
-
-// REMOVE WHEN BINDING IS UNIFIED
-// function validateBindings(paramObjects, bindings) {
-//   for (const param of paramObjects.params) {
-//     const error = validateBinding(param, bindings.get(param.name));
-//     if (error) {
-//       return error;
-//     }
-//   }
-//   if (paramObjects.restParam) {
-//     for (const binding of bindings.get(paramObjects.restParam.name)) {
-//       const error = validateBinding(paramObjects.restParam, binding);
-//       if (error) {
-//         return error;
-//       }
-//     }
-//   }
-// }
 
 function validateBinding(paramObject, binding) {
   const typeError = checkType(binding.value, paramObject);

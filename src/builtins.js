@@ -518,36 +518,25 @@ function loop(functionName, start, step, callback) {
   );
 }
 
-export function eagerBind(value, schema, isRecursiveCall = false) {
+export function eagerBind(value, schema) {
   const forcedValue = deepForce(value);
-  // if (isThrown(forcedValue)) {
-  //   return kpthrow("errorPassed", ["reason", forcedValue]);
-  // }
   if (isThrown(forcedValue)) {
-    return unwrapErrorPassed(forcedValue);
+    return forcedValue;
   }
   const bindings = lazyBind(forcedValue, schema);
   if (isThrown(bindings)) {
-    return unwrapErrorPassed(bindings, isRecursiveCall);
+    return bindings;
   }
   const forcedBindings = kpobject();
   for (const key of bindings.keys()) {
     const bindingValue = force(bindings.get(key));
     if (isThrown(bindingValue)) {
-      return unwrapErrorPassed(bindingValue, isRecursiveCall);
+      return bindingValue;
     } else {
       forcedBindings.set(key, bindingValue);
     }
   }
   return forcedBindings;
-}
-
-function unwrapErrorPassed(err, isRecursiveCall) {
-  if (isRecursiveCall && err.get("#thrown") === "errorPassed") {
-    return err.get("reason");
-  } else {
-    return err;
-  }
 }
 
 export function force(value) {
@@ -596,7 +585,7 @@ export function requiredNames(schema) {
   }
 }
 
-export function lazyBind(value, schema, isRecursiveCall = false) {
+export function lazyBind(value, schema) {
   if (isString(schema)) {
     return bindTypeSchema(value, schema);
   } else if (isArray(schema)) {
