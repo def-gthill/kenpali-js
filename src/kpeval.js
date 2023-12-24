@@ -431,7 +431,6 @@ function callLazyBuiltin_NEW(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
-  // console.log(schema[0]);
   const bindings = lazyBind([args, namedArgs], schema);
   if (isThrown(bindings)) {
     return argumentError(paramObjects, bindings);
@@ -439,7 +438,6 @@ function callLazyBuiltin_NEW(f, allArgs, names) {
   const restArgs = paramObjects.restParam
     ? force(bindings.get(paramObjects.restParam.name))
     : [];
-  // console.log(restArgs);
   const argGetter = {
     arg(name) {
       const argValue = force(bindings.get(name));

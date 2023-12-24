@@ -516,9 +516,6 @@ function parseRepeatedly(
 
     while (true) {
       const parserResult = parser(tokens, index);
-      if (parserResult === undefined) {
-        console.log(parser);
-      }
       if ("error" in parserResult) {
         if (elements.length >= minimumCount) {
           return { ast: elements, end: index };

@@ -611,10 +611,6 @@ export function lazyBind(value, schema) {
 }
 
 function bindTypeSchema(value, schema) {
-  // console.log("Binding");
-  // console.log(value);
-  // console.log("To type schema");
-  // console.log(schema);
   if (isThrown(value)) {
     if (value.get("#thrown") === "errorPassed") {
       return value;
@@ -641,10 +637,6 @@ function bindTypeSchema(value, schema) {
 }
 
 function bindArraySchema(value, schema) {
-  // console.log("Binding");
-  // console.log(value);
-  // console.log("To array schema");
-  // console.log(schema);
   if (!isArray(value)) {
     return kpthrow("wrongType", ["value", value], ["expectedType", "array"]);
   }
@@ -714,8 +706,6 @@ function bindArraySchema(value, schema) {
       value.slice(schema.length - 1),
       arrayOf(schema.at(-1).get("#rest"))
     );
-    // console.log("Rest bindings");
-    // console.log(bindings);
     elementBindings.push(bindings);
   }
   return kpoMerge(...elementBindings);
@@ -759,10 +749,6 @@ function bindLiteralListSchema(value, schema) {
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
-  // console.log("Binding");
-  // console.log(value);
-  // console.log("To type with conditions schema");
-  // console.log(schema);
   const typeBindings = bindTypeSchema(value, schema.get("#type"));
   if (isThrown(typeBindings)) {
     return typeBindings;
@@ -844,10 +830,6 @@ function bindTypeWithConditionsSchema(value, schema) {
 }
 
 function explicitBind(value, schema) {
-  // console.log("Binding");
-  // console.log(value);
-  // console.log("To name");
-  // console.log(schema.get("as"));
   const bindSchema = schema.get("#bind");
   const bindings = lazyBind(value, bindSchema);
   return kpoMerge(
