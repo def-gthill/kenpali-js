@@ -529,7 +529,7 @@ export function eagerBind(value, schema) {
   }
   const forcedBindings = kpobject();
   for (const key of bindings.keys()) {
-    const bindingValue = force(bindings.get(key));
+    const bindingValue = deepForce(bindings.get(key));
     if (isThrown(bindingValue)) {
       return bindingValue;
     } else {
@@ -759,6 +759,10 @@ function bindLiteralListSchema(value, schema) {
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
+  // console.log("Binding");
+  // console.log(value);
+  // console.log("To type with conditions schema");
+  // console.log(schema);
   const typeBindings = bindTypeSchema(value, schema.get("#type"));
   if (isThrown(typeBindings)) {
     return typeBindings;
@@ -846,10 +850,23 @@ function explicitBind(value, schema) {
   // console.log(schema.get("as"));
   const bindSchema = schema.get("#bind");
   const bindings = lazyBind(value, bindSchema);
-  // if (isThrown(bindings)) {
-  //   return bindings;
-  // }
-  return kpoMerge(bindings, kpobject([schema.get("as"), value]));
+  return kpoMerge(
+    bindings,
+    kpobject([
+      schema.get("as"),
+      {
+        thunk: () => {
+          const forcedValue = force(value);
+          const check = lazyBind(forcedValue, bindSchema);
+          if (isThrown(check)) {
+            return check;
+          } else {
+            return forcedValue;
+          }
+        },
+      },
+    ])
+  );
 }
 
 function bindObjectSchema(value, schema) {

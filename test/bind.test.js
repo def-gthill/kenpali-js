@@ -70,7 +70,7 @@ test("Lazy binding ignores unused elements of uniform arrays", (t) => {
   const schema = as(arrayOf("string"), "foo");
 
   const bindings = lazyBind(value, schema);
-  const foo1 = force(bindings.get("foo")[0]);
+  const foo1 = force(force(bindings.get("foo"))[0]);
 
   t.is(foo1, "bar");
 });
@@ -83,7 +83,7 @@ test("Lazy binding ignores unused properties of uniform objects", (t) => {
   const schema = as(objectOf(kpobject(["values", "string"])), "obj");
 
   const bindings = lazyBind(value, schema);
-  const foo = force(bindings.get("obj").get("foo"));
+  const foo = force(force(bindings.get("obj")).get("foo"));
 
   t.is(foo, "bar");
 });
@@ -99,7 +99,7 @@ test("Lazy binding ignores unused union schemas", (t) => {
   );
 
   const bindings = lazyBind(value, schema);
-  const foo = force(bindings.get("obj").get("foo"));
+  const foo = force(force(bindings.get("obj")).get("foo"));
 
   t.is(foo, "bar");
 });

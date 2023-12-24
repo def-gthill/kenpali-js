@@ -316,7 +316,7 @@ function callBuiltin(f, allArgs, names) {
     force(bindings.get(param.name))
   );
   if (paramObjects.restParam) {
-    argValues.push(...force(bindings.get(paramObjects.restParam.name)));
+    argValues.push(...bindings.get(paramObjects.restParam.name).map(force));
   }
   const namedArgValues = kpobject(
     ...paramObjects.namedParams.map((param) => [
@@ -436,13 +436,15 @@ function callLazyBuiltin_NEW(f, allArgs, names) {
   if (isThrown(bindings)) {
     return argumentError(paramObjects, bindings);
   }
-  const restArgs = force(bindings.get(paramObjects.restParam.name));
+  const restArgs = paramObjects.restParam
+    ? force(bindings.get(paramObjects.restParam.name))
+    : [];
   // console.log(restArgs);
   const argGetter = {
     arg(name) {
       const argValue = force(bindings.get(name));
       if (isThrown(argValue)) {
-        throw argValue;
+        throw argumentError(paramObjects, argValue);
       }
       return argValue;
     },
@@ -450,7 +452,7 @@ function callLazyBuiltin_NEW(f, allArgs, names) {
     restArg(index) {
       const argValue = force(restArgs[index]);
       if (isThrown(argValue)) {
-        throw argValue;
+        throw argumentError(paramObjects, argValue);
       }
       return argValue;
     },
