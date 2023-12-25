@@ -6,7 +6,6 @@ import {
   force,
   isThrown,
   lazyBind,
-  matches,
   rest,
   toString,
 } from "./builtins.js";
@@ -14,7 +13,6 @@ import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
-  kpoEntries,
   kpoFilter,
   kpoMap,
   kpoMerge,
@@ -194,8 +192,6 @@ function callOnExpressionsTracing(f, args, namedArgs, names) {
   }
   return result;
 }
-
-const newBinding = true;
 
 function callOnExpressions(f, args, namedArgs, names) {
   const allArgs = {
@@ -381,51 +377,7 @@ function argumentError(paramObjects, err) {
   return updatedErr;
 }
 
-function evalBinding(binding, names) {
-  if (binding instanceof Map) {
-    return kpoMap(binding, ([name, expression]) => [
-      name,
-      evalArg(expression, names),
-    ]);
-  } else if (Array.isArray(binding)) {
-    return binding.map((expression) => evalArg(expression, names));
-  } else {
-    return evalArg(binding, names);
-  }
-}
-
-function evalArg(arg, names) {
-  return { ...arg, value: evalWithBuiltins(arg.value, names) };
-}
-
 function callLazyBuiltin(f, allArgs, names) {
-  if (newBinding) {
-    return callLazyBuiltin_NEW(f, allArgs, names);
-  } else {
-    return callLazyBuiltin_OLD(f, allArgs, names);
-  }
-}
-
-function callLazyBuiltin_OLD(f, allArgs, names) {
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const argObjects = normalizeAllArgs(allArgs);
-  const bindings = bindArgs(argObjects, paramObjects);
-  if (isThrown(bindings)) {
-    return bindings;
-  }
-  try {
-    return f(new ArgGetter(paramObjects, bindings, names));
-  } catch (error) {
-    if (isThrown(error)) {
-      return error;
-    } else {
-      throw error;
-    }
-  }
-}
-
-function callLazyBuiltin_NEW(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
@@ -473,50 +425,6 @@ export function paramsFromBuiltin(f) {
     namedParams: f.namedParams ?? [],
     namedRestParam: f.namedRestParam ?? null,
   };
-}
-
-class ArgGetter {
-  constructor(paramObjects, bindings, names) {
-    this.paramObjects = paramObjects;
-    this.bindings = bindings;
-
-    this.names = names;
-
-    this.paramObjectsByName = new Map();
-    for (const param of this.paramObjects.params) {
-      this.paramObjectsByName.set(param.name, param);
-    }
-    for (const param of this.paramObjects.namedParams) {
-      this.paramObjectsByName.set(param.name, param);
-    }
-
-    this.restParam = this.paramObjects.restParam;
-    this.restArgs = this.bindings.get(this.restParam?.name) ?? [];
-    this.numRestArgs = this.restArgs.length;
-  }
-
-  restArg(index) {
-    const argBinding = this.restArgs[index];
-    const argValue = evalBinding(argBinding, this.names);
-    const typeError = validateBinding(this.restParam, argValue);
-    if (typeError) {
-      throw typeError;
-    }
-    return argValue.value;
-  }
-
-  arg(name) {
-    const argBinding = this.bindings.get(name);
-    const argValue = evalBinding(argBinding, this.names);
-    const typeError = validateBinding(
-      this.paramObjectsByName.get(name),
-      argValue
-    );
-    if (typeError) {
-      throw typeError;
-    }
-    return argValue.value;
-  }
 }
 
 export function normalizeAllParams(params) {
@@ -570,141 +478,6 @@ function createParamSchema(paramObjects) {
     );
   }
   return [paramSchema, namedParamSchema];
-}
-
-export function normalizeAllArgs(args) {
-  return {
-    args: args.args.map(normalizeArg),
-    namedArgs: kpoMap(args.namedArgs, ([name, value]) => [
-      name,
-      normalizeArg(value),
-    ]),
-  };
-}
-
-export function normalizeArg(arg) {
-  let value = arg;
-  const result = { optional: false };
-  if ("optional" in value) {
-    value = value.optional;
-    result.optional = true;
-  }
-  result.value = value;
-  return result;
-}
-
-export function bindArgs(args, params) {
-  const acceptedArgs = bindArgObjects(
-    args.args,
-    params.params,
-    params.restParam
-  );
-  if (isThrown(acceptedArgs)) {
-    return acceptedArgs;
-  }
-  const paramBindings = kpobject(
-    ...params.params.map((param, i) => [param.name, acceptedArgs[i]])
-  );
-  if (params.restParam) {
-    paramBindings.set(
-      params.restParam.name,
-      acceptedArgs.slice(params.params.length)
-    );
-  }
-  const namedParamBindings = bindNamedArgObjects(
-    args.namedArgs,
-    params.namedParams,
-    params.namedRestParam
-  );
-  if (isThrown(namedParamBindings)) {
-    return namedParamBindings;
-  }
-  return kpoMerge(paramBindings, namedParamBindings);
-}
-
-function bindArgObjects(args, params, restParam) {
-  const hasRest = restParam !== null;
-  let numRequiredParams = params.findIndex((param) => "defaultValue" in param);
-  if (numRequiredParams === -1) {
-    numRequiredParams = params.length;
-  }
-  if (args.length < numRequiredParams) {
-    return kpthrow("missingArgument", ["name", params[args.length].name]);
-  }
-  if (!hasRest) {
-    let numRequiredArgs = args.findIndex((arg) => arg.optional);
-    if (numRequiredArgs === -1) {
-      numRequiredArgs = args.length;
-    }
-    if (numRequiredArgs > params.length) {
-      return kpthrow(
-        "unexpectedArgument",
-        ["position", params.length + 1],
-        ["value", args[params.length].value]
-      );
-    }
-  }
-  const argsToBind = hasRest ? args : args.slice(0, params.length);
-  const defaults = hasRest
-    ? []
-    : params.slice(args.length).map((param) => ({ value: param.defaultValue }));
-  return [...argsToBind, ...defaults];
-}
-
-function bindNamedArgObjects(args, params, restParam) {
-  const hasRest = restParam !== null;
-  const defaults = kpobject();
-  for (const param of params) {
-    if (!args.has(param.name)) {
-      if ("defaultValue" in param) {
-        defaults.set(param.name, { value: param.defaultValue });
-      } else {
-        return kpthrow("missingArgument", ["name", param.name]);
-      }
-    }
-  }
-  if (!hasRest) {
-    for (const [name, arg] of kpoEntries(args)) {
-      if (!arg.optional && !params.some((param) => param.name === name)) {
-        return kpthrow(
-          "unexpectedArgument",
-          ["name", name],
-          ["value", arg.value]
-        );
-      }
-    }
-  }
-  const argsToBind = kpobject();
-  const restArgs = kpobject();
-  for (const [name, arg] of kpoEntries(args)) {
-    if (params.some((param) => param.name === name)) {
-      argsToBind.set(name, arg);
-    } else {
-      restArgs.set(name, arg);
-    }
-  }
-  if (hasRest) {
-    argsToBind.set(restParam.name, restArgs);
-  }
-  return kpoMerge(argsToBind, defaults);
-}
-
-function validateBinding(paramObject, binding) {
-  const typeError = checkType(binding.value, paramObject);
-  if (typeError) {
-    return typeError;
-  }
-}
-
-function checkType(arg, param) {
-  if ("type" in param && !matches(arg, param.type)) {
-    return kpthrow(
-      "wrongArgumentType",
-      ["parameter", param.name],
-      ["value", arg],
-      ["expectedType", param.type]
-    );
-  }
 }
 
 function catch_(expression) {
