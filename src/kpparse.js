@@ -168,11 +168,23 @@ function parseParameterList(tokens, start) {
       if (posParams.length > 0) {
         result.params = posParams;
       }
+      const restParam = params
+        .filter((param) => "rest" in param)
+        .map((param) => param.rest);
+      if (restParam.length > 0) {
+        result.restParam = restParam[0];
+      }
       const namedParams = params
         .filter((param) => "named" in param)
         .map((param) => param.named);
       if (namedParams.length > 0) {
         result.namedParams = namedParams;
+      }
+      const namedRestParam = params
+        .filter((param) => "namedRest" in param)
+        .map((param) => param.namedRest);
+      if (namedRestParam.length > 0) {
+        result.namedRestParam = namedRestParam[0];
       }
       return result;
     }
@@ -194,6 +206,14 @@ function parseParameter(tokens, start) {
           return { positional: { name: param.positional, defaultValue } };
         }
       }
+    ),
+    parseAllOf(
+      [consume("STAR", "expectedRestParameter"), parseName],
+      (name) => ({ rest: name.name })
+    ),
+    parseAllOf(
+      [consume("DOUBLE_STAR", "expectedNamedRestParameter"), parseName],
+      (name) => ({ namedRest: name.name })
     ),
     parseParameterName
   )(tokens, start);
