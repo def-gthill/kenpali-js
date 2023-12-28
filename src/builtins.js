@@ -197,6 +197,21 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "switch",
+    {
+      params: ["value"],
+      restParam: { name: "cases", type: ["any", "any"] },
+    },
+    function ([value, ...cases]) {
+      for (const [schema, f] of cases) {
+        const bindings = eagerBind(value, schema);
+        if (!isThrown(bindings)) {
+          return callOnValues(f, [value], bindings);
+        }
+      }
+    }
+  ),
+  builtin(
     "is",
     {
       params: [{ name: "type", type: "string" }],
@@ -241,7 +256,7 @@ const rawBuiltins = [
     "objectOf",
     {
       namedParams: [
-        { name: "keys", defaultValue: "string" },
+        { name: "keys", defaultValue: literal("string") },
         "values",
         {
           name: "where",
