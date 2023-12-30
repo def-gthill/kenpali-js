@@ -105,14 +105,41 @@ const rawBuiltins = [
   builtin("isBoolean", { params: ["value"] }, function ([value]) {
     return isBoolean(value);
   }),
+  builtin("isNumber", { params: ["value"] }, function ([value]) {
+    return isNumber(value);
+  }),
+  builtin("toNumber", { params: ["value"] }, function ([value]) {
+    return parseFloat(value);
+  }),
   builtin("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
   builtin("toString", { params: ["value"] }, function ([value]) {
     return toString(value);
   }),
-  builtin("toNumber", { params: ["value"] }, function ([value]) {
-    return parseFloat(value);
+  builtin("isArray", { params: ["value"] }, function ([value]) {
+    return isArray(value);
+  }),
+  builtin("isRecord", { params: ["value"] }, function ([value]) {
+    return isRecord(value);
+  }),
+  builtin("isBuiltin", { params: ["value"] }, function ([value]) {
+    return isBuiltin(value);
+  }),
+  builtin("isGiven", { params: ["value"] }, function ([value]) {
+    return isGiven(value);
+  }),
+  builtin("isError", { params: ["value"] }, function ([value]) {
+    return isError(value);
+  }),
+  builtin("isObject", { params: ["value"] }, function ([value]) {
+    return isObject(value);
+  }),
+  builtin("isFunction", { params: ["value"] }, function ([value]) {
+    return isFunction(value);
+  }),
+  builtin("isSequence", { params: ["value"] }, function ([value]) {
+    return isSequence(value);
   }),
   lazyBuiltin(
     "if",

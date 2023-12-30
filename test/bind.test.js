@@ -160,7 +160,6 @@ test("The reason given for a bad object property is an #error object", (t) => {
   const result = eagerBind(value, schema);
 
   assertIsThrown(t, result, "badProperty");
-  console.log(result);
   t.is(result.get("reason").get("#error"), "wrongType");
 });
 
