@@ -1,6 +1,8 @@
 import test from "ava";
 import fs from "fs";
 
+const r = String.raw;
+
 export function runSpecFile(
   specPath,
   functionToTest,
@@ -8,10 +10,18 @@ export function runSpecFile(
   checkErrorOutput,
   only = null
 ) {
-  const spec = fs.readFileSync(specPath);
+  const spec = fs.readFileSync(specPath, { encoding: "utf-8" });
 
-  const regex =
-    /```\n#\s+(.*?)\n((?:.|\n)*?)\n(?:>>\s+((?:.|\n)*?)|!!\s+(.*?)\s+(.*?))\n```/gm;
+  const newline = r`(?:\r\n|\r|\n)`;
+  const descriptionPattern = r`#\s+(.*?)`;
+  const inputPattern = r`((?:.|${newline})*?)`;
+  const outputPattern = r`(?:>>\s+((?:.|${newline})*?)|!!\s+(.*?)\s+(.*?))`;
+  const regexPattern =
+    "```" +
+    r`${newline}${descriptionPattern}${newline}${inputPattern}${newline}${outputPattern}${newline}` +
+    "```";
+
+  const regex = new RegExp(regexPattern, "gm");
 
   let match;
   while ((match = regex.exec(spec)) !== null) {
