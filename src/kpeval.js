@@ -345,10 +345,10 @@ function captureContext(expression, names) {
 function argumentError(paramObjects, err) {
   let updatedErr = err;
   if (updatedErr.get("#thrown") === "badElement") {
-    updatedErr = updatedErr.get("reason");
+    updatedErr = rethrow(updatedErr.get("reason"));
   }
   if (updatedErr.get("#thrown") === "badElement") {
-    updatedErr = updatedErr.get("reason");
+    updatedErr = rethrow(updatedErr.get("reason"));
   }
   if (updatedErr.get("#thrown") === "badElement") {
     updatedErr = kpoMerge(
@@ -480,7 +480,7 @@ function createParamSchema(paramObjects) {
   return [paramSchema, namedParamSchema];
 }
 
-function catch_(expression) {
+export function catch_(expression) {
   if (isThrown(expression)) {
     return kpobject(
       ["#error", expression.get("#thrown")],
@@ -489,6 +489,13 @@ function catch_(expression) {
   } else {
     return expression;
   }
+}
+
+export function rethrow(err) {
+  return kpobject(
+    ["#thrown", err.get("#error")],
+    ...kpoFilter(err, ([name, _]) => name !== "#error")
+  );
 }
 
 function quote(expression, names) {

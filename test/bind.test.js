@@ -153,6 +153,17 @@ test("Eager binding can bind expressions inside arrays", (t) => {
   t.is(word, "foo");
 });
 
+test("The reason given for a bad object property is an #error object", (t) => {
+  const value = kpobject(["foo", "bar"]);
+  const schema = kpobject(["foo", "number"]);
+
+  const result = eagerBind(value, schema);
+
+  assertIsThrown(t, result, "badProperty");
+  console.log(result);
+  t.is(result.get("reason").get("#error"), "wrongType");
+});
+
 function expression(expr) {
   return { expression: expr, context: new Map() };
 }

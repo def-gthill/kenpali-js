@@ -1,6 +1,6 @@
 import { given, literal } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { callOnValues, evalWithBuiltins } from "./kpeval.js";
+import { callOnValues, catch_, evalWithBuiltins, rethrow } from "./kpeval.js";
 import kpobject, { kpoEntries, kpoKeys, kpoMap, kpoMerge } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -559,7 +559,7 @@ export function force(value) {
     if (value.get("#thrown") === "errorPassed") {
       return value;
     } else {
-      return kpthrow("errorPassed", ["reason", value]);
+      return kpthrow("errorPassed", ["reason", catch_(value)]);
     }
   } else if (value === null) {
     return value;
@@ -630,7 +630,7 @@ function bindTypeSchema(value, schema) {
     if (value.get("#thrown") === "errorPassed") {
       return value;
     } else {
-      return kpthrow("errorPassed", ["reason", value]);
+      return kpthrow("errorPassed", ["reason", catch_(value)]);
     }
   } else if (isPending(value)) {
     // Type schemas *cannot* bind names, so if the argument
@@ -678,13 +678,13 @@ function bindArraySchema(value, schema) {
       const bindings = lazyBind(value[i], schema[i]);
       if (isThrown(bindings)) {
         if (bindings.get("#thrown") === "errorPassed") {
-          return bindings.get("reason");
+          return rethrow(bindings.get("reason"));
         } else {
           return kpthrow(
             "badElement",
             ["value", value],
             ["index", i + 1],
-            ["reason", bindings]
+            ["reason", catch_(bindings)]
           );
         }
       }
@@ -697,13 +697,13 @@ function bindArraySchema(value, schema) {
                 const forcedValue = force(bindingValue);
                 if (isThrown(forcedValue)) {
                   if (forcedValue.get("#thrown") === "errorPassed") {
-                    return forcedValue.get("reason");
+                    return rethrow(forcedValue.get("reason"));
                   } else {
                     return kpthrow(
                       "badElement",
                       ["value", value],
                       ["index", i + 1],
-                      ["reason", forcedValue]
+                      ["reason", catch_(forcedValue)]
                     );
                   }
                 } else {
@@ -777,13 +777,13 @@ function bindTypeWithConditionsSchema(value, schema) {
       const bindings = lazyBind(value[i], schema.get("elements"));
       if (isThrown(bindings)) {
         if (bindings.get("#thrown") === "errorPassed") {
-          return bindings.get("reason");
+          return rethrow(bindings.get("reason"));
         } else {
           return kpthrow(
             "badElement",
             ["value", value],
             ["index", i + 1],
-            ["reason", bindings]
+            ["reason", catch_(bindings)]
           );
         }
       }
@@ -796,13 +796,13 @@ function bindTypeWithConditionsSchema(value, schema) {
             const forcedValue = force(elementValue);
             if (isThrown(forcedValue)) {
               if (forcedValue.get("#thrown") === "errorPassed") {
-                return forcedValue.get("reason");
+                return rethrow(forcedValue.get("reason"));
               } else {
                 return kpthrow(
                   "badElement",
                   ["value", value],
                   ["index", i + 1],
-                  ["reason", forcedValue]
+                  ["reason", catch_(forcedValue)]
                 );
               }
             } else {
@@ -817,7 +817,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     for (const key of value.keys()) {
       const bindings = eagerBind(key, schema.get("keys"));
       if (isThrown(bindings)) {
-        return kpthrow("badKey", ["key", key], ["reason", bindings]);
+        return kpthrow("badKey", ["key", key], ["reason", catch_(bindings)]);
       }
     }
   }
@@ -829,7 +829,7 @@ function bindTypeWithConditionsSchema(value, schema) {
           "badProperty",
           ["key", key],
           ["value", propertyValue],
-          ["reason", bindings]
+          ["reason", catch_(bindings)]
         );
       }
     }
@@ -920,7 +920,7 @@ function bindObjectSchema(value, schema) {
               "badProperty",
               ["value", value],
               ["key", key],
-              ["reason", bindings]
+              ["reason", catch_(bindings)]
             );
           } else {
             return forcedValue;
