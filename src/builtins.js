@@ -179,7 +179,15 @@ const rawBuiltins = [
         }
         return collection[index - 1];
       } else if (isObject(collection)) {
-        return collection.get(index);
+        if (collection.has(index)) {
+          return collection.get(index);
+        } else {
+          return kpthrow(
+            "missingProperty",
+            ["value", collection],
+            ["key", index]
+          );
+        }
       }
     }
   ),
