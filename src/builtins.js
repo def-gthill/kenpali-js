@@ -766,6 +766,9 @@ function bindUnionSchema(value, schema) {
   for (const option of schema.get("#either")) {
     const bindings = lazyBind(value, option);
     if (isThrown(bindings)) {
+      if (bindings.get("#thrown") === "errorPassed") {
+        return bindings;
+      }
       errors.push([option, bindings]);
     } else {
       return bindings;
@@ -882,6 +885,9 @@ function bindTypeWithConditionsSchema(value, schema) {
 function explicitBind(value, schema) {
   const bindSchema = schema.get("#bind");
   const bindings = lazyBind(value, bindSchema);
+  if (isThrown(bindings)) {
+    return bindings;
+  }
   return kpoMerge(
     bindings,
     kpobject([

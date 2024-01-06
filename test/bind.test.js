@@ -12,7 +12,7 @@ import {
 } from "../src/builtins.js";
 import { defining, literal, name } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
-import assertIsThrown from "./assertIsError.js";
+import { assertIsThrown } from "./assertIsError.js";
 
 test("Lazy binding validates anything that's already evaluated", (t) => {
   const value = "foo";
