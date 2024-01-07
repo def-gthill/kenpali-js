@@ -113,7 +113,7 @@ export function evalWithBuiltins(expression, names) {
     const namedArgs = expression.namedArgs ?? kpobject();
     return callOnExpressionsTracing(f, args, namedArgs, names);
   } else if ("catching" in expression) {
-    return catch_(evalWithBuiltins(expression.calling, names));
+    return catch_(evalWithBuiltins(expression.catching, names));
   } else if ("quote" in expression) {
     return quote(expression.quote, names);
   } else if ("unquote" in expression) {
