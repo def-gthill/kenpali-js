@@ -22,6 +22,14 @@ export function kpoValues(kpo) {
   return [...kpo.values()];
 }
 
+export function kpoSet(kpo, key, newValue) {
+  return new Map([...kpo, [key, newValue]]);
+}
+
+export function kpoUpdate(kpo, key, f) {
+  return kpoSet(kpo, key, f(kpo.get(key)));
+}
+
 export function kpoMap(kpo, f) {
   return new Map([...kpo].map(f));
 }

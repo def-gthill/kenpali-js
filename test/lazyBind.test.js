@@ -245,6 +245,16 @@ test("Binding an array with no excess elements to an array schema with a rest el
   t.deepEqual(result, kpobject(["words", []]));
 });
 
+test("Binding to an array with a rest element propagates errors from the rest schema", (t) => {
+  const value = ["John", 42, "foo", 97];
+  const schema = ["string", "number", rest(as("string", "words"))];
+
+  const result = lazyBind(value, schema);
+
+  assertIsThrown(t, result, "badElement", { index: 4 });
+  assertIsError(t, result.get("reason"), "wrongType");
+});
+
 // Uniform array schema
 
 test("Binding a simple value to a uniform array schema yields a wrongType error", (t) => {

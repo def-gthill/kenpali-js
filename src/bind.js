@@ -15,6 +15,7 @@ import kpobject, {
   kpoKeys,
   kpoMap,
   kpoMerge,
+  kpoUpdate,
   kpoValues,
 } from "./kpobject.js";
 
@@ -180,41 +181,30 @@ function bindArraySchema(value, schema) {
       }
     } else {
       const bindings = lazyBindInternal(value[i], schema[i]);
-      if (isThrown(bindings)) {
-        return withReason(badElement(value, i + 1), bindings);
-      }
-      elementBindings.push(
-        kpobject(
-          ...kpoEntries(bindings).map(([key, bindingValue]) => [
-            key,
-            isPending(bindingValue)
-              ? {
-                  thunk: () => {
-                    const forcedValue = force(bindingValue);
-                    let result;
-                    if (isThrown(forcedValue)) {
-                      result = withReason(
-                        badElement(value, i + 1),
-                        forcedValue
-                      );
-                    } else {
-                      result = forcedValue;
-                    }
-                    return deepUnwrapErrorPassed(result);
-                  },
-                }
-              : bindingValue,
-          ])
-        )
+      const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
+        withReason(badElement(value, i + 1), err)
       );
+      if (isThrown(bindingsWithErrorWrapping)) {
+        return bindingsWithErrorWrapping;
+      } else {
+        elementBindings.push(bindingsWithErrorWrapping);
+      }
     }
   }
   if (hasRest) {
+    const numNonRestElements = schema.length - 1;
     const bindings = lazyBindInternal(
-      value.slice(schema.length - 1),
+      value.slice(numNonRestElements),
       arrayOf(schema.at(-1).get("#rest"))
     );
-    elementBindings.push(bindings);
+    const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
+      kpoUpdate(err, "index", (index) => numNonRestElements + index)
+    );
+    if (isThrown(bindingsWithErrorWrapping)) {
+      return bindingsWithErrorWrapping;
+    } else {
+      elementBindings.push(bindingsWithErrorWrapping);
+    }
   }
   return kpoMerge(...elementBindings);
 }
@@ -349,22 +339,13 @@ function bindTypeWithConditionsSchema(value, schema) {
           continue;
         }
         const elementValue = elementBindings.get(key);
-        if (isPending(elementValue)) {
-          subschemaBindings.get(key).push({
-            thunk: () => {
-              const forcedValue = force(elementValue);
-              let result;
-              if (isThrown(forcedValue)) {
-                result = withReason(badElement(value, i + 1), forcedValue);
-              } else {
-                result = forcedValue;
-              }
-              return deepUnwrapErrorPassed(result);
-            },
-          });
-        } else {
-          subschemaBindings.get(key).push(elementValue);
-        }
+        subschemaBindings
+          .get(key)
+          .push(
+            wrapErrorIfPending(elementValue, (err) =>
+              withReason(badElement(value, i + 1), err)
+            )
+          );
       }
     }
   }
@@ -409,23 +390,12 @@ function bindTypeWithConditionsSchema(value, schema) {
           continue;
         }
         const propertyValue = propertyBindings.get(subschemaKey);
-
-        if (isPending(propertyValue)) {
-          subschemaBindings.get(subschemaKey).set(key, {
-            thunk: () => {
-              const forcedValue = force(propertyValue);
-              let result;
-              if (isThrown(forcedValue)) {
-                result = withReason(badProperty(value, key), forcedValue);
-              } else {
-                result = forcedValue;
-              }
-              return deepUnwrapErrorPassed(result);
-            },
-          });
-        } else {
-          subschemaBindings.get(subschemaKey).set(key, propertyValue);
-        }
+        subschemaBindings.get(subschemaKey).set(
+          key,
+          wrapErrorIfPending(propertyValue, (err) =>
+            withReason(badProperty(value, key), err)
+          )
+        );
       }
     }
   }
@@ -445,24 +415,16 @@ function explicitBind(value, schema) {
   if (isThrown(bindings)) {
     return bindings;
   }
-  let explicitBinding;
-  if (isPending(value)) {
-    explicitBinding = {
-      thunk: () => {
-        const forcedValue = force(value);
-        const check = lazyBindInternal(forcedValue, bindSchema);
-        let result;
-        if (isThrown(check)) {
-          result = check;
-        } else {
-          result = forcedValue;
-        }
-        return deepUnwrapErrorPassed(result);
-      },
-    };
-  } else {
-    explicitBinding = value;
-  }
+  const explicitBinding = wrapPending(value, (forcedValue) => {
+    const check = lazyBindInternal(forcedValue, bindSchema);
+    let result;
+    if (isThrown(check)) {
+      result = check;
+    } else {
+      result = forcedValue;
+    }
+    return deepUnwrapErrorPassed(result);
+  });
   return kpoMerge(kpobject([schema.get("as"), explicitBinding]), bindings);
 }
 
@@ -497,30 +459,14 @@ function bindObjectSchema(value, schema) {
     if (value.has(key)) {
       ownBindings.set(key, [value.get(key), propertySchema]);
       const bindings = lazyBindInternal(value.get(key), propertySchema);
-      if (isThrown(bindings)) {
-        return withReason(badProperty(value, key), bindings);
-      }
-      propertyBindings.push(
-        kpobject(
-          ...kpoEntries(bindings).map(([key, bindingValue]) => [
-            key,
-            isPending(bindingValue)
-              ? {
-                  thunk: () => {
-                    const forcedValue = force(bindingValue);
-                    let result;
-                    if (isThrown(forcedValue)) {
-                      result = withReason(badProperty(value, key), forcedValue);
-                    } else {
-                      result = forcedValue;
-                    }
-                    return deepUnwrapErrorPassed(result);
-                  },
-                }
-              : bindingValue,
-          ])
-        )
+      const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
+        withReason(badProperty(value, key), err)
       );
+      if (isThrown(bindingsWithErrorWrapping)) {
+        return bindingsWithErrorWrapping;
+      } else {
+        propertyBindings.push(bindingsWithErrorWrapping);
+      }
     }
   }
   if (restName !== undefined) {
@@ -543,24 +489,56 @@ function bindObjectSchema(value, schema) {
   return kpobject(
     ...kpoEntries(ownBindings).map(([key, [propertyValue, propertySchema]]) => [
       key,
-      isPending(propertyValue)
-        ? {
-            thunk: () => {
-              const forcedValue = force(propertyValue);
-              const bindings = eagerBindInternal(forcedValue, propertySchema);
-              let result;
-              if (isThrown(bindings)) {
-                result = withReason(badProperty(value, key), bindings);
-              } else {
-                result = forcedValue;
-              }
-              return deepUnwrapErrorPassed(result);
-            },
-          }
-        : propertyValue,
+      wrapPending(propertyValue, (forcedValue) => {
+        const bindings = lazyBindInternal(forcedValue, propertySchema);
+        let result;
+        if (isThrown(bindings)) {
+          result = withReason(badProperty(value, key), bindings);
+        } else {
+          result = forcedValue;
+        }
+        return deepUnwrapErrorPassed(result);
+      }),
     ]),
     ...kpoMerge(...propertyBindings)
   );
+}
+
+function wrapErrorsInBindings(bindings, wrapError) {
+  if (isThrown(bindings)) {
+    return wrapError(bindings);
+  } else {
+    return kpobject(
+      ...kpoEntries(bindings).map(([key, bindingValue]) => [
+        key,
+        wrapErrorIfPending(bindingValue, wrapError),
+      ])
+    );
+  }
+}
+
+function wrapErrorIfPending(value, wrapError) {
+  return wrapPending(value, (forcedValue) => {
+    let result;
+    if (isThrown(forcedValue)) {
+      result = wrapError(forcedValue);
+    } else {
+      result = forcedValue;
+    }
+    return deepUnwrapErrorPassed(result);
+  });
+}
+
+function wrapPending(value, wrap) {
+  if (isPending(value)) {
+    return {
+      thunk: () => {
+        return wrap(force(value));
+      },
+    };
+  } else {
+    return value;
+  }
 }
 
 function unwrapErrorPassed(value) {
