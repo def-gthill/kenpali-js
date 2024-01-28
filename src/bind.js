@@ -27,30 +27,15 @@ function eagerBindInternal(value, schema) {
   if (isThrown(forcedValue)) {
     return forcedValue;
   }
-  const bindings = lazyBindInternal(forcedValue, schema);
-  if (isThrown(bindings)) {
-    return bindings;
-  }
-  const forcedBindings = kpobject();
-  for (const key of bindings.keys()) {
-    const bindingValue = deepForce(bindings.get(key));
-    if (isThrown(bindingValue)) {
-      return bindingValue;
-    } else {
-      forcedBindings.set(key, bindingValue);
-    }
-  }
-  return forcedBindings;
+  return lazyBindInternal(forcedValue, schema);
 }
 
 export function force(value) {
   if (isThrown(value)) {
     return withReason(kpthrow("errorPassed"), value);
-  } else if (value === null) {
-    return value;
-  } else if (typeof value === "object" && "expression" in value) {
+  } else if (isExpression(value)) {
     return evalWithBuiltins(value.expression, value.context);
-  } else if (typeof value === "object" && "thunk" in value) {
+  } else if (isThunk(value)) {
     return value.thunk();
   } else {
     return value;
@@ -139,7 +124,7 @@ function lazyBindInternal(value, schema) {
       return bindObjectSchema(value, schema);
     }
   } else {
-    return kpthrow("invalidSchema", ["schema", schema]);
+    return invalidSchema(schema);
   }
 }
 
@@ -150,7 +135,7 @@ function bindTypeSchema(value, schema) {
     return kpobject();
   }
   if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
+    return withReason(errorPassed(), value);
   }
   if (typeOf(value) === schema) {
     return kpobject();
@@ -163,7 +148,7 @@ function bindTypeSchema(value, schema) {
   } else if (schema === "sequence" && isSequence(value)) {
     return kpobject();
   } else {
-    return kpthrow("wrongType", ["value", value], ["expectedType", schema]);
+    return wrongType(value, schema);
   }
 }
 
@@ -174,10 +159,10 @@ function bindArraySchema(value, schema) {
     return kpobject();
   }
   if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
+    return withReason(errorPassed(), value);
   }
   if (!isArray(value)) {
-    return kpthrow("wrongType", ["value", value], ["expectedType", "array"]);
+    return wrongType(value, "array");
   }
   const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
   const elementBindings = [];
@@ -191,26 +176,12 @@ function bindArraySchema(value, schema) {
           kpobject([forSchema.get("as"), schema[i].get("#default")])
         );
       } else {
-        return kpthrow(
-          "missingElement",
-          ["value", value],
-          ["index", i + 1],
-          ["schema", schema]
-        );
+        return missingElement(value, i + 1, schema);
       }
     } else {
       const bindings = lazyBindInternal(value[i], schema[i]);
       if (isThrown(bindings)) {
-        if (bindings.get("#thrown") === "errorPassed") {
-          return rethrow(bindings.get("reason"));
-        } else {
-          return kpthrow(
-            "badElement",
-            ["value", value],
-            ["index", i + 1],
-            ["reason", catch_(bindings)]
-          );
-        }
+        return withReason(badElement(value, i + 1), bindings);
       }
       elementBindings.push(
         kpobject(
@@ -223,11 +194,7 @@ function bindArraySchema(value, schema) {
                     let result;
                     if (isThrown(forcedValue)) {
                       result = withReason(
-                        kpthrow(
-                          "badElement",
-                          ["value", value],
-                          ["index", i + 1]
-                        ),
+                        badElement(value, i + 1),
                         forcedValue
                       );
                     } else {
@@ -280,16 +247,12 @@ function bindUnionSchema(value, schema) {
             if (
               errors.every(([_, err]) => err.get("#thrown") === "wrongType")
             ) {
-              return kpthrow(
-                "wrongType",
-                ["value", value],
-                [
-                  "expectedType",
-                  either(...errors.map(([_, err]) => err.get("expectedType"))),
-                ]
+              return wrongType(
+                value,
+                either(...errors.map(([_, err]) => err.get("expectedType")))
               );
             } else {
-              return kpthrow("badValue", ["value", value], ["errors", errors]);
+              return badValue(value, ["errors", errors]);
             }
           },
         },
@@ -326,16 +289,12 @@ function bindUnionSchema(value, schema) {
       return kpoMerge(errorsByKey, result);
     }
     if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
-      return kpthrow(
-        "wrongType",
-        ["value", value],
-        [
-          "expectedType",
-          either(...errors.map(([_, err]) => err.get("expectedType"))),
-        ]
+      return wrongType(
+        value,
+        either(...errors.map(([_, err]) => err.get("expectedType")))
       );
     } else {
-      return kpthrow("badValue", ["value", value], ["errors", errors]);
+      return badValue(value, ["errors", errors]);
     }
   }
 }
@@ -347,18 +306,14 @@ function bindLiteralListSchema(value, schema) {
     return kpobject();
   }
   if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
+    return withReason(errorPassed(), value);
   }
   for (const option of schema.get("#oneOf")) {
     if (equals(value, option)) {
       return kpobject();
     }
   }
-  return kpthrow(
-    "badValue",
-    ["value", value],
-    ["options", schema.get("#oneOf")]
-  );
+  return badValue(value, ["options", schema.get("#oneOf")]);
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
@@ -384,20 +339,13 @@ function bindTypeWithConditionsSchema(value, schema) {
     for (let i = 0; i < value.length; i++) {
       const elementBindings = bindings[i];
       if (isThrown(elementBindings)) {
-        return withReason(
-          kpthrow("badElement", ["value", value], ["index", i + 1]),
-          elementBindings
-        );
+        return withReason(badElement(value, i + 1), elementBindings);
       }
       for (const key of keys) {
         if (!elementBindings.has(key)) {
           subschemaBindings
             .get(key)
-            .push(
-              catch_(
-                kpthrow("missingProperty", ["value", bindings], ["key", key])
-              )
-            );
+            .push(catch_(missingProperty(bindings, key)));
           continue;
         }
         const elementValue = elementBindings.get(key);
@@ -407,10 +355,7 @@ function bindTypeWithConditionsSchema(value, schema) {
               const forcedValue = force(elementValue);
               let result;
               if (isThrown(forcedValue)) {
-                result = withReason(
-                  kpthrow("badElement", ["value", value], ["index", i + 1]),
-                  forcedValue
-                );
+                result = withReason(badElement(value, i + 1), forcedValue);
               } else {
                 result = forcedValue;
               }
@@ -427,7 +372,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     for (const key of value.keys()) {
       const bindings = eagerBindInternal(key, schema.get("keys"));
       if (isThrown(bindings)) {
-        return kpthrow("badKey", ["key", key], ["reason", catch_(bindings)]);
+        return badKey(key, catch_(bindings));
       }
     }
   }
@@ -454,25 +399,13 @@ function bindTypeWithConditionsSchema(value, schema) {
     for (const [key, propertyValue] of value) {
       const propertyBindings = bindings.get(key);
       if (isThrown(propertyBindings)) {
-        return withReason(
-          kpthrow("badProperty", ["key", key], ["value", propertyValue]),
-          propertyBindings
-        );
+        return withReason(badProperty(propertyValue, key), propertyBindings);
       }
       for (const subschemaKey of subschemaKeys) {
         if (!propertyBindings.has(subschemaKey)) {
           subschemaBindings
             .get(subschemaKey)
-            .set(
-              key,
-              catch_(
-                kpthrow(
-                  "missingProperty",
-                  ["value", bindings],
-                  ["key", subschemaKey]
-                )
-              )
-            );
+            .set(key, catch_(missingProperty(bindings, subschemaKey)));
           continue;
         }
         const propertyValue = propertyBindings.get(subschemaKey);
@@ -483,10 +416,7 @@ function bindTypeWithConditionsSchema(value, schema) {
               const forcedValue = force(propertyValue);
               let result;
               if (isThrown(forcedValue)) {
-                result = withReason(
-                  kpthrow("badProperty", ["value", value], ["key", key]),
-                  forcedValue
-                );
+                result = withReason(badProperty(value, key), forcedValue);
               } else {
                 result = forcedValue;
               }
@@ -504,11 +434,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     !isPending(value) &&
     !callOnValues(schema.get("where"), [value])
   ) {
-    return kpthrow(
-      "badValue",
-      ["value", value],
-      ["condition", schema.get("where")]
-    );
+    return badValue(value, ["condition", schema.get("where")]);
   }
   return subschemaBindings;
 }
@@ -545,10 +471,10 @@ function bindObjectSchema(value, schema) {
     return bindObjectSchema(force(value), schema);
   }
   if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
+    return withReason(errorPassed(), value);
   }
   if (!isObject(value)) {
-    return kpthrow("wrongType", ["value", value], ["expectedType", "object"]);
+    return wrongType(value, "object");
   }
   let restName;
   const ownBindings = kpobject();
@@ -565,17 +491,14 @@ function bindObjectSchema(value, schema) {
         ownBindings.set(key, [propertySchema.get("#default"), "any"]);
         propertyBindings.push(kpobject([key, propertySchema.get("#default")]));
       } else {
-        return kpthrow("missingProperty", ["value", value], ["key", key]);
+        return missingProperty(value, key);
       }
     }
     if (value.has(key)) {
       ownBindings.set(key, [value.get(key), propertySchema]);
       const bindings = lazyBindInternal(value.get(key), propertySchema);
       if (isThrown(bindings)) {
-        return withReason(
-          kpthrow("badProperty", ["value", value], ["key", key]),
-          bindings
-        );
+        return withReason(badProperty(value, key), bindings);
       }
       propertyBindings.push(
         kpobject(
@@ -587,10 +510,7 @@ function bindObjectSchema(value, schema) {
                     const forcedValue = force(bindingValue);
                     let result;
                     if (isThrown(forcedValue)) {
-                      result = withReason(
-                        kpthrow("badProperty", ["value", value], ["key", key]),
-                        forcedValue
-                      );
+                      result = withReason(badProperty(value, key), forcedValue);
                     } else {
                       result = forcedValue;
                     }
@@ -630,10 +550,7 @@ function bindObjectSchema(value, schema) {
               const bindings = eagerBindInternal(forcedValue, propertySchema);
               let result;
               if (isThrown(bindings)) {
-                result = withReason(
-                  kpthrow("badProperty", ["value", value], ["key", key]),
-                  bindings
-                );
+                result = withReason(badProperty(value, key), bindings);
               } else {
                 result = forcedValue;
               }
@@ -679,15 +596,15 @@ function withReason(err, reason) {
 }
 
 function isPending(value) {
-  if (value === null) {
-    return false;
-  } else if (typeof value === "object" && "expression" in value) {
-    return true;
-  } else if (typeof value === "object" && "thunk" in value) {
-    return true;
-  } else {
-    return false;
-  }
+  return isExpression(value) || isThunk(value);
+}
+
+function isExpression(value) {
+  return value !== null && typeof value === "object" && "expression" in value;
+}
+
+function isThunk(value) {
+  return value !== null && typeof value === "object" && "thunk" in value;
 }
 
 export function matches(value, schema) {
@@ -739,4 +656,45 @@ export function default_(schema, defaultValue) {
 
 export function rest(schema) {
   return kpobject(["#rest", schema]);
+}
+
+function invalidSchema(schema) {
+  return kpthrow("invalidSchema", ["schema", schema]);
+}
+
+function errorPassed() {
+  return kpthrow("errorPassed");
+}
+
+function wrongType(value, schema) {
+  return kpthrow("wrongType", ["value", value], ["expectedType", schema]);
+}
+
+function badKey(key, reason) {
+  return kpthrow("badKey", ["key", key], ["reason", reason]);
+}
+
+function badValue(value, ...details) {
+  return kpthrow("badValue", ["value", value], ...details);
+}
+
+function missingElement(value, index, schema) {
+  return kpthrow(
+    "missingElement",
+    ["value", value],
+    ["index", index],
+    ["schema", schema]
+  );
+}
+
+function badElement(value, index) {
+  return kpthrow("badElement", ["value", value], ["index", index]);
+}
+
+function missingProperty(value, key) {
+  return kpthrow("missingProperty", ["value", value], ["key", key]);
+}
+
+function badProperty(value, key) {
+  return kpthrow("badProperty", ["value", value], ["key", key]);
 }
