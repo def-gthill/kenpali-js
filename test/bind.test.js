@@ -1,5 +1,5 @@
 import test from "ava";
-import { as, eagerBind } from "../src/builtins.js";
+import { as, eagerBind } from "../src/bind.js";
 import { literal } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
 import { assertIsThrown } from "./assertIsError.js";

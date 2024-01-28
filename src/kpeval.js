@@ -1,14 +1,5 @@
-import {
-  as,
-  builtins,
-  default_,
-  eagerBind,
-  force,
-  isThrown,
-  lazyBind,
-  rest,
-  toString,
-} from "./builtins.js";
+import { as, default_, eagerBind, force, lazyBind, rest } from "./bind.js";
+import { builtins, isThrown, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";

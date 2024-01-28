@@ -9,7 +9,7 @@ import {
   objectOf,
   oneOf,
   rest,
-} from "../src/builtins.js";
+} from "../src/bind.js";
 import { defining, literal, name, object, quote } from "../src/kpast.js";
 import kpthrow from "../src/kperror.js";
 import kpobject, { kpoKeys } from "../src/kpobject.js";
