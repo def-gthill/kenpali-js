@@ -8,6 +8,7 @@ import {
   lazyBind,
   objectOf,
   oneOf,
+  rest,
 } from "../src/builtins.js";
 import { defining, literal, name, object, quote } from "../src/kpast.js";
 import kpthrow from "../src/kperror.js";
@@ -125,7 +126,7 @@ test("Explicit binding forwards value bindings from the sub-schema", (t) => {
 
   const result = lazyBind(value, schema);
 
-  t.deepEqual(result, kpobject(["schmanswer", 42], ["answer", 42]));
+  t.deepEqual(result, kpobject(["answer", 42], ["schmanswer", 42]));
 });
 
 test("Explicit binding forwards expression bindings from the sub-schema", (t) => {
@@ -224,6 +225,26 @@ test("Binding an array schema doesn't evaluate expressions that aren't retrieved
   t.is(force(result.get("name")), "John");
 });
 
+// Array schema with rest
+
+test("Binding to an array schema with a rest element binds the excess elements to the rest name", (t) => {
+  const value = ["John", 42, "foo", "bar"];
+  const schema = ["string", "number", rest(as("string", "words"))];
+
+  const result = lazyBind(value, schema);
+
+  t.deepEqual(result, kpobject(["words", ["foo", "bar"]]));
+});
+
+test("Binding an array with no excess elements to an array schema with a rest element binds an empty array to the rest name", (t) => {
+  const value = ["John", 42];
+  const schema = ["string", "number", rest(as("string", "words"))];
+
+  const result = lazyBind(value, schema);
+
+  t.deepEqual(result, kpobject(["words", []]));
+});
+
 // Uniform array schema
 
 test("Binding a simple value to a uniform array schema yields a wrongType error", (t) => {
@@ -270,7 +291,7 @@ test("Binding a uniform array with inconsistent bindings leaves errors for missi
   const answer = result.get("answer");
 
   t.is(answer[0], 42);
-  assertIsError(t, answer[1], "missingProperty");
+  assertIsThrown(t, answer[1], "wrongType");
   t.is(answer[2], 216);
 });
 
@@ -419,6 +440,44 @@ test("Binding an object schema doesn't evaluate expressions that aren't retrieve
   t.is(force(result.get("name")), "John");
 });
 
+// Object schema with rest
+
+test("Binding to an object schema with a rest property binds the excess properties to the rest name", (t) => {
+  const value = kpobject(["name", "John"], ["age", 42], ["hobby", "coding"]);
+  const schema = kpobject(
+    ["name", "string"],
+    ["age", "number"],
+    ["notes", rest("string")]
+  );
+
+  const result = lazyBind(value, schema);
+
+  t.deepEqual(
+    result,
+    kpobject(
+      ["name", "John"],
+      ["age", 42],
+      ["notes", kpobject(["hobby", "coding"])]
+    )
+  );
+});
+
+test("Binding an object with no excess properties to an object schema with a rest property binds an empty object to the rest name", (t) => {
+  const value = kpobject(["name", "John"], ["age", 42]);
+  const schema = kpobject(
+    ["name", "string"],
+    ["age", "number"],
+    ["notes", rest("string")]
+  );
+
+  const result = lazyBind(value, schema);
+
+  t.deepEqual(
+    result,
+    kpobject(["name", "John"], ["age", 42], ["notes", kpobject()])
+  );
+});
+
 // Uniform object schema
 
 test("Binding a simple value to a uniform object schema yields a wrongType error", (t) => {
@@ -466,7 +525,7 @@ test("Binding a uniform object with inconsistent bindings leaves errors for miss
   const result = lazyBind(value, schema);
   const n = result.get("n");
 
-  assertIsError(t, n.get("answer"), "missingProperty");
+  assertIsThrown(t, n.get("answer"), "wrongType");
   t.is(n.get("prime"), 97);
 });
 
@@ -577,7 +636,9 @@ test("Binding a value to a union schema forwards bindings from the matching subs
 
   const result = lazyBind(value, schema);
 
-  t.deepEqual(result, kpobject(["question", "foo"]));
+  t.deepEqual(kpoKeys(result), ["answer", "question"]);
+  assertIsThrown(t, result.get("answer"), "wrongType");
+  t.is(result.get("question"), "foo");
 });
 
 test("Binding an expression to a union schema defers bindings from the matching subschema", (t) => {

@@ -1,7 +1,13 @@
 import { given, literal } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import { callOnValues, catch_, evalWithBuiltins, rethrow } from "./kpeval.js";
-import kpobject, { kpoEntries, kpoKeys, kpoMap, kpoMerge } from "./kpobject.js";
+import kpobject, {
+  kpoEntries,
+  kpoKeys,
+  kpoMap,
+  kpoMerge,
+  kpoValues,
+} from "./kpobject.js";
 
 const rawBuiltins = [
   builtin(
@@ -623,16 +629,45 @@ export function deepForce(value) {
   }
 }
 
-export function requiredNames(schema) {
-  if (isObject(schema)) {
-    if (schema.has("#bind")) {
-      return [schema.get("as")];
+function namesToBind(schema) {
+  if (isArray(schema)) {
+    return mergeArrays(schema.map(namesToBind));
+  } else if (isObject(schema)) {
+    if (schema.has("#either")) {
+      return mergeArrays(schema.get("#either").map(namesToBind));
+    } else if (schema.has("#type")) {
+      if (schema.has("elements")) {
+        return namesToBind(schema.get("elements"));
+      } else if (schema.has("values")) {
+        return namesToBind(schema.get("values"));
+      } else {
+        return [];
+      }
+    } else if (schema.has("#bind")) {
+      return [schema.get("as"), ...namesToBind(schema.get("#bind"))];
+    } else if (schema.has("#default")) {
+      return namesToBind(schema.get("for"));
     } else {
-      return [];
+      return [
+        ...kpoKeys(schema),
+        ...mergeArrays(kpoValues(schema).map(namesToBind)),
+      ];
     }
   } else {
     return [];
   }
+}
+
+function mergeArrays(arrays) {
+  const result = [];
+  for (const array of arrays) {
+    for (const element of array) {
+      if (!result.includes(element)) {
+        result.push(element);
+      }
+    }
+  }
+  return result;
 }
 
 export function lazyBind(value, schema) {
@@ -775,20 +810,9 @@ function bindArraySchema(value, schema) {
 
 function bindUnionSchema(value, schema) {
   if (isPending(value)) {
+    const keys = namesToBind(schema);
     const options = schema.get("#either");
     const bindings = options.map((option) => lazyBindInternal(value, option));
-
-    const keys = [];
-
-    for (const optionBindings of bindings) {
-      if (!isThrown(optionBindings)) {
-        for (const key of kpoKeys(optionBindings)) {
-          if (!keys.includes(key)) {
-            keys.push(key);
-          }
-        }
-      }
-    }
 
     return kpobject(
       ...keys.map((key) => [
@@ -828,17 +852,34 @@ function bindUnionSchema(value, schema) {
       ])
     );
   } else {
+    let succeeded = false;
+    const result = kpobject();
+    const options = schema.get("#either");
+    const bindings = options.map((option) => lazyBindInternal(value, option));
     const errors = [];
-    for (const option of schema.get("#either")) {
-      const bindings = lazyBindInternal(value, option);
-      if (isThrown(bindings)) {
-        if (bindings.get("#thrown") === "errorPassed") {
-          return bindings;
+    const errorsByKey = kpobject();
+    for (let i = 0; i < options.length; i++) {
+      const option = options[i];
+      const optionBindings = bindings[i];
+      if (isThrown(optionBindings)) {
+        if (optionBindings.get("#thrown") === "errorPassed") {
+          return optionBindings;
         }
-        errors.push([option, bindings]);
+        errors.push([option, optionBindings]);
+        for (const key of namesToBind(option)) {
+          if (!errorsByKey.has(key)) {
+            errorsByKey.set(key, optionBindings);
+          }
+        }
       } else {
-        return bindings;
+        succeeded = true;
+        for (const [key, binding] of optionBindings) {
+          result.set(key, binding);
+        }
       }
+    }
+    if (succeeded) {
+      return kpoMerge(errorsByKey, result);
     }
     if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
       return kpthrow(
@@ -888,33 +929,24 @@ function bindTypeWithConditionsSchema(value, schema) {
   }
   const subschemaBindings = kpobject();
   if (schema.has("elements")) {
+    const keys = namesToBind(schema);
     const bindings = value.map((element) =>
       lazyBindInternal(element, schema.get("elements"))
     );
-
-    const keys = [];
-
-    for (const bindingsI of bindings) {
-      for (const key of kpoKeys(bindingsI)) {
-        if (!keys.includes(key)) {
-          keys.push(key);
-        }
-      }
-    }
 
     for (const key of keys) {
       subschemaBindings.set(key, []);
     }
     for (let i = 0; i < value.length; i++) {
-      const bindingsI = bindings[i];
-      if (isThrown(bindingsI)) {
+      const elementBindings = bindings[i];
+      if (isThrown(elementBindings)) {
         return withReason(
           kpthrow("badElement", ["value", value], ["index", i + 1]),
-          bindingsI
+          elementBindings
         );
       }
       for (const key of keys) {
-        if (!bindingsI.has(key)) {
+        if (!elementBindings.has(key)) {
           subschemaBindings
             .get(key)
             .push(
@@ -924,7 +956,7 @@ function bindTypeWithConditionsSchema(value, schema) {
             );
           continue;
         }
-        const elementValue = bindingsI.get(key);
+        const elementValue = elementBindings.get(key);
         if (isPending(elementValue)) {
           subschemaBindings.get(key).push({
             thunk: () => {
@@ -1061,7 +1093,7 @@ function explicitBind(value, schema) {
   } else {
     explicitBinding = value;
   }
-  return kpoMerge(bindings, kpobject([schema.get("as"), explicitBinding]));
+  return kpoMerge(kpobject([schema.get("as"), explicitBinding]), bindings);
 }
 
 function bindObjectSchema(value, schema) {
@@ -1087,10 +1119,7 @@ function bindObjectSchema(value, schema) {
     } else if (!value.has(key)) {
       if (isObject(propertySchema) && propertySchema.has("#default")) {
         ownBindings.set(key, [propertySchema.get("#default"), "any"]);
-        const forSchema = propertySchema.get("for");
-        propertyBindings.push(
-          kpobject([forSchema.get("as"), propertySchema.get("#default")])
-        );
+        propertyBindings.push(kpobject([key, propertySchema.get("#default")]));
       } else {
         return kpthrow("missingProperty", ["value", value], ["key", key]);
       }
