@@ -233,17 +233,7 @@ function bindUnionSchema(value, schema) {
                 }
               }
             }
-
-            if (
-              errors.every(([_, err]) => err.get("#thrown") === "wrongType")
-            ) {
-              return wrongType(
-                value,
-                either(...errors.map(([_, err]) => err.get("expectedType")))
-              );
-            } else {
-              return badValue(value, ["errors", errors]);
-            }
+            return combineUnionErrors(value, errors);
           },
         },
       ])
@@ -278,14 +268,18 @@ function bindUnionSchema(value, schema) {
     if (succeeded) {
       return kpoMerge(errorsByKey, result);
     }
-    if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
-      return wrongType(
-        value,
-        either(...errors.map(([_, err]) => err.get("expectedType")))
-      );
-    } else {
-      return badValue(value, ["errors", errors]);
-    }
+    return combineUnionErrors(value, errors);
+  }
+}
+
+function combineUnionErrors(value, errors) {
+  if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
+    return wrongType(
+      value,
+      either(...errors.map(([_, err]) => err.get("expectedType")))
+    );
+  } else {
+    return badValue(value, ["errors", errors]);
   }
 }
 
@@ -518,15 +512,19 @@ function wrapErrorsInBindings(bindings, wrapError) {
 }
 
 function wrapErrorIfPending(value, wrapError) {
-  return wrapPending(value, (forcedValue) => {
-    let result;
-    if (isThrown(forcedValue)) {
-      result = wrapError(forcedValue);
-    } else {
-      result = forcedValue;
-    }
-    return deepUnwrapErrorPassed(result);
-  });
+  return wrapPending(value, (forcedValue) =>
+    wrapIfError(forcedValue, wrapError)
+  );
+}
+
+function wrapIfError(value, wrapError) {
+  let result;
+  if (isThrown(value)) {
+    result = wrapError(value);
+  } else {
+    result = value;
+  }
+  return deepUnwrapErrorPassed(result);
 }
 
 function wrapPending(value, wrap) {
