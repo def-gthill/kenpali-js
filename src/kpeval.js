@@ -198,7 +198,7 @@ function callOnExpressions(f, args, namedArgs, names) {
       return callBuiltin(f, allArgs, names);
     }
   } else {
-    return f;
+    return kpthrow("notCallable", ["value", f]);
   }
 }
 
@@ -238,7 +238,7 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
   } else if (typeof f === "function") {
     return callBuiltin(f, allArgs, kpobject());
   } else {
-    return f;
+    return kpthrow("notCallable", ["value", f]);
   }
 }
 

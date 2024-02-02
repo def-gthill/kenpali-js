@@ -20,11 +20,3 @@ test("We can call a builtin from JavaScript", (t) => {
 
   t.is(result, 45);
 });
-
-test("We can call a non-function with no arguments from JavaScript", (t) => {
-  const f = kpeval(literal(42));
-
-  const result = callOnValues(f, [], kpobject());
-
-  t.is(result, 42);
-});

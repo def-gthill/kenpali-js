@@ -151,6 +151,13 @@ const rawBuiltins = [
   builtin("isFunction", { params: ["value"] }, function ([value]) {
     return isFunction(value);
   }),
+  builtin("toFunction", { params: ["value"] }, function ([value]) {
+    if (isFunction(value)) {
+      return value;
+    } else {
+      return builtin("constant", {}, () => value);
+    }
+  }),
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
