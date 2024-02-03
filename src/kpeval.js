@@ -250,7 +250,7 @@ function callGiven(f, allArgs, names) {
   const schema = createParamSchema(paramObjects);
   const bindings = lazyBind([args, namedArgs], schema);
   if (isThrown(bindings)) {
-    return argumentError(paramObjects, bindings);
+    return argumentErrorGivenParamObjects(paramObjects, bindings);
   }
   return evalWithBuiltins(
     f.get("result"),
@@ -297,7 +297,7 @@ function callBuiltin(f, allArgs, names) {
   const schema = createParamSchema(paramObjects);
   const bindings = eagerBind([args, namedArgs], schema);
   if (isThrown(bindings)) {
-    return argumentError(paramObjects, bindings);
+    return argumentErrorGivenParamObjects(paramObjects, bindings);
   }
   const argValues = paramObjects.params.map((param) =>
     force(bindings.get(param.name))
@@ -333,7 +333,14 @@ function captureContext(expression, names) {
   return { expression, context: names };
 }
 
-function argumentError(paramObjects, err) {
+function argumentErrorGivenParamObjects(paramObjects, err) {
+  return argumentError(
+    err,
+    paramObjects.params.map((param) => param.name)
+  );
+}
+
+export function argumentError(err, argumentNames) {
   let updatedErr = err;
   if (updatedErr.get("#thrown") === "badElement") {
     updatedErr = rethrow(updatedErr.get("reason"));
@@ -361,7 +368,7 @@ function argumentError(paramObjects, err) {
       updatedErr,
       kpobject(
         ["#thrown", "missingArgument"],
-        ["name", paramObjects.params[updatedErr.get("index") - 1].name]
+        ["name", argumentNames[updatedErr.get("index") - 1]]
       )
     );
   }
@@ -376,7 +383,7 @@ function callLazyBuiltin(f, allArgs, names) {
   const schema = createParamSchema(paramObjects);
   const bindings = lazyBind([args, namedArgs], schema);
   if (isThrown(bindings)) {
-    return argumentError(paramObjects, bindings);
+    return argumentErrorGivenParamObjects(paramObjects, bindings);
   }
   const restArgs = paramObjects.restParam
     ? force(bindings.get(paramObjects.restParam.name))
@@ -385,7 +392,7 @@ function callLazyBuiltin(f, allArgs, names) {
     arg(name) {
       const argValue = force(bindings.get(name));
       if (isThrown(argValue)) {
-        throw argumentError(paramObjects, argValue);
+        throw argumentErrorGivenParamObjects(paramObjects, argValue);
       }
       return argValue;
     },
@@ -393,7 +400,7 @@ function callLazyBuiltin(f, allArgs, names) {
     restArg(index) {
       const argValue = force(restArgs[index]);
       if (isThrown(argValue)) {
-        throw argumentError(paramObjects, argValue);
+        throw argumentErrorGivenParamObjects(paramObjects, argValue);
       }
       return argValue;
     },

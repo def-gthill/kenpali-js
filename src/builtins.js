@@ -13,7 +13,7 @@ import {
 } from "./bind.js";
 import { given, literal } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { callOnValues } from "./kpeval.js";
+import { argumentError, callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -121,9 +121,19 @@ const rawBuiltins = [
   builtin("isNumber", { params: ["value"] }, function ([value]) {
     return isNumber(value);
   }),
-  builtin("toNumber", { params: ["value"] }, function ([value]) {
-    return parseFloat(value);
-  }),
+  builtin(
+    "toNumber",
+    { params: [{ name: "value", type: either("string", "number") }] },
+    function ([value]) {
+      if (isNumber(value)) {
+        return value;
+      }
+      if (!/^-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?$/.test(value)) {
+        return kpthrow("notNumeric", ["value", value]);
+      }
+      return parseFloat(value);
+    }
+  ),
   builtin("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
@@ -152,11 +162,7 @@ const rawBuiltins = [
     return isFunction(value);
   }),
   builtin("toFunction", { params: ["value"] }, function ([value]) {
-    if (isFunction(value)) {
-      return value;
-    } else {
-      return builtin("constant", {}, () => value);
-    }
+    return toFunction(value);
   }),
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
@@ -175,19 +181,27 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin("repeat", { params: ["start", "step"] }, function ([start, step]) {
-    return loop("repeat", start, step, () => {});
-  }),
+  builtin(
+    "repeat",
+    { params: ["start", { name: "step", type: "function" }] },
+    function ([start, step]) {
+      return loop("repeat", start, step, () => {});
+    }
+  ),
   builtin(
     "at",
     {
       params: [
-        { name: "collection", type: either("string", "array", "object") },
+        { name: "collection", type: either("sequence", "object") },
         "index",
       ],
     },
     function ([collection, index]) {
       if (isString(collection) || isArray(collection)) {
+        const check = validateArgument(index, "number");
+        if (isThrown(check)) {
+          return check;
+        }
         if (index < 1 || index > collection.length) {
           return kpthrow(
             "indexOutOfBounds",
@@ -199,6 +213,10 @@ const rawBuiltins = [
         }
         return collection[index - 1];
       } else if (isObject(collection)) {
+        const check = validateArgument(index, "string");
+        if (isThrown(check)) {
+          return check;
+        }
         if (collection.has(index)) {
           return collection.get(index);
         } else {
@@ -211,22 +229,30 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin("length", { params: ["array"] }, function ([array]) {
-    return array.length;
-  }),
-  builtin("build", { params: ["start", "step"] }, function ([start, step]) {
-    const result = [];
-    const loopResult = loop("build", start, step, (stepResult) => {
-      if (stepResult.get("where") ?? true) {
-        result.push(stepResult.get("out") ?? stepResult.get("next"));
-      }
-    });
-    if (isThrown(loopResult)) {
-      return loopResult;
-    } else {
-      return result;
+  builtin(
+    "length",
+    { params: [{ name: "sequence", type: "sequence" }] },
+    function ([sequence]) {
+      return sequence.length;
     }
-  }),
+  ),
+  builtin(
+    "build",
+    { params: ["start", { name: "step", type: "function" }] },
+    function ([start, step]) {
+      const result = [];
+      const loopResult = loop("build", start, step, (stepResult) => {
+        if (stepResult.get("where") ?? true) {
+          result.push(stepResult.get("out") ?? stepResult.get("next"));
+        }
+      });
+      if (isThrown(loopResult)) {
+        return loopResult;
+      } else {
+        return result;
+      }
+    }
+  ),
   builtin(
     "keys",
     { params: [{ name: "object", type: "object" }] },
@@ -261,7 +287,7 @@ const rawBuiltins = [
       for (const [schema, f] of cases) {
         const bindings = eagerBind(value, schema);
         if (!isThrown(bindings)) {
-          return callOnValues(f, [value], bindings);
+          return callOnValues(toFunction(f), [value], bindings);
         }
       }
     }
@@ -515,6 +541,14 @@ export function toString(value) {
   }
 }
 
+export function toFunction(value) {
+  if (isFunction(value)) {
+    return value;
+  } else {
+    return builtin("constant", {}, () => value);
+  }
+}
+
 function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
 }
@@ -586,6 +620,14 @@ function loop(functionName, start, step, callback) {
     ["function", functionName],
     ["currentValue", current]
   );
+}
+
+function validateArgument(value, schema) {
+  const check = eagerBind(value, schema);
+  if (isThrown(check)) {
+    return argumentError(check);
+  }
+  return null;
 }
 
 export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
