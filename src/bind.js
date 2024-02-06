@@ -165,17 +165,15 @@ function bindArraySchema(value, schema) {
   if (!isArray(value)) {
     return wrongType(value, "array");
   }
+  const result = kpobject();
   const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
-  const elementBindings = [];
   for (let i = 0; i < schema.length; i++) {
     if (isObject(schema[i]) && schema[i].has("#rest")) {
       break;
     } else if (i >= value.length) {
       if (isObject(schema[i]) && schema[i].has("#default")) {
         const forSchema = schema[i].get("for");
-        elementBindings.push(
-          kpobject([forSchema.get("as"), schema[i].get("#default")])
-        );
+        result.set(forSchema.get("as"), schema[i].get("#default"));
       } else {
         return missingElement(value, i + 1, schema);
       }
@@ -187,7 +185,9 @@ function bindArraySchema(value, schema) {
       if (isThrown(bindingsWithErrorWrapping)) {
         return bindingsWithErrorWrapping;
       } else {
-        elementBindings.push(bindingsWithErrorWrapping);
+        for (const [name, binding] of bindingsWithErrorWrapping) {
+          result.set(name, binding);
+        }
       }
     }
   }
@@ -203,10 +203,12 @@ function bindArraySchema(value, schema) {
     if (isThrown(bindingsWithErrorWrapping)) {
       return bindingsWithErrorWrapping;
     } else {
-      elementBindings.push(bindingsWithErrorWrapping);
+      for (const [name, binding] of bindingsWithErrorWrapping) {
+        result.set(name, binding);
+      }
     }
   }
-  return kpoMerge(...elementBindings);
+  return result;
 }
 
 function bindUnionSchema(value, schema) {
@@ -419,7 +421,12 @@ function explicitBind(value, schema) {
     }
     return deepUnwrapErrorPassed(result);
   });
-  return kpoMerge(kpobject([schema.get("as"), explicitBinding]), bindings);
+  const result = kpobject();
+  result.set(schema.get("as"), explicitBinding);
+  for (const [name, binding] of bindings) {
+    result.set(name, binding);
+  }
+  return result;
 }
 
 function bindObjectSchema(value, schema) {

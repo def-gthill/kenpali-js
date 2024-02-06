@@ -1,7 +1,7 @@
 import kpeval from "./kpeval.js";
 import kpparse from "./kpparse.js";
 
-const hello = `join("Hello", ", ", "world!")`;
+const hello = `join(["Hello", ", ", "world!"])`;
 const repeatedReference = `array = 1 | to(100);
 plus(length(array), length(array), length(array))
 `;
