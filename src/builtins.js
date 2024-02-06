@@ -44,6 +44,20 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "increment",
+    { params: [{ name: "x", type: "number" }] },
+    function ([x]) {
+      return x + 1;
+    }
+  ),
+  builtin(
+    "decrement",
+    { params: [{ name: "x", type: "number" }] },
+    function ([x]) {
+      return x - 1;
+    }
+  ),
+  builtin(
     "times",
     { restParam: { name: "rest", type: "number" } },
     function (args) {

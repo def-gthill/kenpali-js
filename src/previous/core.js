@@ -1,6 +1,4 @@
 export const core = String.raw`
-increment = (n) => (n | plus(1));
-decrement = (n) => (n | minus(1));
 isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b).remainder | equals(0)
 );
