@@ -25,6 +25,18 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "minus",
+    {
+      params: [
+        { name: "a", type: "number" },
+        { name: "b", type: "number" },
+      ],
+    },
+    function ([a, b]) {
+      return a - b;
+    }
+  ),
+  builtin(
     "negative",
     { params: [{ name: "x", type: "number" }] },
     function ([x]) {
@@ -36,6 +48,18 @@ const rawBuiltins = [
     { restParam: { name: "rest", type: "number" } },
     function (args) {
       return args.reduce((acc, value) => acc * value, 1);
+    }
+  ),
+  builtin(
+    "dividedBy",
+    {
+      params: [
+        { name: "a", type: "number" },
+        { name: "b", type: "number" },
+      ],
+    },
+    function ([a, b]) {
+      return a / b;
     }
   ),
   builtin(

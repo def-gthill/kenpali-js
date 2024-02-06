@@ -1,8 +1,6 @@
 export const core = String.raw`
-minus = (a, b) => plus(a, negative(b));
 increment = (n) => (n | plus(1));
 decrement = (n) => (n | minus(1));
-dividedBy = (a, b) => times(a, oneOver(b));
 isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b).remainder | equals(0)
 );
