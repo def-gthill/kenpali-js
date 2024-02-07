@@ -92,7 +92,10 @@ function runBenchmark(benchmark, kpparse, kpeval) {
   return time;
 }
 
-const namesOfBenchmarksToRun = process.argv.slice(2);
+const namesOfBenchmarksToRun = process.argv
+  .slice(2)
+  .filter((arg) => !arg.startsWith("--"));
+const currentOnly = process.argv.includes("--current");
 
 const results = [];
 
@@ -101,27 +104,28 @@ for (const benchmark of benchmarks) {
     namesOfBenchmarksToRun.length === 0 ||
     namesOfBenchmarksToRun.includes(benchmark.name)
   ) {
+    const result = { name: benchmark.name };
     console.log(benchmark.name);
-    const baselineTime = runBenchmark(
-      benchmark,
-      kpparseBaseline,
-      kpevalBaseline
-    );
-    console.log(`${formatTime(baselineTime)} (baseline)`);
-    const previousTime = runBenchmark(
-      benchmark,
-      kpparsePrevious,
-      kpevalPrevious
-    );
-    console.log(`${formatTime(previousTime)} (previous)`);
+    if (!currentOnly) {
+      const baselineTime = runBenchmark(
+        benchmark,
+        kpparseBaseline,
+        kpevalBaseline
+      );
+      console.log(`${formatTime(baselineTime)} (baseline)`);
+      result["baselineTime"] = baselineTime;
+      const previousTime = runBenchmark(
+        benchmark,
+        kpparsePrevious,
+        kpevalPrevious
+      );
+      console.log(`${formatTime(previousTime)} (previous)`);
+      result["previousTime"] = previousTime;
+    }
     const currentTime = runBenchmark(benchmark, kpparse, kpeval);
     console.log(`${formatTime(currentTime)} (current)`);
-    results.push({
-      name: benchmark.name,
-      baselineTime,
-      previousTime,
-      currentTime,
-    });
+    result["currentTime"] = currentTime;
+    results.push(result);
   }
 }
 
@@ -140,18 +144,24 @@ function percentChange(newTime, oldTime) {
   }
 }
 
-const baselineTotal = total("baselineTime");
-console.log(`Baseline total: ${formatTime(baselineTotal)}`);
-const previousTotal = total("previousTime");
-console.log(`Previous total: ${formatTime(previousTotal)}`);
+let baselineTotal;
+let previousTotal;
+if (!currentOnly) {
+  baselineTotal = total("baselineTime");
+  console.log(`Baseline total: ${formatTime(baselineTotal)}`);
+  previousTotal = total("previousTime");
+  console.log(`Previous total: ${formatTime(previousTotal)}`);
+}
 const currentTotal = total("currentTime");
 console.log(`Current total: ${formatTime(currentTotal)}`);
-console.log(
-  `(${percentChange(
-    currentTotal,
-    previousTotal
-  )} from previous, ${percentChange(
-    currentTotal,
-    baselineTotal
-  )} from baseline)`
-);
+if (!currentOnly) {
+  console.log(
+    `(${percentChange(
+      currentTotal,
+      previousTotal
+    )} from previous, ${percentChange(
+      currentTotal,
+      baselineTotal
+    )} from baseline)`
+  );
+}
