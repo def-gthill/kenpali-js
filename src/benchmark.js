@@ -5,7 +5,7 @@ import kpparse from "./kpparse.js";
 import kpevalPrevious from "./previous/kpeval.js";
 import kpparsePrevious from "./previous/kpparse.js";
 
-const hello = `join(["Hello", ", ", "world!"])`;
+const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString(), "!"])`;
 const repeatedReference = `array = 1 | to(100);
 plus(length(array), length(array), length(array))
 `;
@@ -55,7 +55,7 @@ parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
 const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
-  { name: "Hello", code: hello, times: 300000 },
+  { name: "Hello", code: hello, times: 500 },
   { name: "Repeated Reference", code: repeatedReference, times: 500 },
   {
     name: "Repeated Reference in Given",

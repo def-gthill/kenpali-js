@@ -505,6 +505,31 @@ function bindObjectSchema(value, schema) {
   );
 }
 
+export function eagerParamBinder(params, namedParams) {
+  return paramBinder(params, namedParams, eagerBind);
+}
+
+export function lazyParamBinder(params, namedParams) {
+  return paramBinder(params, namedParams, lazyBind);
+}
+
+function paramBinder(params, namedParams, eagerOrLazyBind) {
+  if (namedParams.size === 0) {
+    function bind(args) {
+      return eagerOrLazyBind(args, params);
+    }
+    return bind;
+  } else {
+    function bind(args, namedArgs) {
+      return kpoMerge(
+        eagerOrLazyBind(args, params),
+        eagerOrLazyBind(namedArgs, namedParams)
+      );
+    }
+    return bind;
+  }
+}
+
 function wrapErrorsInBindings(bindings, wrapError) {
   if (isThrown(bindings)) {
     return wrapError(bindings);

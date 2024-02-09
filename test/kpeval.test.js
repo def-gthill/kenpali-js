@@ -9,6 +9,15 @@ import {
 } from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
+import { assertIsError } from "./assertIsError.js";
+
+test("Evaluating null returns an error", (t) => {
+  const expression = null;
+
+  const result = kpeval(expression);
+
+  assertIsError(t, result, "notAnExpression");
+});
 
 test("We can define and call a two-argument function", (t) => {
   t.is(
