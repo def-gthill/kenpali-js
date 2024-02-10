@@ -1,5 +1,6 @@
 import {
   as,
+  deepForce,
   default_,
   eagerBind,
   eagerParamBinder,
@@ -8,7 +9,7 @@ import {
   lazyParamBinder,
   rest,
 } from "./bind.js";
-import { builtins, isThrown, toString } from "./builtins.js";
+import { builtins, isArray, isObject, isThrown, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
@@ -62,7 +63,7 @@ export default function kpeval(expression, names = kpobject(), trace = false) {
   const withCustomNames = new Scope(withCore, names);
   compileScope(withCustomNames, withCustomNames);
   const compiled = compile(expression, withCustomNames);
-  return catch_(evalWithBuiltins(compiled, withCustomNames));
+  return deepForce(deepCatch(evalWithBuiltins(compiled, withCustomNames)));
 }
 
 function validateExpression(expression) {
@@ -741,6 +742,18 @@ export function catch_(expression) {
       ["#error", expression.get("#thrown")],
       ...kpoFilter(expression, ([name, _]) => name !== "#thrown")
     );
+  } else {
+    return expression;
+  }
+}
+
+function deepCatch(expression) {
+  if (isThrown(expression)) {
+    return catch_(expression);
+  } else if (isArray(expression)) {
+    return expression.map(deepCatch);
+  } else if (isObject(expression)) {
+    return kpoMap(expression, ([key, value]) => [key, deepCatch(value)]);
   } else {
     return expression;
   }

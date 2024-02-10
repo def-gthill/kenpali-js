@@ -17,6 +17,12 @@ test("A function can be defined with a rest parameter", (t) => {
   t.is(result, 2);
 });
 
+test("Returning the named rest parameter returns the arguments bundled into an array", (t) => {
+  const code = "foo = (*args) => args; foo(42, 97)";
+  const result = kpeval(kpparse(code));
+  t.deepEqual(result, [42, 97]);
+});
+
 test("The object spread operator merges objects", (t) => {
   const code = "o1 = {foo: 1, bar: 2}; o2 = {bar: 3, baz: 4}; {**o1, **o2}";
   const result = kpeval(kpparse(code));
