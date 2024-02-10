@@ -91,7 +91,8 @@ function compileScope(scope, names) {
 
 function compile(expression, names) {
   const prebound = prebind(expression);
-  return prebound;
+  const tagged = tagNodesWithType(prebound);
+  return tagged;
 }
 
 function prebind(expression) {
@@ -115,6 +116,35 @@ function prebind(expression) {
         }
       }
       return handleDefault(node);
+    },
+  });
+}
+
+function tagNodesWithType(expression) {
+  return transformTree(expression, {
+    handleLiteral(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "literal", ...node });
+    },
+    handleArray(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "array", ...node });
+    },
+    handleObject(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "object", ...node });
+    },
+    handleName(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "name", ...node });
+    },
+    handleDefining(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "defining", ...node });
+    },
+    handleGiven(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "given", ...node });
+    },
+    handleCalling(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "calling", ...node });
+    },
+    handleCatching(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "catching", ...node });
     },
   });
 }
@@ -202,18 +232,49 @@ function loadCore(enclosingScope) {
 export function evalWithBuiltins(expression, names) {
   if (expression === null || typeof expression !== "object") {
     return kpthrow("notAnExpression", ["value", expression]);
+  } else if ("type" in expression) {
+    return evalThis[expression.type](expression, names);
   } else if ("literal" in expression) {
-    return expression.literal;
+    return evalThis.literal(expression, names);
   } else if ("array" in expression) {
-    return expression.array.map((element) => evalWithBuiltins(element, names));
+    return evalThis.array(expression, names);
   } else if ("object" in expression) {
+    return evalThis.object(expression, names);
+  } else if ("name" in expression) {
+    return evalThis.name(expression, names);
+  } else if ("defining" in expression) {
+    return evalThis.defining(expression, names);
+  } else if ("given" in expression) {
+    return evalThis.given(expression, names);
+  } else if ("calling" in expression) {
+    return evalThis.calling(expression, names);
+  } else if ("catching" in expression) {
+    return evalThis.catching(expression, names);
+  } else if ("quote" in expression) {
+    return evalThis.quote(expression, names);
+  } else if ("unquote" in expression) {
+    return evalThis.unquote(expression, names);
+  } else {
+    return kpthrow("notAnExpression", ["value", expression]);
+  }
+}
+
+const evalThis = {
+  literal(expression) {
+    return expression.literal;
+  },
+  array(expression, names) {
+    return expression.array.map((element) => evalWithBuiltins(element, names));
+  },
+  object(expression, names) {
     return kpobject(
       ...expression.object.map(([key, value]) => [
         typeof key === "string" ? key : evalWithBuiltins(key, names),
         evalWithBuiltins(value, names),
       ])
     );
-  } else if ("name" in expression) {
+  },
+  name(expression, names) {
     if (!names.has(expression.name)) {
       return kpthrow("nameNotDefined", ["name", expression.name]);
     }
@@ -229,10 +290,12 @@ export function evalWithBuiltins(expression, names) {
     } else {
       return binding;
     }
-  } else if ("defining" in expression) {
+  },
+  defining(expression, names) {
     const scope = selfReferentialScope(names, expression.defining);
     return evalWithBuiltins(expression.result, scope);
-  } else if ("given" in expression) {
+  },
+  given(expression, names) {
     const result = kpobject(
       ["#given", paramSpecToKpValue(expression.given)],
       ["result", expression.result],
@@ -242,24 +305,26 @@ export function evalWithBuiltins(expression, names) {
       result.set("binder", expression.binder);
     }
     return result;
-  } else if ("calling" in expression) {
+  },
+  calling(expression, names) {
     const f = evalWithBuiltins(expression.calling, names);
     const args = expression.args ?? [];
     const namedArgs = expression.namedArgs ?? kpobject();
     return callOnExpressionsTracing(f, args, namedArgs, names);
-  } else if ("catching" in expression) {
+  },
+  catching(expression, names) {
     return catch_(evalWithBuiltins(expression.catching, names));
-  } else if ("quote" in expression) {
+  },
+  quote(expression, names) {
     return quote(expression.quote, names);
-  } else if ("unquote" in expression) {
+  },
+  unquote(expression, names) {
     return evalWithBuiltins(
       deepToJsObject(evalWithBuiltins(expression.unquote, names)),
       names
     );
-  } else {
-    return kpthrow("notAnExpression", ["value", expression]);
-  }
-}
+  },
+};
 
 function selfReferentialScope(enclosingScope, localNames) {
   const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
