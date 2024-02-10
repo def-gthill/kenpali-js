@@ -211,7 +211,13 @@ function transformTree(expression, handlers) {
   } else if ("catching" in expression) {
     return transformNode("handleCatching", (node) => ({
       ...node,
-      catching: recurse(expression.catching),
+      catching: recurse(node.catching),
+    }));
+  } else if ("expression" in expression) {
+    // Special node type that shows up when loading core
+    return transformNode("handleExpression", (node) => ({
+      ...node,
+      expression: recurse(node.expression),
     }));
   } else {
     return transformNode("handleOther", (node) => node);
@@ -458,7 +464,7 @@ function callGiven(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if (f.has("binder")) {
-    bindings = f.get("binder")(args, namedArgs);
+    bindings = f.get("binder")([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(
@@ -534,7 +540,7 @@ function callBuiltin(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if ("binder" in f) {
-    bindings = f.binder(args, namedArgs);
+    bindings = f.binder([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(
@@ -625,7 +631,7 @@ function callLazyBuiltin(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if ("binder" in f) {
-    bindings = f.binder(args, namedArgs);
+    bindings = f.binder([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(

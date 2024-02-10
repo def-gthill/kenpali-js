@@ -5,7 +5,7 @@ import kpparse from "./kpparse.js";
 import kpevalPrevious from "./previous/kpeval.js";
 import kpparsePrevious from "./previous/kpparse.js";
 
-const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString(), "!"])`;
+const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString, "!"])`;
 const repeatedReference = `array = 1 | to(100);
 plus(length(array), length(array), length(array))
 `;
