@@ -121,7 +121,7 @@ function total(runType) {
 }
 
 function percentChange(newTime, oldTime) {
-  const change = Math.round(((newTime - oldTime) / newTime) * 100);
+  const change = Math.round(((newTime - oldTime) / oldTime) * 100);
   if (change === 0) {
     return "\x1b[2m0%\x1b[0m";
   } else if (change < 0) {

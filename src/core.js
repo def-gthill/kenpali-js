@@ -61,12 +61,6 @@ trim = (string) => (
     );
     string | slice(firstIndex | to(lastIndex))
 );
-isAtMost = (a, b) => or(
-    a | isLessThan(b),
-    a | equals(b),
-);
-isMoreThan = (a, b) => (b | isLessThan(a));
-isAtLeast = (a, b) => (b | isAtMost(a));
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
 );
