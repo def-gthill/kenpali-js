@@ -10,15 +10,7 @@ import {
 } from "./bind.js";
 import { builtins, isThrown, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
-import {
-  array,
-  calling,
-  catching,
-  defining,
-  given,
-  literal,
-  object,
-} from "./kpast.js";
+import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
   kpoFilter,
@@ -37,25 +29,25 @@ export function kpevalJson(json, names = kpobject()) {
 
 export function toAst(expressionRaw) {
   return transformTree(expressionRaw, {
-    handleDefining(node, recurse) {
-      return defining(
-        ...kpoMap(toKpobject(node.defining), ([name, value]) => [
-          name,
-          recurse(value),
-        ]),
-        recurse(node.result)
-      );
+    handleDefining(node, _recurse, handleDefault) {
+      return handleDefault({
+        ...node,
+        defining: toKpobject(node.defining),
+      });
     },
-    handleCalling(node, recurse) {
-      const args = node.args ?? [];
-      return calling(
-        recurse(node.calling),
-        Array.isArray(args) ? args.map(recurse) : recurse(args),
-        kpoMap(toKpobject(node.namedArgs ?? {}), ([name, value]) => [
-          name,
-          recurse(value),
-        ])
-      );
+    handleCalling(node, _recurse, handleDefault) {
+      const result = handleDefault({
+        ...node,
+        args: node.args,
+        namedArgs: toKpobject(node.namedArgs ?? {}),
+      });
+      if (result.args.length === 0) {
+        delete result.args;
+      }
+      if (result.namedArgs.size === 0) {
+        delete result.namedArgs;
+      }
+      return result;
     },
   });
 }
@@ -104,14 +96,14 @@ function compile(expression, names) {
 
 function prebind(expression) {
   return transformTree(expression, {
-    handleGiven(node) {
+    handleGiven(node, _recurse, handleDefault) {
       const allParams = paramSpecToKpValue(node.given);
       const paramObjects = normalizeAllParams(allParams);
       const schema = createParamSchema(paramObjects);
       node.binder = lazyParamBinder(...schema);
-      return node;
+      return handleDefault(node);
     },
-    handleOther(node) {
+    handleOther(node, _recurse, handleDefault) {
       if (typeof node === "function") {
         const allParams = paramsFromBuiltin(node);
         const paramObjects = normalizeAllParams(allParams);
@@ -122,7 +114,7 @@ function prebind(expression) {
           node.binder = eagerParamBinder(...schema);
         }
       }
-      return node;
+      return handleDefault(node);
     },
   });
 }
@@ -131,85 +123,68 @@ function transformTree(expression, handlers) {
   function recurse(node) {
     return transformTree(node, handlers);
   }
+
+  function transformNode(handlerName, defaultHandler) {
+    if (handlerName in handlers) {
+      return handlers[handlerName](expression, recurse, defaultHandler);
+    } else {
+      return defaultHandler(expression);
+    }
+  }
+
   if (expression === null || typeof expression !== "object") {
-    if ("handleOther" in handlers) {
-      return handlers.handleOther(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleOther", (node) => node);
   } else if ("literal" in expression) {
-    if ("handleLiteral" in handlers) {
-      return handlers.handleLiteral(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleLiteral", (node) => node);
   } else if ("array" in expression) {
-    if ("handleArray" in handlers) {
-      return handlers.handleArray(expression, recurse);
-    } else {
-      return array(...expression.array.map(recurse));
-    }
+    return transformNode("handleArray", (node) => ({
+      ...node,
+      array: node.array.map(recurse),
+    }));
   } else if ("object" in expression) {
-    if ("handleObject" in handlers) {
-      return handlers.handleObject(expression, recurse);
-    } else {
-      return object(
-        ...kpoMap(expression.object, ([key, value]) => [
-          typeof key === "string" ? key : recurse(key),
-          recurse(value),
-        ])
-      );
-    }
+    return transformNode("handleObject", (node) => ({
+      ...node,
+      object: node.object.map(([key, value]) => [
+        typeof key === "string" ? key : recurse(key),
+        recurse(value),
+      ]),
+    }));
   } else if ("name" in expression) {
-    if ("handleName" in handlers) {
-      return handlers.handleName(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleName", (node) => node);
   } else if ("defining" in expression) {
-    if ("handleDefining" in handlers) {
-      return handlers.handleDefining(expression, recurse);
-    } else {
-      return defining(
-        ...kpoMap(expression.defining, ([name, value]) => [
+    return transformNode("handleDefining", (node) => ({
+      ...node,
+      defining: kpoMap(node.defining, ([name, value]) => [
+        name,
+        recurse(value),
+      ]),
+      result: recurse(node.result),
+    }));
+  } else if ("given" in expression) {
+    return transformNode("handleGiven", (node) => ({
+      ...node,
+      result: recurse(node.result),
+    }));
+  } else if ("calling" in expression) {
+    return transformNode("handleCalling", (node) => {
+      const args = node.args ?? [];
+      return {
+        ...node,
+        calling: recurse(node.calling),
+        args: Array.isArray(args) ? args.map(recurse) : recurse(args),
+        namedArgs: kpoMap(node.namedArgs ?? kpobject(), ([name, value]) => [
           name,
           recurse(value),
         ]),
-        recurse(expression.result)
-      );
-    }
-  } else if ("given" in expression) {
-    if ("handleGiven" in handlers) {
-      return handlers.handleGiven(expression, recurse);
-    } else {
-      return given(expression.given, recurse(expression.result));
-    }
-  } else if ("calling" in expression) {
-    if ("handleCalling" in handlers) {
-      return handlers.handleCalling(expression, recurse);
-    } else {
-      const args = expression.args ?? [];
-      return calling(
-        recurse(expression.calling),
-        Array.isArray(args) ? args.map(recurse) : recurse(args),
-        kpoMap(expression.namedArgs ?? kpobject(), ([name, value]) => [
-          name,
-          recurse(value),
-        ])
-      );
-    }
+      };
+    });
   } else if ("catching" in expression) {
-    if ("handleCatching" in handlers) {
-      return handlers.handleCatching(expression, recurse);
-    } else {
-      return catching(recurse(expression.catching));
-    }
+    return transformNode("handleCatching", (node) => ({
+      ...node,
+      catching: recurse(expression.catching),
+    }));
   } else {
-    if ("handleOther" in handlers) {
-      return handlers.handleOther(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleOther", (node) => node);
   }
 }
 
