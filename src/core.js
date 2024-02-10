@@ -4,7 +4,7 @@ isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b).remainder | equals(0)
 );
 characters = (string) => (
-    1 | to(length(string)) | forEach((i) => (string @ i))
+    1 | to(length(string)) | transform((i) => (string @ i))
 );
 split = (string, delimiter) => (
     delimiterLocations = 1 | build(
@@ -28,13 +28,13 @@ split = (string, delimiter) => (
     );
     startIndices = [
         1,
-        *delimiterLocations | forEach((i) => (i | plus(length(delimiter)))),
+        *delimiterLocations | transform((i) => (i | plus(length(delimiter)))),
     ];
     endIndices = [
-        *delimiterLocations | forEach(decrement),
+        *delimiterLocations | transform(decrement),
         length(string),
     ];
-    1 | to(length(startIndices)) | forEach(
+    1 | to(length(startIndices)) | transform(
         (i) => (string | slice(startIndices @ i | to(endIndices @ i)))
     )
 );
@@ -70,7 +70,7 @@ dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
 slice = (coll, indices) => (
     result = indices
         | where((index) => and(index | isAtLeast(1), index | isAtMost(length(coll))))
-        | forEach((index) => (coll @ index));
+        | transform((index) => (coll @ index));
     result | butIf(isString(coll), join(result))
 );
 to = (start, end, by: = 1) => (
@@ -83,12 +83,12 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-forEach = (array, transform) => (
+transform = (array, f) => (
     1 | build(
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: transform(array @ i)
+            out: f(array @ i)
         }
     )
 );
@@ -107,7 +107,7 @@ zip = (*arrays) => (
         (i) => {
             while: arrays | forAll((array) => (i | isAtMost(length(array)))),
             next: increment(i),
-            out: arrays | forEach((array) => (array @ i)),
+            out: arrays | transform((array) => (array @ i)),
         }
     )
 );
@@ -132,12 +132,12 @@ flatten = (array) => (
 );
 chunk = (array, size) => (
     starts = 1 | to(length(array), by: size);
-    starts | forEach((start) => (array | slice(start | toSize(size))))
+    starts | transform((start) => (array | slice(start | toSize(size))))
 );
 properties = (object) => (
-    object | keys | forEach((key) => [key, object.<<key>>])
+    object | keys | transform((key) => [key, object.<<key>>])
 );
 merge = (objects) => (
-    objects | forEach(properties) | flatten | toObject
+    objects | transform(properties) | flatten | toObject
 );
 `;

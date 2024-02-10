@@ -22,8 +22,8 @@ const primePairs = `primesUpTo = (max) => (
 );
 rows = primesUpTo(10);
 cols = primesUpTo(10);
-rows | forEach((row) => (
-  cols | forEach((col) => (
+rows | transform((row) => (
+  cols | transform((col) => (
     [row, col]
   ))
 )) | flatten
@@ -38,7 +38,7 @@ fib(15)
 `;
 const stringSplitting = String.raw`
 parseCsv = (text) => (
-  text | splitLines | forEach(
+  text | splitLines | transform(
     (line) => (line | split(","))
   )
 );
