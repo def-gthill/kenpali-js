@@ -6,13 +6,6 @@ import kpevalPrevious from "./previous/kpeval.js";
 import kpparsePrevious from "./previous/kpparse.js";
 
 const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString, "!"])`;
-const repeatedReference = `array = 1 | to(100);
-plus(length(array), length(array), length(array))
-`;
-const repeatedGiven = `array = 1 | to(100);
-myLength = (a) => length(a);
-plus(myLength(array), myLength(array), myLength(array))
-`;
 const primePairs = `primesUpTo = (max) => (
   [2 | to(max), 1] | repeat((args) => (
     [numbers, i] = args;
@@ -56,12 +49,6 @@ const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
   { name: "Hello", code: hello, times: 500 },
-  { name: "Repeated Reference", code: repeatedReference, times: 500 },
-  {
-    name: "Repeated Reference in Given",
-    code: repeatedGiven,
-    times: 500,
-  },
   {
     name: "Prime Pairs",
     code: primePairs,
