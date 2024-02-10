@@ -1,5 +1,6 @@
 import {
   as,
+  deepForce,
   default_,
   eagerBind,
   eagerParamBinder,
@@ -8,17 +9,9 @@ import {
   lazyParamBinder,
   rest,
 } from "./bind.js";
-import { builtins, isThrown, toString } from "./builtins.js";
+import { builtins, isArray, isObject, isThrown, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
-import {
-  array,
-  calling,
-  catching,
-  defining,
-  given,
-  literal,
-  object,
-} from "./kpast.js";
+import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
   kpoFilter,
@@ -37,25 +30,25 @@ export function kpevalJson(json, names = kpobject()) {
 
 export function toAst(expressionRaw) {
   return transformTree(expressionRaw, {
-    handleDefining(node, recurse) {
-      return defining(
-        ...kpoMap(toKpobject(node.defining), ([name, value]) => [
-          name,
-          recurse(value),
-        ]),
-        recurse(node.result)
-      );
+    handleDefining(node, _recurse, handleDefault) {
+      return handleDefault({
+        ...node,
+        defining: toKpobject(node.defining),
+      });
     },
-    handleCalling(node, recurse) {
-      const args = node.args ?? [];
-      return calling(
-        recurse(node.calling),
-        Array.isArray(args) ? args.map(recurse) : recurse(args),
-        kpoMap(toKpobject(node.namedArgs ?? {}), ([name, value]) => [
-          name,
-          recurse(value),
-        ])
-      );
+    handleCalling(node, _recurse, handleDefault) {
+      const result = handleDefault({
+        ...node,
+        args: node.args,
+        namedArgs: toKpobject(node.namedArgs ?? {}),
+      });
+      if (result.args.length === 0) {
+        delete result.args;
+      }
+      if (result.namedArgs.size === 0) {
+        delete result.namedArgs;
+      }
+      return result;
     },
   });
 }
@@ -70,7 +63,7 @@ export default function kpeval(expression, names = kpobject(), trace = false) {
   const withCustomNames = new Scope(withCore, names);
   compileScope(withCustomNames, withCustomNames);
   const compiled = compile(expression, withCustomNames);
-  return catch_(evalWithBuiltins(compiled, withCustomNames));
+  return deepForce(deepCatch(evalWithBuiltins(compiled, withCustomNames)));
 }
 
 function validateExpression(expression) {
@@ -99,19 +92,20 @@ function compileScope(scope, names) {
 
 function compile(expression, names) {
   const prebound = prebind(expression);
-  return prebound;
+  const tagged = tagNodesWithType(prebound);
+  return tagged;
 }
 
 function prebind(expression) {
   return transformTree(expression, {
-    handleGiven(node) {
+    handleGiven(node, _recurse, handleDefault) {
       const allParams = paramSpecToKpValue(node.given);
       const paramObjects = normalizeAllParams(allParams);
       const schema = createParamSchema(paramObjects);
       node.binder = lazyParamBinder(...schema);
-      return node;
+      return handleDefault(node);
     },
-    handleOther(node) {
+    handleOther(node, _recurse, handleDefault) {
       if (typeof node === "function") {
         const allParams = paramsFromBuiltin(node);
         const paramObjects = normalizeAllParams(allParams);
@@ -122,7 +116,36 @@ function prebind(expression) {
           node.binder = eagerParamBinder(...schema);
         }
       }
-      return node;
+      return handleDefault(node);
+    },
+  });
+}
+
+function tagNodesWithType(expression) {
+  return transformTree(expression, {
+    handleLiteral(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "literal", ...node });
+    },
+    handleArray(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "array", ...node });
+    },
+    handleObject(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "object", ...node });
+    },
+    handleName(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "name", ...node });
+    },
+    handleDefining(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "defining", ...node });
+    },
+    handleGiven(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "given", ...node });
+    },
+    handleCalling(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "calling", ...node });
+    },
+    handleCatching(node, _recurse, defaultHandler) {
+      return defaultHandler({ type: "catching", ...node });
     },
   });
 }
@@ -131,85 +154,74 @@ function transformTree(expression, handlers) {
   function recurse(node) {
     return transformTree(node, handlers);
   }
+
+  function transformNode(handlerName, defaultHandler) {
+    if (handlerName in handlers) {
+      return handlers[handlerName](expression, recurse, defaultHandler);
+    } else {
+      return defaultHandler(expression);
+    }
+  }
+
   if (expression === null || typeof expression !== "object") {
-    if ("handleOther" in handlers) {
-      return handlers.handleOther(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleOther", (node) => node);
   } else if ("literal" in expression) {
-    if ("handleLiteral" in handlers) {
-      return handlers.handleLiteral(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleLiteral", (node) => node);
   } else if ("array" in expression) {
-    if ("handleArray" in handlers) {
-      return handlers.handleArray(expression, recurse);
-    } else {
-      return array(...expression.array.map(recurse));
-    }
+    return transformNode("handleArray", (node) => ({
+      ...node,
+      array: node.array.map(recurse),
+    }));
   } else if ("object" in expression) {
-    if ("handleObject" in handlers) {
-      return handlers.handleObject(expression, recurse);
-    } else {
-      return object(
-        ...kpoMap(expression.object, ([key, value]) => [
-          typeof key === "string" ? key : recurse(key),
-          recurse(value),
-        ])
-      );
-    }
+    return transformNode("handleObject", (node) => ({
+      ...node,
+      object: node.object.map(([key, value]) => [
+        typeof key === "string" ? key : recurse(key),
+        recurse(value),
+      ]),
+    }));
   } else if ("name" in expression) {
-    if ("handleName" in handlers) {
-      return handlers.handleName(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleName", (node) => node);
   } else if ("defining" in expression) {
-    if ("handleDefining" in handlers) {
-      return handlers.handleDefining(expression, recurse);
-    } else {
-      return defining(
-        ...kpoMap(expression.defining, ([name, value]) => [
+    return transformNode("handleDefining", (node) => ({
+      ...node,
+      defining: kpoMap(node.defining, ([name, value]) => [
+        name,
+        recurse(value),
+      ]),
+      result: recurse(node.result),
+    }));
+  } else if ("given" in expression) {
+    return transformNode("handleGiven", (node) => ({
+      ...node,
+      result: recurse(node.result),
+    }));
+  } else if ("calling" in expression) {
+    return transformNode("handleCalling", (node) => {
+      const args = node.args ?? [];
+      return {
+        ...node,
+        calling: recurse(node.calling),
+        args: Array.isArray(args) ? args.map(recurse) : recurse(args),
+        namedArgs: kpoMap(node.namedArgs ?? kpobject(), ([name, value]) => [
           name,
           recurse(value),
         ]),
-        recurse(expression.result)
-      );
-    }
-  } else if ("given" in expression) {
-    if ("handleGiven" in handlers) {
-      return handlers.handleGiven(expression, recurse);
-    } else {
-      return given(expression.given, recurse(expression.result));
-    }
-  } else if ("calling" in expression) {
-    if ("handleCalling" in handlers) {
-      return handlers.handleCalling(expression, recurse);
-    } else {
-      const args = expression.args ?? [];
-      return calling(
-        recurse(expression.calling),
-        Array.isArray(args) ? args.map(recurse) : recurse(args),
-        kpoMap(expression.namedArgs ?? kpobject(), ([name, value]) => [
-          name,
-          recurse(value),
-        ])
-      );
-    }
+      };
+    });
   } else if ("catching" in expression) {
-    if ("handleCatching" in handlers) {
-      return handlers.handleCatching(expression, recurse);
-    } else {
-      return catching(recurse(expression.catching));
-    }
+    return transformNode("handleCatching", (node) => ({
+      ...node,
+      catching: recurse(node.catching),
+    }));
+  } else if ("expression" in expression) {
+    // Special node type that shows up when loading core
+    return transformNode("handleExpression", (node) => ({
+      ...node,
+      expression: recurse(node.expression),
+    }));
   } else {
-    if ("handleOther" in handlers) {
-      return handlers.handleOther(expression, recurse);
-    } else {
-      return expression;
-    }
+    return transformNode("handleOther", (node) => node);
   }
 }
 
@@ -227,18 +239,49 @@ function loadCore(enclosingScope) {
 export function evalWithBuiltins(expression, names) {
   if (expression === null || typeof expression !== "object") {
     return kpthrow("notAnExpression", ["value", expression]);
+  } else if ("type" in expression) {
+    return evalThis[expression.type](expression, names);
   } else if ("literal" in expression) {
-    return expression.literal;
+    return evalThis.literal(expression, names);
   } else if ("array" in expression) {
-    return expression.array.map((element) => evalWithBuiltins(element, names));
+    return evalThis.array(expression, names);
   } else if ("object" in expression) {
+    return evalThis.object(expression, names);
+  } else if ("name" in expression) {
+    return evalThis.name(expression, names);
+  } else if ("defining" in expression) {
+    return evalThis.defining(expression, names);
+  } else if ("given" in expression) {
+    return evalThis.given(expression, names);
+  } else if ("calling" in expression) {
+    return evalThis.calling(expression, names);
+  } else if ("catching" in expression) {
+    return evalThis.catching(expression, names);
+  } else if ("quote" in expression) {
+    return evalThis.quote(expression, names);
+  } else if ("unquote" in expression) {
+    return evalThis.unquote(expression, names);
+  } else {
+    return kpthrow("notAnExpression", ["value", expression]);
+  }
+}
+
+const evalThis = {
+  literal(expression) {
+    return expression.literal;
+  },
+  array(expression, names) {
+    return expression.array.map((element) => evalWithBuiltins(element, names));
+  },
+  object(expression, names) {
     return kpobject(
       ...expression.object.map(([key, value]) => [
         typeof key === "string" ? key : evalWithBuiltins(key, names),
         evalWithBuiltins(value, names),
       ])
     );
-  } else if ("name" in expression) {
+  },
+  name(expression, names) {
     if (!names.has(expression.name)) {
       return kpthrow("nameNotDefined", ["name", expression.name]);
     }
@@ -254,10 +297,12 @@ export function evalWithBuiltins(expression, names) {
     } else {
       return binding;
     }
-  } else if ("defining" in expression) {
+  },
+  defining(expression, names) {
     const scope = selfReferentialScope(names, expression.defining);
     return evalWithBuiltins(expression.result, scope);
-  } else if ("given" in expression) {
+  },
+  given(expression, names) {
     const result = kpobject(
       ["#given", paramSpecToKpValue(expression.given)],
       ["result", expression.result],
@@ -267,24 +312,26 @@ export function evalWithBuiltins(expression, names) {
       result.set("binder", expression.binder);
     }
     return result;
-  } else if ("calling" in expression) {
+  },
+  calling(expression, names) {
     const f = evalWithBuiltins(expression.calling, names);
     const args = expression.args ?? [];
     const namedArgs = expression.namedArgs ?? kpobject();
     return callOnExpressionsTracing(f, args, namedArgs, names);
-  } else if ("catching" in expression) {
+  },
+  catching(expression, names) {
     return catch_(evalWithBuiltins(expression.catching, names));
-  } else if ("quote" in expression) {
+  },
+  quote(expression, names) {
     return quote(expression.quote, names);
-  } else if ("unquote" in expression) {
+  },
+  unquote(expression, names) {
     return evalWithBuiltins(
       deepToJsObject(evalWithBuiltins(expression.unquote, names)),
       names
     );
-  } else {
-    return kpthrow("notAnExpression", ["value", expression]);
-  }
-}
+  },
+};
 
 function selfReferentialScope(enclosingScope, localNames) {
   const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
@@ -418,7 +465,7 @@ function callGiven(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if (f.has("binder")) {
-    bindings = f.get("binder")(args, namedArgs);
+    bindings = f.get("binder")([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(
@@ -494,7 +541,7 @@ function callBuiltin(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if ("binder" in f) {
-    bindings = f.binder(args, namedArgs);
+    bindings = f.binder([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(
@@ -585,7 +632,7 @@ function callLazyBuiltin(f, allArgs, names) {
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
   if ("binder" in f) {
-    bindings = f.binder(args, namedArgs);
+    bindings = f.binder([args, namedArgs]);
   } else {
     const schema = createParamSchema(paramObjects);
     bindings = kpoMerge(
@@ -695,6 +742,18 @@ export function catch_(expression) {
       ["#error", expression.get("#thrown")],
       ...kpoFilter(expression, ([name, _]) => name !== "#thrown")
     );
+  } else {
+    return expression;
+  }
+}
+
+function deepCatch(expression) {
+  if (isThrown(expression)) {
+    return catch_(expression);
+  } else if (isArray(expression)) {
+    return expression.map(deepCatch);
+  } else if (isObject(expression)) {
+    return kpoMap(expression, ([key, value]) => [key, deepCatch(value)]);
   } else {
     return expression;
   }

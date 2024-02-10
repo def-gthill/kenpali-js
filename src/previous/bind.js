@@ -20,15 +20,28 @@ import kpobject, {
 } from "./kpobject.js";
 
 export function eagerBind(value, schema) {
-  return deepUnwrapErrorPassed(eagerBindInternal(value, schema));
+  const bind = eagerBinder(getBinderFor(schema));
+  return bind(value);
+}
+
+function eagerBinder(innerBind) {
+  function bind(value) {
+    const forcedValue = deepForce(value);
+    if (isThrown(forcedValue)) {
+      return forcedValue;
+    }
+    return deepUnwrapErrorPassed(innerBind(forcedValue));
+  }
+  return bind;
 }
 
 function eagerBindInternal(value, schema) {
+  const bind = getBinderFor(schema);
   const forcedValue = deepForce(value);
   if (isThrown(forcedValue)) {
     return forcedValue;
   }
-  return lazyBindInternal(forcedValue, schema);
+  return bind(forcedValue);
 }
 
 export function force(value) {
@@ -101,31 +114,49 @@ function mergeArrays(arrays) {
 }
 
 export function lazyBind(value, schema) {
-  return deepUnwrapErrorPassed(lazyBindInternal(value, schema));
+  const bind = lazyBinder(getBinderFor(schema));
+  return bind(value);
+}
+
+function lazyBinder(innerBind) {
+  function bind(value) {
+    return deepUnwrapErrorPassed(innerBind(value));
+  }
+  return bind;
 }
 
 function lazyBindInternal(value, schema) {
-  if (isString(schema)) {
-    return bindTypeSchema(value, schema);
-  } else if (isArray(schema)) {
-    return bindArraySchema(value, schema);
-  } else if (isObject(schema)) {
-    if (schema.has("#either")) {
-      return bindUnionSchema(value, schema);
-    } else if (schema.has("#oneOf")) {
-      return bindLiteralListSchema(value, schema);
-    } else if (schema.has("#type")) {
-      const result = bindTypeWithConditionsSchema(value, schema);
-      return result;
-    } else if (schema.has("#bind")) {
-      return explicitBind(value, schema);
-    } else if (schema.has("#default")) {
-      return lazyBindInternal(value, schema.get("for"));
-    } else {
-      return bindObjectSchema(value, schema);
-    }
+  const bind = getBinderFor(schema);
+  return bind(value);
+}
+
+function getBinderFor(schema) {
+  if (isArray(schema)) {
+    return getArrayBinderFor(schema);
   } else {
-    return invalidSchema(schema);
+    function bind(value) {
+      if (isString(schema)) {
+        return bindTypeSchema(value, schema);
+      } else if (isObject(schema)) {
+        if (schema.has("#either")) {
+          return bindUnionSchema(value, schema);
+        } else if (schema.has("#oneOf")) {
+          return bindLiteralListSchema(value, schema);
+        } else if (schema.has("#type")) {
+          const result = bindTypeWithConditionsSchema(value, schema);
+          return result;
+        } else if (schema.has("#bind")) {
+          return explicitBind(value, schema);
+        } else if (schema.has("#default")) {
+          return lazyBindInternal(value, schema.get("for"));
+        } else {
+          return bindObjectSchema(value, schema);
+        }
+      } else {
+        return invalidSchema(schema);
+      }
+    }
+    return bind;
   }
 }
 
@@ -150,6 +181,106 @@ function bindTypeSchema(value, schema) {
     return kpobject();
   } else {
     return wrongType(value, schema);
+  }
+}
+
+function getArrayBinderFor(schema) {
+  const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
+  if (hasRest) {
+    function bindArraySchemaWithRest(value) {
+      if (isPending(value)) {
+        // Array schemas don't bind names by themselves.
+        // They need to wait for the parent to force the value.
+        return kpobject();
+      }
+      if (isThrown(value)) {
+        return withReason(errorPassed(), value);
+      }
+      if (!isArray(value)) {
+        return wrongType(value, "array");
+      }
+      const result = kpobject();
+      for (let i = 0; i < schema.length - 1; i++) {
+        if (i >= value.length) {
+          if (isObject(schema[i]) && schema[i].has("#default")) {
+            const forSchema = schema[i].get("for");
+            result.set(forSchema.get("as"), schema[i].get("#default"));
+          } else {
+            return missingElement(value, i + 1, schema);
+          }
+        } else {
+          const bindings = lazyBindInternal(value[i], schema[i]);
+          const bindingsWithErrorWrapping = wrapErrorsInBindings(
+            bindings,
+            (err) => withReason(badElement(value, i + 1), err)
+          );
+          if (isThrown(bindingsWithErrorWrapping)) {
+            return bindingsWithErrorWrapping;
+          } else {
+            for (const [name, binding] of bindingsWithErrorWrapping) {
+              result.set(name, binding);
+            }
+          }
+        }
+      }
+      const numNonRestElements = schema.length - 1;
+      const bindings = lazyBindInternal(
+        value.slice(numNonRestElements),
+        arrayOf(schema.at(-1).get("#rest"))
+      );
+      const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
+        kpoUpdate(err, "index", (index) => numNonRestElements + index)
+      );
+      if (isThrown(bindingsWithErrorWrapping)) {
+        return bindingsWithErrorWrapping;
+      } else {
+        for (const [name, binding] of bindingsWithErrorWrapping) {
+          result.set(name, binding);
+        }
+      }
+      return result;
+    }
+    return bindArraySchemaWithRest;
+  } else {
+    function bindSimpleArraySchema(value) {
+      if (isPending(value)) {
+        // Array schemas don't bind names by themselves.
+        // They need to wait for the parent to force the value.
+        return kpobject();
+      }
+      if (isThrown(value)) {
+        return withReason(errorPassed(), value);
+      }
+      if (!isArray(value)) {
+        return wrongType(value, "array");
+      }
+      const result = kpobject();
+      for (let i = 0; i < schema.length; i++) {
+        if (i >= value.length) {
+          if (isObject(schema[i]) && schema[i].has("#default")) {
+            const forSchema = schema[i].get("for");
+            result.set(forSchema.get("as"), schema[i].get("#default"));
+          } else {
+            return missingElement(value, i + 1, schema);
+          }
+        } else {
+          const bindings = lazyBindInternal(value[i], schema[i]);
+          const bindingsWithErrorWrapping = wrapErrorsInBindings(
+            bindings,
+            (err) => withReason(badElement(value, i + 1), err)
+          );
+          if (isThrown(bindingsWithErrorWrapping)) {
+            return bindingsWithErrorWrapping;
+          } else {
+            for (const [name, binding] of bindingsWithErrorWrapping) {
+              result.set(name, binding);
+            }
+          }
+        }
+      }
+      return result;
+    }
+    return bindSimpleArraySchema;
   }
 }
 
@@ -506,24 +637,27 @@ function bindObjectSchema(value, schema) {
 }
 
 export function eagerParamBinder(params, namedParams) {
-  return paramBinder(params, namedParams, eagerBind);
+  return eagerBinder(paramBinder(params, namedParams));
 }
 
 export function lazyParamBinder(params, namedParams) {
-  return paramBinder(params, namedParams, lazyBind);
+  return lazyBinder(paramBinder(params, namedParams));
 }
 
-function paramBinder(params, namedParams, eagerOrLazyBind) {
+function paramBinder(params, namedParams) {
   if (namedParams.size === 0) {
-    function bind(args) {
-      return eagerOrLazyBind(args, params);
+    const bindParams = getBinderFor(params);
+    function bind([args]) {
+      return bindParams(args);
     }
     return bind;
   } else {
-    function bind(args, namedArgs) {
+    const bindParams = getBinderFor(params);
+    const bindNamedParams = getBinderFor(namedParams);
+    function bind([args, namedArgs]) {
       return kpoMerge(
-        eagerOrLazyBind(args, params),
-        eagerOrLazyBind(namedArgs, namedParams)
+        bindParams(args, params),
+        bindNamedParams(namedArgs, namedParams)
       );
     }
     return bind;
