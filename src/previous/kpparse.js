@@ -11,7 +11,6 @@ import {
   name,
   object,
   objectSpread,
-  optional,
   pipeline,
   quote,
   unquote,
@@ -197,7 +196,7 @@ function parseParameter(tokens, start) {
       [
         parseParameterName,
         consume("EQUALS", "expectedParameterDefault"),
-        parse,
+        parsePipeline,
       ],
       (param, defaultValue) => {
         if ("named" in param) {
@@ -298,27 +297,13 @@ function parseArgument(tokens, start) {
 }
 
 function parsePositionalArgument(tokens, start) {
-  return parsePossiblyOptionalArgument(tokens, start);
+  return parsePipeline(tokens, start);
 }
 
 function parseNamedArgument(tokens, start) {
   return parseAllOf(
-    [
-      parseName,
-      consume("COLON", "expectedNamedArgument"),
-      parsePossiblyOptionalArgument,
-    ],
+    [parseName, consume("COLON", "expectedNamedArgument"), parsePipeline],
     (name, value) => [name.name, value]
-  )(tokens, start);
-}
-
-function parsePossiblyOptionalArgument(tokens, start) {
-  return parseAnyOf(
-    parseAllOf(
-      [parse, consume("QUESTION_MARK", "expectedOptionalArgument")],
-      optional
-    ),
-    parse
   )(tokens, start);
 }
 
@@ -382,12 +367,12 @@ function parseArray(tokens, start) {
 }
 
 function parseArrayElement(tokens, start) {
-  return parseAnyOf(parse, parseArraySpread)(tokens, start);
+  return parseAnyOf(parsePipeline, parseArraySpread)(tokens, start);
 }
 
 function parseArraySpread(tokens, start) {
   return parseAllOfFlat(
-    [consume("STAR", "expectedSpread"), parse],
+    [consume("STAR", "expectedSpread"), parseAtomic],
     arraySpread
   )(tokens, start);
 }
@@ -408,14 +393,18 @@ function parseObject(tokens, start) {
 
 function parseObjectEntry(tokens, start) {
   return parseAnyOf(
-    parseAllOf([parse, consume("COLON", "missingKeyValueSeparator"), parse]),
+    parseAllOf([
+      parsePipeline,
+      consume("COLON", "missingKeyValueSeparator"),
+      parsePipeline,
+    ]),
     parseObjectSpread
   )(tokens, start);
 }
 
 function parseObjectSpread(tokens, start) {
   return parseAllOfFlat(
-    [consume("DOUBLE_STAR", "expectedSpread"), parse],
+    [consume("DOUBLE_STAR", "expectedSpread"), parseAtomic],
     objectSpread
   )(tokens, start);
 }
