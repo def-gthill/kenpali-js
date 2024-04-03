@@ -61,12 +61,6 @@ trim = (string) => (
     );
     string | slice(firstIndex | to(lastIndex))
 );
-isAtMost = (a, b) => or(
-    a | isLessThan(b),
-    a | equals(b),
-);
-isMoreThan = (a, b) => (b | isLessThan(a));
-isAtLeast = (a, b) => (b | isAtMost(a));
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
 );
@@ -89,12 +83,12 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-transform = (array, transform) => (
+transform = (array, f) => (
     1 | build(
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: transform(array @ i)
+            out: f(array @ i)
         }
     )
 );

@@ -65,7 +65,7 @@ function parseScope(tokens, start) {
         terminator: consume("SEMICOLON"),
         errorIfTerminatorMissing: "missingDefinitionSeparator",
       }),
-      parsePipeline,
+      parseAssignable,
     ],
     (definitions, result) =>
       definitions.length === 0
@@ -78,7 +78,7 @@ function parseNameDefinition(tokens, start) {
   return parseAllOf([
     parseAnyOf(parseName, parseArray),
     consume("EQUALS", "missingEqualsInDefinition"),
-    parsePipeline,
+    parseAssignable,
   ])(tokens, start);
 }
 
@@ -112,14 +112,18 @@ function definingPatterns(...args) {
   return defining(...names, result);
 }
 
+function parseAssignable(tokens, start) {
+  return parseAnyOf(parseArrowFunction, parsePipeline)(tokens, start);
+}
+
 function parsePipeline(tokens, start) {
   return parseAllOf(
     [
-      parsePipelineElement,
+      parseTightPipeline,
       parseZeroOrMore(
         parseAnyOf(
-          parseAllOf([parseSingle("PIPE", () => "PIPE"), parsePipelineElement]),
-          parseAllOf([parseSingle("AT", () => "AT"), parsePipelineElement]),
+          parseAllOf([parseSingle("PIPE", () => "PIPE"), parseTightPipeline]),
+          parseAllOf([parseSingle("AT", () => "AT"), parseTightPipeline]),
           parseSingle("BANG", () => "BANG")
         )
       ),
@@ -134,16 +138,12 @@ function parsePipeline(tokens, start) {
   )(tokens, start);
 }
 
-function parsePipelineElement(tokens, start) {
-  return parseAnyOf(parseArrowFunction, parseTightPipeline)(tokens, start);
-}
-
 function parseArrowFunction(tokens, start) {
   return parseAllOf(
     [
       parseParameterList,
       consume("ARROW", "expectedArrowFunction"),
-      parsePipelineElement,
+      parseAssignable,
     ],
     given
   )(tokens, start);
@@ -196,7 +196,7 @@ function parseParameter(tokens, start) {
       [
         parseParameterName,
         consume("EQUALS", "expectedParameterDefault"),
-        parsePipeline,
+        parse,
       ],
       (param, defaultValue) => {
         if ("named" in param) {
@@ -297,12 +297,12 @@ function parseArgument(tokens, start) {
 }
 
 function parsePositionalArgument(tokens, start) {
-  return parsePipeline(tokens, start);
+  return parseAssignable(tokens, start);
 }
 
 function parseNamedArgument(tokens, start) {
   return parseAllOf(
-    [parseName, consume("COLON", "expectedNamedArgument"), parsePipeline],
+    [parseName, consume("COLON", "expectedNamedArgument"), parseAssignable],
     (name, value) => [name.name, value]
   )(tokens, start);
 }
@@ -367,12 +367,12 @@ function parseArray(tokens, start) {
 }
 
 function parseArrayElement(tokens, start) {
-  return parseAnyOf(parsePipeline, parseArraySpread)(tokens, start);
+  return parseAnyOf(parseAssignable, parseArraySpread)(tokens, start);
 }
 
 function parseArraySpread(tokens, start) {
   return parseAllOfFlat(
-    [consume("STAR", "expectedSpread"), parseAtomic],
+    [consume("STAR", "expectedSpread"), parse],
     arraySpread
   )(tokens, start);
 }
@@ -394,9 +394,9 @@ function parseObject(tokens, start) {
 function parseObjectEntry(tokens, start) {
   return parseAnyOf(
     parseAllOf([
-      parsePipeline,
+      parseAssignable,
       consume("COLON", "missingKeyValueSeparator"),
-      parsePipeline,
+      parseAssignable,
     ]),
     parseObjectSpread
   )(tokens, start);
@@ -404,7 +404,7 @@ function parseObjectEntry(tokens, start) {
 
 function parseObjectSpread(tokens, start) {
   return parseAllOfFlat(
-    [consume("DOUBLE_STAR", "expectedSpread"), parseAtomic],
+    [consume("DOUBLE_STAR", "expectedSpread"), parseAssignable],
     objectSpread
   )(tokens, start);
 }

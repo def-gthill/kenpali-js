@@ -126,7 +126,75 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      return isLessThan(a, b);
+      const check = validateArgument(b, typeOf(a));
+      if (isThrown(check)) {
+        return check;
+      }
+      const compareResult = compare(a, b);
+      if (isThrown(compareResult)) {
+        return compareResult;
+      }
+      return compareResult < 0;
+    }
+  ),
+  builtin(
+    "isAtMost",
+    {
+      params: [
+        { name: "a", type: either("number", "string", "boolean", "array") },
+        { name: "b", type: either("number", "string", "boolean", "array") },
+      ],
+    },
+    function ([a, b]) {
+      const check = validateArgument(b, typeOf(a));
+      if (isThrown(check)) {
+        return check;
+      }
+      const compareResult = compare(a, b);
+      if (isThrown(compareResult)) {
+        return compareResult;
+      }
+      return compareResult <= 0;
+    }
+  ),
+  builtin(
+    "isMoreThan",
+    {
+      params: [
+        { name: "a", type: either("number", "string", "boolean", "array") },
+        { name: "b", type: either("number", "string", "boolean", "array") },
+      ],
+    },
+    function ([a, b]) {
+      const check = validateArgument(b, typeOf(a));
+      if (isThrown(check)) {
+        return check;
+      }
+      const compareResult = compare(a, b);
+      if (isThrown(compareResult)) {
+        return compareResult;
+      }
+      return compareResult > 0;
+    }
+  ),
+  builtin(
+    "isAtLeast",
+    {
+      params: [
+        { name: "a", type: either("number", "string", "boolean", "array") },
+        { name: "b", type: either("number", "string", "boolean", "array") },
+      ],
+    },
+    function ([a, b]) {
+      const check = validateArgument(b, typeOf(a));
+      if (isThrown(check)) {
+        return check;
+      }
+      const compareResult = compare(a, b);
+      if (isThrown(compareResult)) {
+        return compareResult;
+      }
+      return compareResult >= 0;
     }
   ),
   lazyBuiltin(
@@ -482,18 +550,14 @@ export function equals(a, b) {
   }
 }
 
-export function isLessThan(a, b) {
-  const check = validateArgument(b, typeOf(a));
-  if (isThrown(check)) {
-    return check;
-  }
-  if (isArray(a) && isArray(b)) {
+function compare(a, b) {
+  if (isArray(a)) {
     for (let i = 0; i < Math.max(a.length, b.length); i++) {
       if (i >= a.length) {
-        return true;
+        return -1;
       }
       if (i >= b.length) {
-        return false;
+        return 1;
       }
       const checkA = validateArgument(
         a[i],
@@ -509,20 +573,24 @@ export function isLessThan(a, b) {
       if (isThrown(checkB)) {
         return checkB;
       }
-      const aLessThanB = isLessThan(a[i], b[i]);
-      if (isThrown(aLessThanB)) {
-        return aLessThanB;
+      const checkSame = validateArgument(b[i], typeOf(a[i]));
+      if (isThrown(checkSame)) {
+        return checkSame;
       }
-      if (aLessThanB) {
-        return true;
-      }
-      if (isLessThan(b[i], a[i])) {
-        return false;
+      const elementCompare = compare(a[i], b[i]);
+      if (elementCompare !== 0) {
+        return elementCompare;
       }
     }
-    return false;
+    return 0;
   } else {
-    return a < b;
+    if (a < b) {
+      return -1;
+    } else if (a > b) {
+      return 1;
+    } else {
+      return 0;
+    }
   }
 }
 

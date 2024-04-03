@@ -1,8 +1,5 @@
 export const core = String.raw`
-minus = (a, b) => plus(a, negative(b));
-increment = (n) => (n | plus(1));
-decrement = (n) => (n | minus(1));
-dividedBy = (a, b) => times(a, oneOver(b));
+sum = (numbers) => plus(*numbers);
 isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b).remainder | equals(0)
 );
@@ -64,12 +61,6 @@ trim = (string) => (
     );
     string | slice(firstIndex | to(lastIndex))
 );
-isAtMost = (a, b) => or(
-    a | isLessThan(b),
-    a | equals(b),
-);
-isMoreThan = (a, b) => (b | isLessThan(a));
-isAtLeast = (a, b) => (b | isAtMost(a));
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
 );
@@ -82,22 +73,22 @@ slice = (coll, indices) => (
         | transform((index) => (coll @ index));
     result | butIf(isString(coll), join(result))
 );
-to = (start, end) => (
+to = (start, end, by: = 1) => (
     start | build(
         (i) => {
             while: i | isAtMost(end),
-            next: increment(i),
+            next: i | plus(by),
             out: i
         }
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-transform = (array, transform) => (
+transform = (array, f) => (
     1 | build(
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: transform(array @ i)
+            out: f(array @ i)
         }
     )
 );
@@ -111,7 +102,18 @@ where = (array, condition) => (
         }
     )
 );
+zip = (*arrays) => (
+    1 | build(
+        (i) => {
+            while: arrays | forAll((array) => (i | isAtMost(length(array)))),
+            next: increment(i),
+            out: arrays | transform((array) => (array @ i)),
+        }
+    )
+);
 count = (array, condition) => (array | where(condition) | length);
+forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
+forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
 flatten = (array) => (
     [1, 1] | build(
         (indices) => (
@@ -127,6 +129,10 @@ flatten = (array) => (
             }
         )
     )
+);
+chunk = (array, size) => (
+    starts = 1 | to(length(array), by: size);
+    starts | transform((start) => (array | slice(start | toSize(size))))
 );
 properties = (object) => (
     object | keys | transform((key) => [key, object.<<key>>])
