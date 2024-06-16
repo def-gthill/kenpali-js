@@ -114,6 +114,20 @@ const rawBuiltins = [
       return strings.join(namedArgs.get("with"));
     }
   ),
+  builtin(
+    "toLowerCase",
+    { params: [{ name: "string", type: "string" }] },
+    function ([string]) {
+      return string.toLowerCase();
+    }
+  ),
+  builtin(
+    "toUpperCase",
+    { params: [{ name: "string", type: "string" }] },
+    function ([string]) {
+      return string.toUpperCase();
+    }
+  ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
