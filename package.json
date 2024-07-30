@@ -9,7 +9,7 @@
     "test": "ava"
   },
   "author": "Graham Hill",
-  "license": "GPL-3.0",
+  "license": "MIT",
   "devDependencies": {
     "ava": "^5.2.0",
     "eslint": "^8.41.0",
