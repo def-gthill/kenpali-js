@@ -14,6 +14,12 @@ import {
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
 
+test("Variables can have names starting with literal keywords", (t) => {
+  const code = `trueValue`;
+  const result = kpparseSugared(code);
+  t.deepEqual(result, name("trueValue"));
+});
+
 test("Object key syntactic sugar parses to reflect the sugar", (t) => {
   const code = `{foo: 1, "bar": 2, <<baz>>: 3}`;
   const result = kpparseSugared(code);
