@@ -10,6 +10,10 @@
   },
   "author": "Graham Hill",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/def-gthill/kenpali-js"
+  },
   "devDependencies": {
     "ava": "^5.2.0",
     "eslint": "^8.41.0",

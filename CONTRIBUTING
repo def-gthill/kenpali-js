@@ -1,0 +1,21 @@
+# Contributing to Kenpali JS
+
+Quality improvements are welcome!
+
+## I fixed a bug
+
+- Make sure you have a test case covering the fix, one that failed before the fix but now passes. If the bug reveals a gap in the [specification](https://github.com/def-gthill/kenpali), add the test as an additional specification case rather than a new test in this repo.
+- Make sure all the existing tests pass.
+- Make sure you've run Prettier on your changes.
+- Open a pull request explaining the bug and how you fixed it.
+
+## I've made a performance improvement
+
+- Confirm that performance has actually improved using `node src/benchmark.js`. If the improvement is only noticeable in a specific situation that the existing benchmarks don't cover, add a new one!
+- Make sure that all the tests pass.
+- Make sure you've run Prettier on your changes.
+- Open a pull request explaining the improved approach and presenting benchmark results.
+
+## I want to add a feature
+
+This repo implements a [specification](https://github.com/def-gthill/kenpali). To add a feature, you must first add it to the specification. See the [contributing guide](https://github.com/def-gthill/kenpali/blob/main/CONTRIBUTING) in the specification repository.
