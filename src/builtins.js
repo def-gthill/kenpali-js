@@ -115,17 +115,21 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "toLowerCase",
-    { params: [{ name: "string", type: "string" }] },
+    "toCodePoints",
+    {
+      params: [{ name: "string", type: "string" }],
+    },
     function ([string]) {
-      return string.toLowerCase();
+      return [...string].map((char) => char.codePointAt(0));
     }
   ),
   builtin(
-    "toUpperCase",
-    { params: [{ name: "string", type: "string" }] },
-    function ([string]) {
-      return string.toUpperCase();
+    "fromCodePoints",
+    {
+      params: [{ name: "codePoints", type: arrayOf("number") }],
+    },
+    function ([codePoints]) {
+      return String.fromCodePoint(...codePoints);
     }
   ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {

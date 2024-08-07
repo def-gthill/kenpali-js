@@ -40,27 +40,6 @@ split = (string, delimiter) => (
 );
 splitLines = (string) => (string | split("\n"));
 joinLines = (strings) => (strings | join(with: "\n"));
-trim = (string) => (
-    firstIndex = 1 | repeat(
-        (i) => {
-            while: and(
-                i | isAtMost(length(string)),
-                string @ i | equals(" "),
-            ),
-            next: increment(i),
-        }
-    );
-    lastIndex = length(string) | repeat(
-        (i) => {
-            while: and(
-                i | isAtLeast(1),
-                string @ i | equals(" "),
-            ),
-            next: decrement(i),
-        }
-    );
-    string | slice(firstIndex | to(lastIndex))
-);
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
 );
