@@ -781,4 +781,15 @@ function validateArgument(value, schema) {
   return null;
 }
 
-export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
+export function loadBuiltins(modules = kpobject()) {
+  const import_ = builtin(
+    "import",
+    {
+      params: ["module"],
+    },
+    function ([module]) {
+      return modules.get(module) ?? kpthrow("missingModule", ["name", module]);
+    }
+  );
+  return kpobject(...[import_, ...rawBuiltins].map((f) => [f.builtinName, f]));
+}

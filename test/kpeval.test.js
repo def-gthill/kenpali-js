@@ -1,4 +1,5 @@
 import test from "ava";
+import { builtin } from "../src/builtins.js";
 import {
   calling,
   defining,
@@ -79,4 +80,22 @@ test("Eval results are Kenpali objects, not JavaScript objects", (t) => {
       ]
     )
   );
+});
+
+test("Modules can be imported", (t) => {
+  const ast = defining(
+    ["foo", calling(name("import"), [literal("foo")])],
+    ["bar", calling(name("at"), [name("foo"), literal("bar")])],
+    calling(name("bar"), [literal("world")])
+  );
+  const fooModule = kpobject([
+    "bar",
+    builtin(
+      "bar",
+      { params: [{ name: "name", type: "string" }] },
+      (name) => `Hello, ${name}!`
+    ),
+  ]);
+  const result = kpeval(ast, { modules: kpobject(["foo", fooModule]) });
+  t.is(result, "Hello, world!");
 });

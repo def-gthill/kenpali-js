@@ -9,7 +9,13 @@ import {
   lazyParamBinder,
   rest,
 } from "./bind.js";
-import { builtins, isArray, isObject, isThrown, toString } from "./builtins.js";
+import {
+  isArray,
+  isObject,
+  isThrown,
+  loadBuiltins,
+  toString,
+} from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
@@ -22,10 +28,13 @@ import kpobject, {
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
 
-export function kpevalJson(json, names = kpobject()) {
+export function kpevalJson(
+  json,
+  { names = kpobject(), modules = kpobject() } = {}
+) {
   const expressionRaw = JSON.parse(json);
   const expression = toAst(expressionRaw);
-  return kpeval(expression, names);
+  return kpeval(expression, { names, modules });
 }
 
 export function toAst(expressionRaw) {
@@ -53,12 +62,16 @@ export function toAst(expressionRaw) {
   });
 }
 
-export default function kpeval(expression, names = kpobject(), trace = false) {
+export default function kpeval(
+  expression,
+  { names = kpobject(), modules = kpobject(), trace = false } = {}
+) {
   tracing = trace;
   const check = validateExpression(expression);
   if (isThrown(check)) {
     return catch_(check);
   }
+  const builtins = loadBuiltins(modules);
   const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
   compileScope(withCustomNames, withCustomNames);
@@ -225,15 +238,15 @@ function transformTree(expression, handlers) {
   }
 }
 
-let coreScope = null;
+let core = null;
 
 function loadCore(enclosingScope) {
-  if (!coreScope) {
+  if (!core) {
     const code = coreCode;
     const ast = kpparse(code + "null");
-    coreScope = selfReferentialScope(enclosingScope, ast.defining);
+    core = ast.defining;
   }
-  return coreScope;
+  return selfReferentialScope(enclosingScope, core);
 }
 
 export function evalWithBuiltins(expression, names) {
