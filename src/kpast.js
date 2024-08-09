@@ -30,7 +30,7 @@ export function given(params, result) {
   return { given: params, result };
 }
 
-export function calling(f, args = [], namedArgs = kpobject()) {
+export function calling(f, args = [], namedArgs = []) {
   const result = { calling: f };
   if (args.length > 0) {
     result.args = args;
