@@ -16,7 +16,6 @@ import {
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
-import kpobject from "./kpobject.js";
 
 export default function kpparse(code) {
   const sugar = kpparseSugared(code);
@@ -274,12 +273,9 @@ function parseArgumentList(tokens, start) {
       const posArgs = args.filter(
         (argument) => !(Array.isArray(argument) || "objectSpread" in argument)
       );
-      let namedArgs = args.filter(
+      const namedArgs = args.filter(
         (argument) => Array.isArray(argument) || "objectSpread" in argument
       );
-      if (!namedArgs.some((arg) => "objectSpread" in arg)) {
-        namedArgs = kpobject(...namedArgs);
-      }
       return {
         arguments: [posArgs, namedArgs],
       };

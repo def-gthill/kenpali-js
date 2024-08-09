@@ -12,10 +12,10 @@ import {
   literal,
   name,
   object,
-  objectSpread,
   optional,
   pipeline,
   quote,
+  spread,
   unquote,
 } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
@@ -63,100 +63,6 @@ test("A simple array desugars to itself", (t) => {
   t.deepEqual(result, expression);
 });
 
-test("An array containing spreads desugars to a flatten call", (t) => {
-  const expression = array(literal(1), arraySpread(name("foo")), literal(3));
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(name("flatten"), [
-      array(array(literal(1)), name("foo"), array(literal(3))),
-    ])
-  );
-});
-
-test("An array starting with a spread desugars to a flatten call", (t) => {
-  const expression = array(arraySpread(name("foo")), literal(3));
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(name("flatten"), [array(name("foo"), array(literal(3)))])
-  );
-});
-
-test("An argument list containing only an array spread desugars to an all-args expression", (t) => {
-  const expression = calling(name("foo"), [arraySpread(name("bar"))]);
-  const result = desugar(expression);
-  t.deepEqual(result, calling(name("foo"), name("bar")));
-});
-
-test("An argument list containing array spreads desugars to a flatten call on the arguments", (t) => {
-  const expression = calling(name("foo"), [
-    literal(1),
-    arraySpread(name("bar")),
-    literal(3),
-  ]);
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(
-      name("foo"),
-      calling(name("flatten"), [
-        array(array(literal(1)), name("bar"), array(literal(3))),
-      ])
-    )
-  );
-});
-
-test("An object containing spreads desugars to a merge call", (t) => {
-  const expression = object(
-    [name("answer"), literal(42)],
-    objectSpread(name("foo")),
-    [name("question"), literal(97)]
-  );
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(name("merge"), [
-      array(
-        object(["answer", literal(42)]),
-        name("foo"),
-        object(["question", literal(97)])
-      ),
-    ])
-  );
-});
-
-test("An argument list containing only an object spread desugars to an all-named-args expression", (t) => {
-  const expression = calling(name("foo"), [], [objectSpread(name("bar"))]);
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(name("foo"), [], kpobject(["#all", name("bar")]))
-  );
-});
-
-test("An argument list containing object spreads desugars to a merge call on the arguments", (t) => {
-  const expression = calling(
-    name("foo"),
-    [],
-    [["answer", literal(42)], objectSpread(name("bar"))]
-  );
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(
-      name("foo"),
-      [],
-      kpobject([
-        "#all",
-        calling(name("merge"), [
-          array(object(["answer", literal(42)]), name("bar")),
-        ]),
-      ])
-    )
-  );
-});
-
 test("A forward pipe desugars to a function call", (t) => {
   const expression = pipeline(name("x"), ["PIPE", name("f")]);
   const result = desugar(expression);
@@ -181,10 +87,7 @@ test("Desugaring propagates through arrays", (t) => {
 test("Desugaring propagates through arrays with spread operators", (t) => {
   const expression = array(pipeSugared, arraySpread(pipeSugared));
   const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(name("flatten"), [array(array(pipeDesugared), pipeDesugared)])
-  );
+  t.deepEqual(result, array(pipeDesugared, spread(pipeDesugared)));
 });
 
 test("Desugaring propagates through objects", (t) => {

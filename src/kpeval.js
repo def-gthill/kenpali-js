@@ -20,6 +20,7 @@ import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
+  kpoEntries,
   kpoFilter,
   kpoMap,
   kpoMerge,
@@ -49,12 +50,12 @@ export function toAst(expressionRaw) {
       const result = handleDefault({
         ...node,
         args: node.args,
-        namedArgs: toKpobject(node.namedArgs ?? {}),
+        namedArgs: node.namedArgs,
       });
       if (result.args.length === 0) {
         delete result.args;
       }
-      if (result.namedArgs.size === 0) {
+      if (result.namedArgs.length === 0) {
         delete result.namedArgs;
       }
       return result;
@@ -188,10 +189,14 @@ function transformTree(expression, handlers) {
   } else if ("object" in expression) {
     return transformNode("handleObject", (node) => ({
       ...node,
-      object: node.object.map(([key, value]) => [
-        typeof key === "string" ? key : recurse(key),
-        recurse(value),
-      ]),
+      object: node.object.map((element) => {
+        if ("spread" in element) {
+          return recurse(element);
+        } else {
+          const [key, value] = element;
+          return [typeof key === "string" ? key : recurse(key), recurse(value)];
+        }
+      }),
     }));
   } else if ("name" in expression) {
     return transformNode("handleName", (node) => node);
@@ -211,15 +216,18 @@ function transformTree(expression, handlers) {
     }));
   } else if ("calling" in expression) {
     return transformNode("handleCalling", (node) => {
-      const args = node.args ?? [];
       return {
         ...node,
         calling: recurse(node.calling),
-        args: Array.isArray(args) ? args.map(recurse) : recurse(args),
-        namedArgs: kpoMap(node.namedArgs ?? kpobject(), ([name, value]) => [
-          name,
-          recurse(value),
-        ]),
+        args: (node.args ?? []).map(recurse),
+        namedArgs: (node.namedArgs ?? []).map((element) => {
+          if ("spread" in element) {
+            return { spread: recurse(element.spread) };
+          } else {
+            const [name, value] = element;
+            return [name, recurse(value)];
+          }
+        }),
       };
     });
   } else if ("catching" in expression) {
@@ -284,15 +292,30 @@ const evalThis = {
     return expression.literal;
   },
   array(expression, names) {
-    return expression.array.map((element) => evalWithBuiltins(element, names));
+    const result = [];
+    for (const element of expression.array) {
+      if ("spread" in element) {
+        result.push(...evalWithBuiltins(element.spread, names));
+      } else {
+        result.push(evalWithBuiltins(element, names));
+      }
+    }
+    return result;
   },
   object(expression, names) {
-    return kpobject(
-      ...expression.object.map(([key, value]) => [
-        typeof key === "string" ? key : evalWithBuiltins(key, names),
-        evalWithBuiltins(value, names),
-      ])
-    );
+    const result = [];
+    for (const element of expression.object) {
+      if ("spread" in element) {
+        result.push(...kpoEntries(evalWithBuiltins(element.spread, names)));
+      } else {
+        const [key, value] = element;
+        result.push([
+          typeof key === "string" ? key : evalWithBuiltins(key, names),
+          evalWithBuiltins(value, names),
+        ]);
+      }
+    }
+    return kpobject(...result);
   },
   name(expression, names) {
     if (!names.has(expression.name)) {
@@ -432,22 +455,31 @@ function callOnExpressions(f, args, namedArgs, names) {
 }
 
 function evalExpressionArgs(args, names) {
-  if (Array.isArray(args)) {
-    return args;
-  } else {
-    return evalWithBuiltins(args, names).map(literal);
+  const result = [];
+  for (const element of args) {
+    if ("spread" in element) {
+      result.push(...evalWithBuiltins(element.spread, names).map(literal));
+    } else {
+      result.push(element);
+    }
   }
+  return result;
 }
 
 function evalExpressionNamedArgs(namedArgs, names) {
-  if (namedArgs.has("#all")) {
-    return kpoMap(
-      evalWithBuiltins(namedArgs.get("#all"), names),
-      ([name, value]) => [name, literal(value)]
-    );
-  } else {
-    return namedArgs;
+  const result = [];
+  for (const element of namedArgs) {
+    if ("spread" in element) {
+      result.push(
+        ...kpoEntries(evalWithBuiltins(element.spread, names)).map(
+          ([name, value]) => [name, literal(value)]
+        )
+      );
+    } else {
+      result.push(element);
+    }
   }
+  return kpobject(...result);
 }
 
 // For use by the host program.

@@ -2,7 +2,6 @@ import test from "ava";
 import { toJsFunction, toKpFunction } from "../src/interop.js";
 import { calling, given, literal, name } from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
-import kpobject from "../src/kpobject.js";
 
 test("We can convert a Kenpali function into a JavaScript function", (t) => {
   const kpf = kpeval(given({}, literal(42)));
@@ -87,7 +86,10 @@ test("A JavaScript callback converts named arguments into a final object argumen
       calling(
         name("callback"),
         [literal(3)],
-        kpobject(["bonus", literal(4)], ["multiplier", literal(5)])
+        [
+          ["bonus", literal(4)],
+          ["multiplier", literal(5)],
+        ]
       )
     )
   );

@@ -12,6 +12,10 @@ export function object(...entries) {
   return { object: entries };
 }
 
+export function spread(node) {
+  return { spread: node };
+}
+
 export function name(name) {
   return { name };
 }
@@ -28,10 +32,10 @@ export function given(params, result) {
 
 export function calling(f, args = [], namedArgs = kpobject()) {
   const result = { calling: f };
-  if (!Array.isArray(args) || args.length > 0) {
+  if (args.length > 0) {
     result.args = args;
   }
-  if (!(namedArgs instanceof Map) || namedArgs.size > 0) {
+  if (namedArgs.length > 0) {
     result.namedArgs = namedArgs;
   }
   return result;
