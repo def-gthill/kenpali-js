@@ -1,5 +1,3 @@
-import kpobject from "./kpobject.js";
-
 export function literal(value) {
   return { literal: value };
 }
@@ -23,7 +21,7 @@ export function name(name) {
 export function defining(...args) {
   const names = args.slice(0, -1);
   const result = args.at(-1);
-  return { defining: kpobject(...names), result };
+  return { defining: names, result };
 }
 
 export function given(params, result) {

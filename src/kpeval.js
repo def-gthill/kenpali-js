@@ -43,7 +43,9 @@ export function toAst(expressionRaw) {
     handleDefining(node, _recurse, handleDefault) {
       return handleDefault({
         ...node,
-        defining: toKpobject(node.defining),
+        defining: Array.isArray(node.defining)
+          ? node.defining
+          : toKpobject(node.defining),
       });
     },
     handleCalling(node, _recurse, handleDefault) {
@@ -203,10 +205,12 @@ function transformTree(expression, handlers) {
   } else if ("defining" in expression) {
     return transformNode("handleDefining", (node) => ({
       ...node,
-      defining: kpoMap(node.defining, ([name, value]) => [
-        name,
-        recurse(value),
-      ]),
+      defining: Array.isArray(node.defining)
+        ? node.defining.map(([name, value]) => [
+            typeof name === "string" ? name : recurse(name),
+            recurse(value),
+          ])
+        : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
       result: recurse(node.result),
     }));
   } else if ("given" in expression) {
@@ -335,7 +339,8 @@ const evalThis = {
     }
   },
   defining(expression, names) {
-    const scope = selfReferentialScope(names, expression.defining);
+    const namesObject = Array.isArray(names) ? kpobject(...names) : names;
+    const scope = selfReferentialScope(namesObject, expression.defining);
     return evalWithBuiltins(expression.result, scope);
   },
   given(expression, names) {
