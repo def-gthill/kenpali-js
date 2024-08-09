@@ -27,15 +27,15 @@ test("Kenpali positional parameters become JavaScript positional parameters", (t
   t.is(jsf(3, 4), 15);
 });
 
-// test("Kenpali rest parameters become JavaScript rest parameters", (t) => {
-//   const kpf = kpeval(
-//     given({ restParam: "rest" }, calling(name("length"), [name("rest")]))
-//   );
+test("Kenpali rest parameters become JavaScript rest parameters", (t) => {
+  const kpf = kpeval(
+    given({ restParam: "rest" }, calling(name("length"), [name("rest")]))
+  );
 
-//   const jsf = toJsFunction(kpf);
+  const jsf = toJsFunction(kpf);
 
-//   t.is(jsf(1, "a", [], null), 4);
-// });
+  t.is(jsf(1, "a", [], null), 4);
+});
 
 test("Kenpali named parameters become an extra object argument in the JavaScript version", (t) => {
   const kpf = kpeval(
