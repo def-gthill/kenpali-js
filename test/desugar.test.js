@@ -12,13 +12,11 @@ import {
   literal,
   name,
   object,
-  optional,
   pipeline,
   quote,
   spread,
   unquote,
 } from "../src/kpast.js";
-import kpobject from "../src/kpobject.js";
 
 test("Object key syntactic sugar desugars to standard object syntax", (t) => {
   const expression = object(
@@ -111,17 +109,13 @@ test("Desugaring propagates through function definitions", (t) => {
 test("Desugaring propagates through function calls", (t) => {
   const expression = calling(
     pipeSugared,
-    [pipeSugared, optional(pipeSugared)],
-    kpobject(["foo", pipeSugared], ["bar", optional(pipeSugared)])
+    [pipeSugared],
+    [["foo", pipeSugared]]
   );
   const result = desugar(expression);
   t.deepEqual(
     result,
-    calling(
-      pipeDesugared,
-      [pipeDesugared, optional(pipeDesugared)],
-      kpobject(["foo", pipeDesugared], ["bar", optional(pipeDesugared)])
-    )
+    calling(pipeDesugared, [pipeDesugared], [["foo", pipeDesugared]])
   );
 });
 

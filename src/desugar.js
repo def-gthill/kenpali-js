@@ -7,7 +7,6 @@ import {
   literal,
   name,
   object,
-  optional,
   quote,
   unquote,
 } from "./kpast.js";
@@ -24,8 +23,6 @@ export default function desugar(expression) {
     return desugarGiven(expression);
   } else if ("calling" in expression) {
     return desugarCalling(expression);
-  } else if ("optional" in expression) {
-    return desugarOptional(expression);
   } else if ("quote" in expression) {
     return desugarQuote(expression);
   } else if ("unquote" in expression) {
@@ -115,10 +112,6 @@ function desugarNamedArgs(namedArgs) {
       return [name, desugar(value)];
     }
   });
-}
-
-function desugarOptional(expression) {
-  return optional(desugar(expression.optional));
 }
 
 function desugarQuote(expression) {
