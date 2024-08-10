@@ -1,6 +1,10 @@
 import { oneOf } from "./bind.js";
 import { equals } from "./builtins.js";
 
+export function typecheck(expression) {
+  return expression;
+}
+
 export function infer(node) {
   switch (node.type) {
     case "literal":

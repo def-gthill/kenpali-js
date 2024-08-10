@@ -17,6 +17,8 @@ import {
   toString,
 } from "./builtins.js";
 import { core as coreCode } from "./core.js";
+import decompose from "./decompose.js";
+import { typecheck } from "./infer.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
@@ -28,6 +30,7 @@ import kpobject, {
   toKpobject,
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
+import simplify from "./simplify.js";
 
 export function kpevalJson(
   json,
@@ -75,6 +78,17 @@ export default function kpeval(
 }
 
 export function kpcompile(
+  expression,
+  { names = kpobject(), modules = kpobject() } = {}
+) {
+  const initial = compile_OLD(expression, { names, modules });
+  const decomposed = decompose(initial);
+  const simplified = simplify(decomposed);
+  const typechecked = typecheck(simplified);
+  return typechecked;
+}
+
+function compile_OLD(
   expression,
   { names = kpobject(), modules = kpobject() } = {}
 ) {
