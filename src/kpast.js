@@ -6,8 +6,16 @@ export function array(...elements) {
   return { array: elements };
 }
 
+export function arrayPattern(...elements) {
+  return { arrayPattern: elements };
+}
+
 export function object(...entries) {
   return { object: entries };
+}
+
+export function objectPattern(...elements) {
+  return { objectPattern: elements };
 }
 
 export function spread(node) {

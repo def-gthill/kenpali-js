@@ -339,8 +339,8 @@ const evalThis = {
     }
   },
   defining(expression, names) {
-    const namesObject = Array.isArray(names) ? kpobject(...names) : names;
-    const scope = selfReferentialScope(namesObject, expression.defining);
+    const definedNames = defineNames(expression.defining, names);
+    const scope = selfReferentialScope(names, definedNames);
     return evalWithBuiltins(expression.result, scope);
   },
   given(expression, names) {
@@ -373,6 +373,46 @@ const evalThis = {
     );
   },
 };
+
+function defineNames(definitions, names) {
+  let result = kpobject();
+  for (const definition of definitions) {
+    result = kpoMerge(result, defineNamesInDefinition(definition, names));
+  }
+  return result;
+}
+
+function defineNamesInDefinition(definition, names) {
+  const [pattern, value] = definition;
+  const schema = createPatternSchema(pattern);
+  let forcedValue;
+  if (typeof pattern === "string") {
+    forcedValue = value;
+  } else if ("arrayPattern" in pattern) {
+    forcedValue = evalWithBuiltins(value, names).map(literal);
+  } else if ("objectPattern" in pattern) {
+    forcedValue = kpoMap(evalWithBuiltins(value, names), ([key, value]) => [
+      key,
+      literal(value),
+    ]);
+  } else {
+    return kpthrow("invalidPattern", ["pattern", pattern]);
+  }
+  const bindings = lazyBind(forcedValue, schema);
+  return bindings;
+}
+
+function createPatternSchema(pattern) {
+  if (typeof pattern === "string") {
+    return as("any", pattern);
+  } else if ("arrayPattern" in pattern) {
+    return pattern.arrayPattern.map(createPatternSchema);
+  } else if ("objectPattern" in pattern) {
+    return kpobject(
+      ...pattern.objectPattern.map((element) => [element, "any"])
+    );
+  }
+}
 
 function selfReferentialScope(enclosingScope, localNames) {
   const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
