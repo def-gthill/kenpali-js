@@ -7,11 +7,10 @@ import {
   literal,
   name,
   object,
-  optional,
   quote,
   unquote,
 } from "./kpast.js";
-import kpobject, { kpoEntries, kpoMap } from "./kpobject.js";
+import { kpoEntries } from "./kpobject.js";
 
 export default function desugar(expression) {
   if ("array" in expression) {
@@ -24,8 +23,6 @@ export default function desugar(expression) {
     return desugarGiven(expression);
   } else if ("calling" in expression) {
     return desugarCalling(expression);
-  } else if ("optional" in expression) {
-    return desugarOptional(expression);
   } else if ("quote" in expression) {
     return desugarQuote(expression);
   } else if ("unquote" in expression) {
@@ -42,61 +39,28 @@ export default function desugar(expression) {
 }
 
 function desugarArray(expression) {
-  if (!expression.array.some((element) => "arraySpread" in element)) {
-    return array(...expression.array.map(desugar));
-  }
-  if (expression.array.length === 1) {
-    return desugar(expression.array[0].arraySpread);
-  }
-  const subArrays = [];
-  let currentSubArray = [];
-  for (const element of expression.array) {
-    if ("arraySpread" in element) {
-      if (currentSubArray.length > 0) {
-        subArrays.push(array(...currentSubArray));
-        currentSubArray = [];
+  return array(
+    ...expression.array.map((element) => {
+      if ("arraySpread" in element) {
+        return { spread: desugar(element.arraySpread) };
+      } else {
+        return desugar(element);
       }
-      subArrays.push(desugar(element.arraySpread));
-    } else {
-      currentSubArray.push(desugar(element));
-    }
-  }
-  if (currentSubArray.length > 0) {
-    subArrays.push(array(...currentSubArray));
-  }
-  return calling(name("flatten"), [array(...subArrays)]);
+    })
+  );
 }
 
 function desugarObject(expression) {
-  if (!expression.object.some((entry) => "objectSpread" in entry)) {
-    return object(
-      ...expression.object.map(([key, value]) => [
-        desugarPropertyDefinition(key),
-        desugar(value),
-      ])
-    );
-  }
-  if (expression.object.length === 1) {
-    return desugar(expression.object[0].objectSpread);
-  }
-  const subObjects = [];
-  let currentSubObject = [];
-  for (const entry of expression.object) {
-    if ("objectSpread" in entry) {
-      if (currentSubObject.length > 0) {
-        subObjects.push(object(...currentSubObject));
-        currentSubObject = [];
+  return object(
+    ...expression.object.map((element) => {
+      if ("objectSpread" in element) {
+        return { spread: desugar(element.objectSpread) };
+      } else {
+        const [key, value] = element;
+        return [desugarPropertyDefinition(key), desugar(value)];
       }
-      subObjects.push(desugar(entry.objectSpread));
-    } else {
-      const [key, value] = entry;
-      currentSubObject.push([desugarPropertyDefinition(key), desugar(value)]);
-    }
-  }
-  if (currentSubObject.length > 0) {
-    subObjects.push(object(...currentSubObject));
-  }
-  return calling(name("merge"), [array(...subObjects)]);
+    })
+  );
 }
 
 function desugarPropertyDefinition(expression) {
@@ -126,7 +90,7 @@ function desugarCalling(expression) {
   return calling(
     desugar(expression.calling),
     desugarArgs(expression.args ?? []),
-    desugarNamedArgs(expression.namedArgs ?? kpobject())
+    desugarNamedArgs(expression.namedArgs ?? [])
   );
 }
 
@@ -140,31 +104,14 @@ function desugarArgs(args) {
 }
 
 function desugarNamedArgs(namedArgs) {
-  if (namedArgs instanceof Map) {
-    return kpoMap(namedArgs, ([name, arg]) => [name, desugar(arg)]);
-  } else {
-    return kpobject([
-      "#all",
-      desugarObject({
-        object: namedArgs.map((arg) => {
-          if (Array.isArray(arg)) {
-            const [key, value] = arg;
-            if (typeof key === "string") {
-              return [literal(key), value];
-            } else {
-              return arg;
-            }
-          } else {
-            return arg;
-          }
-        }),
-      }),
-    ]);
-  }
-}
-
-function desugarOptional(expression) {
-  return optional(desugar(expression.optional));
+  return namedArgs.map((arg) => {
+    if ("objectSpread" in arg) {
+      return { spread: desugar(arg.objectSpread) };
+    } else {
+      const [name, value] = arg;
+      return [name, desugar(value)];
+    }
+  });
 }
 
 function desugarQuote(expression) {
@@ -207,11 +154,15 @@ function desugarPipeline(expression) {
         axis = calling(name("at"), [axis, desugar(call)]);
       } else {
         if ("calling" in call) {
-          const args = call.args?.map(desugar) ?? [];
-          const namedArgs = kpoMap(
-            call.namedArgs ?? kpobject(),
-            ([name, arg]) => [name, desugar(arg)]
-          );
+          const args = (call.args ?? []).map(desugar);
+          const namedArgs = (call.namedArgs ?? []).map((element) => {
+            if ("objectSpread" in element) {
+              return { spread: desugar(element.objectSpread) };
+            } else {
+              const [name, value] = element;
+              return [name, desugar(value)];
+            }
+          });
           axis = calling(desugar(call.calling), [axis, ...args], namedArgs);
         } else {
           axis = calling(desugar(call), [axis]);

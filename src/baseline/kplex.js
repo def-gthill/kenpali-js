@@ -2,9 +2,6 @@ const r = String.raw;
 
 const tokenSpec = [
   // Literals
-  ["NULL", "null"],
-  ["FALSE", "false"],
-  ["TRUE", "true"],
   ["NUMBER", r`-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?`],
   ["STRING", r`"(\\"|[^"])*"`],
   // Groupers
@@ -47,28 +44,28 @@ export default function* kplex(code) {
   let lineStart = 0;
   let re = new RegExp(tokenRegex, "g");
   let mo;
-  let lastText;
 
   while ((mo = re.exec(code)) !== null) {
     let [kind, text] = Object.entries(mo.groups).find(([_, value]) => value);
-    lastText = text;
     let value = null;
     let column = mo.index - lineStart + 1;
 
-    if (kind === "NULL") {
-      kind = "LITERAL";
-    } else if (kind === "FALSE") {
-      kind = "LITERAL";
-      value = false;
-    } else if (kind === "TRUE") {
-      kind = "LITERAL";
-      value = true;
+    if (kind === "NAME") {
+      if (text === "null") {
+        kind = "LITERAL";
+      } else if (text === "false") {
+        kind = "LITERAL";
+        value = false;
+      } else if (text === "true") {
+        kind = "LITERAL";
+        value = true;
+      }
     } else if (kind === "NUMBER") {
       kind = "LITERAL";
-      value = JSON.parse(lastText);
+      value = JSON.parse(text);
     } else if (kind === "STRING") {
       kind = "LITERAL";
-      value = JSON.parse(lastText);
+      value = JSON.parse(text);
     } else if (kind === "NEWLINE" || kind === "COMMENT") {
       lineStart = mo.index + text.length;
       lineNum += 1;
@@ -76,7 +73,7 @@ export default function* kplex(code) {
     } else if (kind === "WHITESPACE") {
       continue;
     }
-    yield { type: kind, value, text: lastText, line: lineNum, column };
+    yield { type: kind, value, text, line: lineNum, column };
   }
   yield {
     type: "EOF",

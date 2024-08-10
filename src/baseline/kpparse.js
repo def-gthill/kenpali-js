@@ -2,6 +2,7 @@ import desugar from "./desugar.js";
 import {
   access,
   array,
+  arrayPattern,
   arraySpread,
   calling,
   defining,
@@ -10,13 +11,13 @@ import {
   literal,
   name,
   object,
+  objectPattern,
   objectSpread,
   pipeline,
   quote,
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
-import kpobject from "./kpobject.js";
 
 export default function kpparse(code) {
   const sugar = kpparseSugared(code);
@@ -68,48 +69,86 @@ function parseScope(tokens, start) {
       parseAssignable,
     ],
     (definitions, result) =>
-      definitions.length === 0
-        ? result
-        : definingPatterns(...definitions, result)
+      definitions.length === 0 ? result : defining(...definitions, result)
   )(tokens, start);
 }
 
 function parseNameDefinition(tokens, start) {
   return parseAllOf([
-    parseAnyOf(parseName, parseArray),
+    parseDefiningPattern,
     consume("EQUALS", "missingEqualsInDefinition"),
     parseAssignable,
   ])(tokens, start);
 }
 
-function definingPatterns(...args) {
-  const patterns = args.slice(0, -1);
-  const result = args.at(-1);
+function parseDefiningPattern(tokens, start) {
+  return parseAnyOf(
+    convert(parseName, (name) => name.name),
+    parseArrayPattern,
+    parseObjectPattern
+  )(tokens, start);
+}
 
-  const names = [];
-  let arrayNumber = 1;
+function parseArrayPattern(tokens, start) {
+  return parseAllOfFlat(
+    [
+      consume("OPEN_BRACKET", "expectedArrayPattern"),
+      parseZeroOrMore(parseArrayPatternElement, {
+        terminator: consume("COMMA"),
+        errorIfTerminatorMissing: "missingArrayPatternSeparator",
+      }),
+      consume("CLOSE_BRACKET", "unclosedArrayPattern"),
+    ],
+    arrayPattern
+  )(tokens, start);
+}
 
-  function resolvePattern(pattern, value) {
-    if ("name" in pattern) {
-      names.push([pattern.name, value]);
-    } else if ("array" in pattern) {
-      const tempName = `#array${arrayNumber}`;
-      arrayNumber++;
-      names.push([tempName, value]);
-      pattern.array.forEach((subpattern, i) => {
-        resolvePattern(
-          subpattern,
-          calling(name("at"), [name(tempName), literal(i + 1)])
-        );
-      });
-    }
-  }
+function parseArrayPatternElement(tokens, start) {
+  return parseAnyOf(
+    parseAllOf(
+      [parseName, consume("EQUALS", "expectedDefault"), parse],
+      (name, defaultValue) => ({ name: name.name, defaultValue })
+    ),
+    parseAllOf([consume("STAR", "expectedRest"), parseName], (name) => ({
+      rest: name.name,
+    })),
+    parseDefiningPattern
+  )(tokens, start);
+}
 
-  for (const [pattern, value] of patterns) {
-    resolvePattern(pattern, value);
-  }
+function parseObjectPattern(tokens, start) {
+  return parseAllOfFlat(
+    [
+      consume("OPEN_BRACE", "expectedObjectPattern"),
+      parseZeroOrMore(parseObjectPatternElement, {
+        terminator: consume("COMMA"),
+        errorIfTerminatorMissing: "missingObjectPatternSeparator",
+      }),
+      consume("CLOSE_BRACE", "unclosedObject"),
+    ],
+    objectPattern
+  )(tokens, start);
+}
 
-  return defining(...names, result);
+function parseObjectPatternElement(tokens, start) {
+  return parseAnyOf(
+    parseAllOf([
+      parseObjectPatternPropertyName,
+      consume("EQUALS", "expectedDefault"),
+      parse,
+    ]),
+    parseAllOf([consume("DOUBLE_STAR", "expectedRest"), parseName], (name) => ({
+      namedRest: name.name,
+    })),
+    parseObjectPatternPropertyName
+  )(tokens, start);
+}
+
+function parseObjectPatternPropertyName(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("COLON", "expectedPropertyName")],
+    (name) => name.name
+  )(tokens, start);
 }
 
 function parseAssignable(tokens, start) {
@@ -274,12 +313,9 @@ function parseArgumentList(tokens, start) {
       const posArgs = args.filter(
         (argument) => !(Array.isArray(argument) || "objectSpread" in argument)
       );
-      let namedArgs = args.filter(
+      const namedArgs = args.filter(
         (argument) => Array.isArray(argument) || "objectSpread" in argument
       );
-      if (!namedArgs.some((arg) => "objectSpread" in arg)) {
-        namedArgs = kpobject(...namedArgs);
-      }
       return {
         arguments: [posArgs, namedArgs],
       };

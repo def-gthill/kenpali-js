@@ -1,11 +1,18 @@
-import kpevalBaseline from "./baseline/kpeval.js";
+import {
+  kpcompile as kpcompileBaseline,
+  evalCompiled as kpevalBaseline,
+} from "./baseline/kpeval.js";
 import kpparseBaseline from "./baseline/kpparse.js";
-import kpeval from "./kpeval.js";
+import { isError } from "./builtins.js";
+import { kpcompile, evalCompiled as kpeval } from "./kpeval.js";
 import kpparse from "./kpparse.js";
-import kpevalPrevious from "./previous/kpeval.js";
+import {
+  kpcompile as kpcompilePrevious,
+  evalCompiled as kpevalPrevious,
+} from "./previous/kpeval.js";
 import kpparsePrevious from "./previous/kpparse.js";
 
-const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString, "!"])`;
+const hello = `1 | to(100) | transform((n) => join(["Hello, ", n | toString, "!"]))`;
 const primePairs = `primesUpTo = (max) => (
   [2 | to(max), 1] | repeat((args) => (
     [numbers, i] = args;
@@ -48,14 +55,14 @@ parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
 const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
-  { name: "Hello", code: hello, times: 500 },
+  { name: "Hello", code: hello, times: 300 },
   {
     name: "Prime Pairs",
     code: primePairs,
-    times: 200,
+    times: 300,
   },
-  { name: "Naive Fibonacci", code: naiveFib, times: 30 },
-  { name: "String Splitting", code: stringSplitting, times: 20 },
+  { name: "Naive Fibonacci", code: naiveFib, times: 70 },
+  { name: "String Splitting", code: stringSplitting, times: 30 },
 ];
 
 const trace = process.argv.includes("--trace");
@@ -64,19 +71,33 @@ function formatTime(time) {
   return time.toFixed(2);
 }
 
-function runBenchmark(benchmark, kpparse, kpeval) {
+function formatBenchmarkTime({ runTime, compileTime }) {
+  return `${formatTime(runTime)} (+ ${formatTime(compileTime)})`;
+}
+
+function runBenchmark(benchmark, kpparse, kpcompile, kpeval) {
   const json = kpparse(benchmark.code);
+  const compileStart = process.hrtime();
+  const compiled = kpcompile(json);
+  const [compileSeconds, compileNanoseconds] = process.hrtime(compileStart);
+  const compileTime = compileSeconds + compileNanoseconds / 1e9;
+  // Check for errors
+  const result = kpeval(compiled, undefined, trace);
+  if (isError(result)) {
+    console.log(result);
+    return { runTime: 0, compileTime: 0 };
+  }
   // Warm up
   for (let i = 0; i < benchmark.times / 10; i++) {
-    kpeval(json, undefined, trace);
+    kpeval(compiled, undefined, trace);
   }
   const start = process.hrtime();
   for (let i = 0; i < benchmark.times; i++) {
-    kpeval(json, undefined, trace);
+    kpeval(compiled, undefined, trace);
   }
   const [seconds, nanoseconds] = process.hrtime(start);
   const time = seconds + nanoseconds / 1e9;
-  return time;
+  return { runTime: time, compileTime };
 }
 
 const namesOfBenchmarksToRun = process.argv
@@ -97,21 +118,23 @@ for (const benchmark of benchmarks) {
       const baselineTime = runBenchmark(
         benchmark,
         kpparseBaseline,
+        kpcompileBaseline,
         kpevalBaseline
       );
-      console.log(`${formatTime(baselineTime)} (baseline)`);
-      result["baselineTime"] = baselineTime;
+      console.log(`${formatBenchmarkTime(baselineTime)} (baseline)`);
+      result["baselineTime"] = baselineTime.runTime;
       const previousTime = runBenchmark(
         benchmark,
         kpparsePrevious,
+        kpcompilePrevious,
         kpevalPrevious
       );
-      console.log(`${formatTime(previousTime)} (previous)`);
-      result["previousTime"] = previousTime;
+      console.log(`${formatBenchmarkTime(previousTime)} (previous)`);
+      result["previousTime"] = previousTime.runTime;
     }
-    const currentTime = runBenchmark(benchmark, kpparse, kpeval);
-    console.log(`${formatTime(currentTime)} (current)`);
-    result["currentTime"] = currentTime;
+    const currentTime = runBenchmark(benchmark, kpparse, kpcompile, kpeval);
+    console.log(`${formatBenchmarkTime(currentTime)} (current)`);
+    result["currentTime"] = currentTime.runTime;
     results.push(result);
   }
 }

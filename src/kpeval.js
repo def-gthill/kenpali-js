@@ -70,6 +70,14 @@ export default function kpeval(
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
   tracing = trace;
+  const compiled = kpcompile(expression, { names, modules });
+  return evalCompiled(compiled);
+}
+
+export function kpcompile(
+  expression,
+  { names = kpobject(), modules = kpobject() } = {}
+) {
   const check = validateExpression(expression);
   if (isThrown(check)) {
     return catch_(check);
@@ -79,7 +87,11 @@ export default function kpeval(
   const withCustomNames = new Scope(withCore, names);
   compileScope(withCustomNames, withCustomNames);
   const compiled = compile(expression, withCustomNames);
-  return deepForce(deepCatch(evalWithBuiltins(compiled, withCustomNames)));
+  return { instructions: compiled, names: withCustomNames };
+}
+
+export function evalCompiled({ instructions, names }) {
+  return deepForce(deepCatch(evalWithBuiltins(instructions, names)));
 }
 
 function validateExpression(expression) {

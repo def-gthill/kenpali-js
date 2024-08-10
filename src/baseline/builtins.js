@@ -114,6 +114,24 @@ const rawBuiltins = [
       return strings.join(namedArgs.get("with"));
     }
   ),
+  builtin(
+    "toCodePoints",
+    {
+      params: [{ name: "string", type: "string" }],
+    },
+    function ([string]) {
+      return [...string].map((char) => char.codePointAt(0));
+    }
+  ),
+  builtin(
+    "fromCodePoints",
+    {
+      params: [{ name: "codePoints", type: arrayOf("number") }],
+    },
+    function ([codePoints]) {
+      return String.fromCodePoint(...codePoints);
+    }
+  ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
@@ -767,4 +785,15 @@ function validateArgument(value, schema) {
   return null;
 }
 
-export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
+export function loadBuiltins(modules = kpobject()) {
+  const import_ = builtin(
+    "import",
+    {
+      params: ["module"],
+    },
+    function ([module]) {
+      return modules.get(module) ?? kpthrow("missingModule", ["name", module]);
+    }
+  );
+  return kpobject(...[import_, ...rawBuiltins].map((f) => [f.builtinName, f]));
+}
