@@ -3,14 +3,13 @@ import {
   deepForce,
   default_,
   eagerBind,
-  eagerParamBinder,
   force,
   lazyBind,
-  lazyParamBinder,
   rest,
 } from "./bind.js";
 import {
   isArray,
+  isError,
   isObject,
   isThrown,
   loadBuiltins,
@@ -18,7 +17,6 @@ import {
 } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import decompose from "./decompose.js";
-import { typecheck } from "./infer.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
@@ -30,7 +28,6 @@ import kpobject, {
   toKpobject,
 } from "./kpobject.js";
 import kpparse from "./kpparse.js";
-import simplify from "./simplify.js";
 
 export function kpevalJson(
   json,
@@ -46,21 +43,13 @@ export default function kpeval(
 ) {
   tracing = trace;
   const compiled = kpcompile(expression, { names, modules });
+  if (isError(compiled)) {
+    return compiled;
+  }
   return evalCompiled(compiled);
 }
 
 export function kpcompile(
-  expression,
-  { names = kpobject(), modules = kpobject() } = {}
-) {
-  const initial = compile_OLD(expression, { names, modules });
-  const decomposed = decompose(initial);
-  const simplified = simplify(decomposed);
-  const typechecked = typecheck(simplified);
-  return typechecked;
-}
-
-function compile_OLD(
   expression,
   { names = kpobject(), modules = kpobject() } = {}
 ) {
@@ -71,9 +60,14 @@ function compile_OLD(
   const builtins = loadBuiltins(modules);
   const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
-  compileScope(withCustomNames, withCustomNames);
-  const compiled = compile(expression, withCustomNames);
-  return { instructions: compiled, names: withCustomNames };
+  const decomposed = decompose(expression, withCustomNames.toMap());
+  if (isError(decomposed)) {
+    return decomposed;
+  }
+  // const simplified = simplify(decomposed);
+  // const typechecked = typecheck(simplified);
+  // return typechecked;
+  return { instructions: decomposed, names: withCustomNames };
 }
 
 export function evalCompiled({ instructions, names }) {
@@ -96,72 +90,6 @@ function validateExpression(expression) {
       throw error;
     }
   }
-}
-
-function compileScope(scope, names) {
-  for (const name of scope.names()) {
-    scope.set(name, compile(scope.get(name), names));
-  }
-}
-
-function compile(expression, names) {
-  const prebound = prebind(expression);
-  const tagged = tagNodesWithType(prebound);
-  return tagged;
-}
-
-function prebind(expression) {
-  return transformTree(expression, {
-    handleGiven(node, _recurse, handleDefault) {
-      const allParams = paramSpecToKpValue(node.given);
-      const paramObjects = normalizeAllParams(allParams);
-      const schema = createParamSchema(paramObjects);
-      node.binder = lazyParamBinder(...schema);
-      return handleDefault(node);
-    },
-    handleOther(node, _recurse, handleDefault) {
-      if (typeof node === "function") {
-        const allParams = paramsFromBuiltin(node);
-        const paramObjects = normalizeAllParams(allParams);
-        const schema = createParamSchema(paramObjects);
-        if (node.isLazy) {
-          node.binder = lazyParamBinder(...schema);
-        } else {
-          node.binder = eagerParamBinder(...schema);
-        }
-      }
-      return handleDefault(node);
-    },
-  });
-}
-
-function tagNodesWithType(expression) {
-  return transformTree(expression, {
-    handleLiteral(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "literal", ...node });
-    },
-    handleArray(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "array", ...node });
-    },
-    handleObject(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "object", ...node });
-    },
-    handleName(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "name", ...node });
-    },
-    handleDefining(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "defining", ...node });
-    },
-    handleGiven(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "given", ...node });
-    },
-    handleCalling(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "calling", ...node });
-    },
-    handleCatching(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "catching", ...node });
-    },
-  });
 }
 
 function transformTree(expression, handlers) {
@@ -262,8 +190,8 @@ function loadCore(enclosingScope) {
 export function evalWithBuiltins(expression, names) {
   if (expression === null || typeof expression !== "object") {
     return kpthrow("notAnExpression", ["value", expression]);
-  } else if ("type" in expression) {
-    return evalThis[expression.type](expression, names);
+  } else if ("steps" in expression) {
+    return evalPlan(expression, names);
   } else if ("literal" in expression) {
     return evalThis.literal(expression, names);
   } else if ("array" in expression) {
@@ -286,6 +214,113 @@ export function evalWithBuiltins(expression, names) {
     return evalThis.unquote(expression, names);
   } else {
     return kpthrow("notAnExpression", ["value", expression]);
+  }
+}
+
+function evalPlan(plan, names) {
+  const computed = names.toMap();
+  const steps = [...plan.steps, { find: "$result", as: plan.result }];
+  const stepsByName = new Map(steps.map((step) => [step.find, step]));
+
+  const stack = ["$result"];
+  while (stack.length > 0) {
+    const step = stepsByName.get(stack.at(-1));
+    // TODO Remove this once everything is moved over to the compilation pipeline
+    if (!step) {
+      return kpthrow("nameNotDefined", ["name", stack.at(-1)]);
+    }
+    const result = tryEvalNode(step.as, computed, names);
+    if (result.succeeded) {
+      stack.pop();
+      computed.set(step.find, result.value);
+    } else {
+      stack.push(...result.stepsNeeded);
+    }
+  }
+
+  return computed.get("$result");
+}
+
+function tryEvalNode(node, computed, names) {
+  if ("literal" in node) {
+    return { succeeded: true, value: node.literal };
+  } else if ("name" in node) {
+    return tryEvalName(node, computed);
+  } else if ("array" in node) {
+    return tryEvalArray(node, computed);
+  } else {
+    // TODO Remove this once everything is moved over to the compilation pipeline
+    try {
+      return {
+        succeeded: true,
+        value: evalWithBuiltins(node, new BridgingScope(names, computed)),
+      };
+    } catch (error) {
+      if (isThrown(error) && error.get("#thrown") === "stepNeeded") {
+        return { succeeded: false, stepsNeeded: [error.get("name")] };
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+// TODO Remove this once everything is moved over to the compilation pipeline
+class BridgingScope {
+  constructor(oldStyleNames, newStyleNames) {
+    this.oldStyleNames = oldStyleNames;
+    this.newStyleNames = newStyleNames;
+  }
+
+  has(key) {
+    return true;
+  }
+
+  get(key) {
+    if (this.oldStyleNames.has(key)) {
+      return this.oldStyleNames.get(key);
+    } else if (this.newStyleNames.has(key)) {
+      return this.newStyleNames.get(key);
+    } else {
+      throw kpthrow("stepNeeded", ["name", key]);
+    }
+  }
+
+  set(key, value) {
+    this.oldStyleNames.set(key, value);
+  }
+}
+
+function tryEvalName(node, computed) {
+  if (computed.has(node.name)) {
+    return { succeeded: true, value: computed.get(node.name) };
+  } else {
+    return { succeeded: false, stepsNeeded: [node.name] };
+  }
+}
+
+function tryEvalArray(node, computed) {
+  const result = [];
+  const stepsNeeded = [];
+  for (const element of node.array) {
+    if ("spread" in element) {
+      if (computed.has(element.spread.name)) {
+        result.push(...computed.get(element.spread.name));
+      } else {
+        stepsNeeded.push(element.spread.name);
+      }
+    } else {
+      if (computed.has(element.name)) {
+        result.push(computed.get(element.name));
+      } else {
+        stepsNeeded.push(element.name);
+      }
+    }
+  }
+  if (stepsNeeded.length > 0) {
+    return { succeeded: false, stepsNeeded };
+  } else {
+    return { succeeded: true, value: result };
   }
 }
 
@@ -619,6 +654,14 @@ class Scope {
     } else {
       this.enclosingScope.set(key, value);
     }
+  }
+
+  toMap() {
+    const map = new Map();
+    for (const name of this.names()) {
+      map.set(name, this.get(name));
+    }
+    return map;
   }
 }
 

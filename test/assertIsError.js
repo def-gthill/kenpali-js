@@ -1,3 +1,4 @@
+import { isError, isThrown } from "../src/builtins.js";
 import { toJsObject } from "../src/kpobject.js";
 
 export function assertIsThrown(
@@ -6,8 +7,7 @@ export function assertIsThrown(
   expectedErrorName,
   expectedErrorDetails = {}
 ) {
-  t.assert(actual instanceof Map, `${actual} isn't a thrown error`);
-  t.assert(actual.has("#thrown"), `${actual} isn't a thrown error`);
+  t.assert(isThrown(actual), `${actual} isn't a thrown error`);
   t.like(toJsObject(actual), {
     "#thrown": expectedErrorName,
     ...expectedErrorDetails,
@@ -20,8 +20,7 @@ export function assertIsError(
   expectedErrorName,
   expectedErrorDetails = {}
 ) {
-  t.assert(actual instanceof Map, `${actual} isn't an error object`);
-  t.assert(actual.has("#error"), `${actual} isn't an error object`);
+  t.assert(isError(actual), `${actual} isn't an error object`);
   t.like(toJsObject(actual), {
     "#error": expectedErrorName,
     ...expectedErrorDetails,

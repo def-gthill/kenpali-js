@@ -3,10 +3,8 @@ import {
   deepForce,
   default_,
   eagerBind,
-  eagerParamBinder,
   force,
   lazyBind,
-  lazyParamBinder,
   rest,
 } from "./bind.js";
 import {
@@ -17,6 +15,7 @@ import {
   toString,
 } from "./builtins.js";
 import { core as coreCode } from "./core.js";
+import decompose from "./decompose.js";
 import { array, literal, object } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import kpobject, {
@@ -33,36 +32,8 @@ export function kpevalJson(
   json,
   { names = kpobject(), modules = kpobject() } = {}
 ) {
-  const expressionRaw = JSON.parse(json);
-  const expression = toAst(expressionRaw);
+  const expression = JSON.parse(json);
   return kpeval(expression, { names, modules });
-}
-
-export function toAst(expressionRaw) {
-  return transformTree(expressionRaw, {
-    handleDefining(node, _recurse, handleDefault) {
-      return handleDefault({
-        ...node,
-        defining: Array.isArray(node.defining)
-          ? node.defining
-          : toKpobject(node.defining),
-      });
-    },
-    handleCalling(node, _recurse, handleDefault) {
-      const result = handleDefault({
-        ...node,
-        args: node.args,
-        namedArgs: node.namedArgs,
-      });
-      if (result.args.length === 0) {
-        delete result.args;
-      }
-      if (result.namedArgs.length === 0) {
-        delete result.namedArgs;
-      }
-      return result;
-    },
-  });
 }
 
 export default function kpeval(
@@ -85,9 +56,11 @@ export function kpcompile(
   const builtins = loadBuiltins(modules);
   const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
-  compileScope(withCustomNames, withCustomNames);
-  const compiled = compile(expression, withCustomNames);
-  return { instructions: compiled, names: withCustomNames };
+  const decomposed = decompose(expression);
+  // const simplified = simplify(decomposed);
+  // const typechecked = typecheck(simplified);
+  // return typechecked;
+  return { instructions: decomposed, names: withCustomNames };
 }
 
 export function evalCompiled({ instructions, names }) {
@@ -110,72 +83,6 @@ function validateExpression(expression) {
       throw error;
     }
   }
-}
-
-function compileScope(scope, names) {
-  for (const name of scope.names()) {
-    scope.set(name, compile(scope.get(name), names));
-  }
-}
-
-function compile(expression, names) {
-  const prebound = prebind(expression);
-  const tagged = tagNodesWithType(prebound);
-  return tagged;
-}
-
-function prebind(expression) {
-  return transformTree(expression, {
-    handleGiven(node, _recurse, handleDefault) {
-      const allParams = paramSpecToKpValue(node.given);
-      const paramObjects = normalizeAllParams(allParams);
-      const schema = createParamSchema(paramObjects);
-      node.binder = lazyParamBinder(...schema);
-      return handleDefault(node);
-    },
-    handleOther(node, _recurse, handleDefault) {
-      if (typeof node === "function") {
-        const allParams = paramsFromBuiltin(node);
-        const paramObjects = normalizeAllParams(allParams);
-        const schema = createParamSchema(paramObjects);
-        if (node.isLazy) {
-          node.binder = lazyParamBinder(...schema);
-        } else {
-          node.binder = eagerParamBinder(...schema);
-        }
-      }
-      return handleDefault(node);
-    },
-  });
-}
-
-function tagNodesWithType(expression) {
-  return transformTree(expression, {
-    handleLiteral(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "literal", ...node });
-    },
-    handleArray(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "array", ...node });
-    },
-    handleObject(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "object", ...node });
-    },
-    handleName(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "name", ...node });
-    },
-    handleDefining(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "defining", ...node });
-    },
-    handleGiven(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "given", ...node });
-    },
-    handleCalling(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "calling", ...node });
-    },
-    handleCatching(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "catching", ...node });
-    },
-  });
 }
 
 function transformTree(expression, handlers) {
@@ -276,8 +183,8 @@ function loadCore(enclosingScope) {
 export function evalWithBuiltins(expression, names) {
   if (expression === null || typeof expression !== "object") {
     return kpthrow("notAnExpression", ["value", expression]);
-  } else if ("type" in expression) {
-    return evalThis[expression.type](expression, names);
+  } else if ("steps" in expression) {
+    return evalPlan(expression, names);
   } else if ("literal" in expression) {
     return evalThis.literal(expression, names);
   } else if ("array" in expression) {
@@ -300,6 +207,74 @@ export function evalWithBuiltins(expression, names) {
     return evalThis.unquote(expression, names);
   } else {
     return kpthrow("notAnExpression", ["value", expression]);
+  }
+}
+
+function evalPlan(plan, names) {
+  const computed = new Map();
+  for (const name of names.names()) {
+    computed.set(name, names.get(name));
+  }
+  const steps = [...plan.steps, { find: "$result", as: plan.result }];
+  const stepsByName = new Map(steps.map((step) => [step.find, step]));
+
+  const stack = ["$result"];
+  while (stack.length > 0) {
+    const step = stepsByName.get(stack.at(-1));
+    const result = tryEvalNode(step.as, computed, names);
+    if (result.succeeded) {
+      stack.pop();
+      computed.set(step.find, result.value);
+    } else {
+      stack.push(...result.stepsNeeded);
+    }
+  }
+
+  return computed.get("$result");
+}
+
+function tryEvalNode(node, computed, names) {
+  if ("literal" in node) {
+    return { succeeded: true, value: node.literal };
+  } else if ("name" in node) {
+    return tryEvalName(node, computed);
+  } else if ("array" in node) {
+    return tryEvalArray(node, computed);
+  } else {
+    return { succeeded: true, value: evalWithBuiltins(node, names) };
+  }
+}
+
+function tryEvalName(node, computed) {
+  if (computed.has(node.name)) {
+    return { succeeded: true, value: computed.get(node.name) };
+  } else {
+    return { succeeded: false, stepsNeeded: [node.name] };
+  }
+}
+
+function tryEvalArray(node, computed) {
+  const result = [];
+  const stepsNeeded = [];
+  for (const element of node.array) {
+    if ("spread" in element) {
+      if (computed.has(element.spread.name)) {
+        result.push(...computed.get(element.spread.name));
+      } else {
+        stepsNeeded.push(element.spread.name);
+      }
+    } else {
+      if (computed.has(element.name)) {
+        result.push(computed.get(element.name));
+      } else {
+        stepsNeeded.push(element.name);
+      }
+    }
+  }
+  if (stepsNeeded.length > 0) {
+    return { succeeded: false, stepsNeeded };
+  } else {
+    return { succeeded: true, value: result };
   }
 }
 
