@@ -1,6 +1,13 @@
 import test from "ava";
 import decompose from "../src/decompose.js";
-import { array, defining, literal, name } from "../src/kpast.js";
+import {
+  array,
+  calling,
+  defining,
+  literal,
+  name,
+  object,
+} from "../src/kpast.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("A literal node doesn't decompose any further", (t) => {
@@ -16,6 +23,19 @@ test("An array node decomposes into a step for each element", (t) => {
   t.deepEqual(result.steps.sort(byFind), [
     { find: "$arr.$1", as: literal("foo") },
     { find: "$arr.$2", as: literal(42) },
+  ]);
+});
+
+test("An object node decomposes into a step for each value", (t) => {
+  const expression = object(["foo", literal(42)], ["bar", literal("baz")]);
+  const result = decompose(expression);
+  t.deepEqual(
+    result.result,
+    object(["foo", name("$obj.$v1")], ["bar", name("$obj.$v2")])
+  );
+  t.deepEqual(result.steps.sort(byFind), [
+    { find: "$obj.$v1", as: literal(42) },
+    { find: "$obj.$v2", as: literal("baz") },
   ]);
 });
 
@@ -42,6 +62,23 @@ test("A defining node decomposes into a step for each defined name", (t) => {
   t.deepEqual(result.steps.sort(byFind), [
     { find: "$def.bar", as: literal(42) },
     { find: "$def.foo", as: name("$def.bar") },
+  ]);
+});
+
+test("A calling node decomposes into a step for each argument", (t) => {
+  const expression = calling(
+    name("foo"),
+    [literal(42)],
+    [["bar", literal("baz")]]
+  );
+  const result = decompose(expression, new Map([["foo", literal(42)]]));
+  t.deepEqual(
+    result.result,
+    calling(name("foo"), [name("$call.$pa1")], [["bar", name("$call.$na1")]])
+  );
+  t.deepEqual(result.steps.sort(byFind), [
+    { find: "$call.$na1", as: literal("baz") },
+    { find: "$call.$pa1", as: literal(42) },
   ]);
 });
 

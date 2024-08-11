@@ -33,6 +33,8 @@ function decomposeInScope(expression, scopeId, outerNames) {
     return { steps: [], result: expression };
   } else if ("array" in expression) {
     return decomposeArray(expression, scopeId, outerNames);
+  } else if ("object" in expression) {
+    return decomposeObject(expression, scopeId, outerNames);
   } else if ("name" in expression) {
     if (!outerNames.has(expression.name)) {
       throw kperror("nameNotDefined", ["name", expression.name]);
@@ -44,6 +46,8 @@ function decomposeInScope(expression, scopeId, outerNames) {
     } else {
       return decomposeDefining(expression, scopeId, outerNames);
     }
+  } else if ("calling" in expression) {
+    return decomposeCalling(expression, scopeId, outerNames);
   } else {
     return decomposeNotSupportedYet(expression, scopeId, outerNames);
   }
@@ -78,6 +82,47 @@ function decomposeArray(expression, scopeId, outerNames) {
   return { steps, result };
 }
 
+function decomposeObject(expression, scopeId, outerNames) {
+  const objectScopeId = push(scopeId, "$obj");
+  const refs = [];
+  const steps = [];
+  expression.object.forEach((element, i) => {
+    if ("spread" in element) {
+      const { ref: elementRef, steps: elementSteps } = decomposePart(
+        `$${i + 1}`,
+        element.spread,
+        objectScopeId,
+        outerNames
+      );
+      refs.push(spread(elementRef));
+      steps.push(...elementSteps);
+    } else {
+      const [key, value] = element;
+      const { ref: valueRef, steps: valueSteps } = decomposePart(
+        `$v${i + 1}`,
+        value,
+        objectScopeId,
+        outerNames
+      );
+      steps.push(...valueSteps);
+      if (typeof key === "string") {
+        refs.push([key, valueRef]);
+      } else {
+        const { ref: keyRef, steps: keySteps } = decomposePart(
+          `$k${i + 1}`,
+          key,
+          objectScopeId,
+          outerNames
+        );
+        refs.push([keyRef, valueRef]);
+        steps.push(...keySteps);
+      }
+    }
+  });
+  const result = object(...refs);
+  return { steps, result };
+}
+
 function decomposeDefining(expression, scopeId, outerNames) {
   const definingScopeId = push(scopeId, "$def");
   const names = new Map([...outerNames]);
@@ -98,6 +143,68 @@ function decomposeDefining(expression, scopeId, outerNames) {
   );
   steps.push(...resultSteps.steps);
   return { steps, result: resultSteps.result };
+}
+
+function decomposeCalling(expression, scopeId, outerNames) {
+  const callingScopeId = push(scopeId, "$call");
+  const steps = [];
+
+  const { ref: functionRef, steps: functionSteps } = decomposePart(
+    "$fun",
+    expression.calling,
+    callingScopeId,
+    outerNames
+  );
+  steps.push(...functionSteps);
+
+  const posArgRefs = [];
+  (expression.args ?? []).forEach((arg, i) => {
+    if ("spread" in arg) {
+      const { ref: posArgRef, steps: posArgSteps } = decomposePart(
+        `$pa${i + 1}`,
+        arg.spread,
+        callingScopeId,
+        outerNames
+      );
+      posArgRefs.push(spread(posArgRef));
+      steps.push(...posArgSteps);
+    } else {
+      const { ref: posArgRef, steps: posArgSteps } = decomposePart(
+        `$pa${i + 1}`,
+        arg,
+        callingScopeId,
+        outerNames
+      );
+      posArgRefs.push(posArgRef);
+      steps.push(...posArgSteps);
+    }
+  });
+
+  const namedArgRefs = [];
+  (expression.namedArgs ?? []).forEach((arg, i) => {
+    if ("spread" in arg) {
+      const { ref: namedArgRef, steps: namedArgSteps } = decomposePart(
+        `$na${i + 1}`,
+        arg.spread,
+        callingScopeId,
+        outerNames
+      );
+      namedArgRefs.push(spread(namedArgRef));
+      steps.push(...namedArgSteps);
+    } else {
+      const [name, value] = arg;
+      const { ref: namedArgRef, steps: namedArgSteps } = decomposePart(
+        `$na${i + 1}`,
+        value,
+        callingScopeId,
+        outerNames
+      );
+      namedArgRefs.push([name, namedArgRef]);
+      steps.push(...namedArgSteps);
+    }
+  });
+
+  return { steps, result: calling(functionRef, posArgRefs, namedArgRefs) };
 }
 
 function decomposePart(partName, part, scopeId, outerNames) {

@@ -225,6 +225,10 @@ function evalPlan(plan, names) {
   const stack = ["$result"];
   while (stack.length > 0) {
     const step = stepsByName.get(stack.at(-1));
+    // if (computed.has(step)) {
+    //   stack.pop();
+    //   continue;
+    // }
     // TODO Remove this once everything is moved over to the compilation pipeline
     if (!step) {
       return kpthrow("nameNotDefined", ["name", stack.at(-1)]);
@@ -248,13 +252,15 @@ function tryEvalNode(node, computed, names) {
     return tryEvalName(node, computed);
   } else if ("array" in node) {
     return tryEvalArray(node, computed);
+  } else if ("object" in node) {
+    return tryEvalObject(node, computed);
+  } else if ("calling" in node) {
+    return tryEvalCalling(node, computed, names);
   } else {
     // TODO Remove this once everything is moved over to the compilation pipeline
     try {
-      return {
-        succeeded: true,
-        value: evalWithBuiltins(node, new BridgingScope(names, computed)),
-      };
+      const value = evalWithBuiltins(node, new BridgingScope(names, computed));
+      return { succeeded: true, value };
     } catch (error) {
       if (isThrown(error) && error.get("#thrown") === "stepNeeded") {
         return { succeeded: false, stepsNeeded: [error.get("name")] };
@@ -266,6 +272,7 @@ function tryEvalNode(node, computed, names) {
 }
 
 // TODO Remove this once everything is moved over to the compilation pipeline
+Error.stackTraceLimit = Infinity;
 class BridgingScope {
   constructor(oldStyleNames, newStyleNames) {
     this.oldStyleNames = oldStyleNames;
@@ -282,6 +289,9 @@ class BridgingScope {
     } else if (this.newStyleNames.has(key)) {
       return this.newStyleNames.get(key);
     } else {
+      // if (key === "$def.$call.$pa1") {
+      //   throw new Error(key);
+      // }
       throw kpthrow("stepNeeded", ["name", key]);
     }
   }
@@ -324,6 +334,77 @@ function tryEvalArray(node, computed) {
   }
 }
 
+function tryEvalObject(node, computed) {
+  const result = kpobject();
+  const stepsNeeded = [];
+  for (const element of node.object) {
+    if ("spread" in element) {
+      if (computed.has(element.spread.name)) {
+        for (const [key, value] of kpoEntries(
+          computed.get(element.spread.name)
+        )) {
+          result.set(key, value);
+        }
+      } else {
+        stepsNeeded.push(element.spread.name);
+      }
+    } else {
+      const [key, value] = element;
+      let keyResult, valueResult;
+      if (typeof key === "string") {
+        keyResult = key;
+      } else {
+        if (computed.has(key.name)) {
+          keyResult = computed.get(key.name);
+        } else {
+          stepsNeeded.push(key.name);
+        }
+      }
+      if (computed.has(value.name)) {
+        valueResult = computed.get(value.name);
+      } else {
+        stepsNeeded.push(value.name);
+      }
+      result.set(keyResult, valueResult);
+    }
+  }
+  if (stepsNeeded.length > 0) {
+    return { succeeded: false, stepsNeeded };
+  } else {
+    return { succeeded: true, value: result };
+  }
+}
+
+function tryEvalCalling(node, computed, names) {
+  // TODO Remove this once everything is moved over to the new evaluation algorithm
+  try {
+    const rawValue = evalWithBuiltins(node, new BridgingScope(names, computed));
+    let value = deepForce(rawValue);
+    if (isThrown(value) && value.get("#thrown") === "errorPassed") {
+      value = kpobject(
+        ["#thrown", value.get("reason").get("#error")],
+        ...kpoFilter(value.get("reason"), ([name, _]) => name !== "#error")
+      );
+    }
+    if (isThrown(value) && value.get("#thrown") === "stepNeeded") {
+      return { succeeded: false, stepsNeeded: [value.get("name")] };
+    }
+    return { succeeded: true, value };
+  } catch (error) {
+    if (isThrown(error) && error.get("#thrown") === "stepNeeded") {
+      return { succeeded: false, stepsNeeded: [error.get("name")] };
+    } else {
+      throw error;
+    }
+  }
+  // if (!computed.has(node.calling.name)) {
+  //   return { succeeded: false, stepsNeeded: [node.calling.name] };
+  // }
+  // const f = computed.get(node.calling.name);
+  // const posArgs = [];
+  // const namedArgs = kpobject();
+}
+
 const evalThis = {
   literal(expression) {
     return expression.literal;
@@ -359,7 +440,9 @@ const evalThis = {
       return kpthrow("nameNotDefined", ["name", expression.name]);
     }
     const binding = names.get(expression.name);
-    if (typeof binding === "object" && "expression" in binding) {
+    if (binding === null) {
+      return binding;
+    } else if (typeof binding === "object" && "expression" in binding) {
       const result = evalWithBuiltins(binding.expression, binding.context);
       names.set(expression.name, result);
       return result;
