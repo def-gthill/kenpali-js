@@ -48,6 +48,8 @@ function decomposeInScope(expression, scopeId, outerNames) {
     }
   } else if ("calling" in expression) {
     return decomposeCalling(expression, scopeId, outerNames);
+  } else if ("catching" in expression) {
+    return decomposeCatching(expression, scopeId, outerNames);
   } else {
     return decomposeNotSupportedYet(expression, scopeId, outerNames);
   }
@@ -205,6 +207,16 @@ function decomposeCalling(expression, scopeId, outerNames) {
   });
 
   return { steps, result: calling(functionRef, posArgRefs, namedArgRefs) };
+}
+
+function decomposeCatching(expression, scopeId, outerNames) {
+  const { ref, steps } = decomposePart(
+    "$catch",
+    expression.catching,
+    scopeId,
+    outerNames
+  );
+  return { steps, result: catching(ref) };
 }
 
 function decomposePart(partName, part, scopeId, outerNames) {

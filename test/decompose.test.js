@@ -3,6 +3,7 @@ import decompose from "../src/decompose.js";
 import {
   array,
   calling,
+  catching,
   defining,
   literal,
   name,
@@ -65,6 +66,17 @@ test("A defining node decomposes into a step for each defined name", (t) => {
   ]);
 });
 
+// test("A given node decomposes into the steps for its body, with an invocation placeholder", (t) => {
+//   const expression = given(
+//     {
+//       params: ["foo"],
+//     },
+//     calling(name("plus"), [name("foo"), literal(42)])
+//   );
+//   const result = decompose(expression);
+//   t.deepEqual(result)
+// });
+
 test("A calling node decomposes into a step for each argument", (t) => {
   const expression = calling(
     name("foo"),
@@ -80,6 +92,15 @@ test("A calling node decomposes into a step for each argument", (t) => {
     { find: "$call.$na1", as: literal("baz") },
     { find: "$call.$pa1", as: literal(42) },
   ]);
+});
+
+test("A catching node decomposes into a step for the caught expression", (t) => {
+  const expression = catching(literal(42));
+  const result = decompose(expression);
+  t.deepEqual(result, {
+    steps: [{ find: "$catch", as: literal(42) }],
+    result: catching(name("$catch")),
+  });
 });
 
 function byFind(a, b) {
