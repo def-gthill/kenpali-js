@@ -19,7 +19,7 @@ import kpobject, { kpoEntries } from "./kpobject.js";
 const rawBuiltins = [
   builtin(
     "plus",
-    { restParam: { name: "rest", type: "number" } },
+    { params: [{ rest: { name: "rest", type: "number" } }] },
     function (args) {
       return args.reduce((acc, value) => acc + value, 0);
     }
@@ -59,7 +59,7 @@ const rawBuiltins = [
   ),
   builtin(
     "times",
-    { restParam: { name: "rest", type: "number" } },
+    { params: [{ rest: { name: "rest", type: "number" } }] },
     function (args) {
       return args.reduce((acc, value) => acc * value, 1);
     }
@@ -217,7 +217,7 @@ const rawBuiltins = [
   ),
   lazyBuiltin(
     "and",
-    { restParam: { name: "rest", type: "boolean" } },
+    { params: [{ rest: { name: "rest", type: "boolean" } }] },
     function (argGetter) {
       for (let i = 0; i < argGetter.numRestArgs; i++) {
         if (!argGetter.restArg(i)) {
@@ -229,7 +229,7 @@ const rawBuiltins = [
   ),
   lazyBuiltin(
     "or",
-    { restParam: { name: "rest", type: "boolean" } },
+    { params: [{ rest: { name: "rest", type: "boolean" } }] },
     function (argGetter) {
       for (let i = 0; i < argGetter.numRestArgs; i++) {
         if (argGetter.restArg(i)) {
@@ -413,8 +413,7 @@ const rawBuiltins = [
   builtin(
     "switch",
     {
-      params: ["value"],
-      restParam: { name: "cases", type: ["any", "any"] },
+      params: ["value", { rest: { name: "cases", type: ["any", "any"] } }],
     },
     function ([value, ...cases]) {
       for (const [schema, f] of cases) {
@@ -444,7 +443,7 @@ const rawBuiltins = [
   builtin(
     "oneOf",
     {
-      restParam: "values",
+      params: [{ rest: "values" }],
     },
     function (values) {
       return oneOf(values);
@@ -495,7 +494,7 @@ const rawBuiltins = [
   builtin(
     "either",
     {
-      restParam: "schemas",
+      params: [{ rest: "schemas" }],
     },
     function (schemas) {
       return either(...schemas);

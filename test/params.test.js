@@ -16,9 +16,7 @@ test("A given with an empty param spec has no params", (t) => {
 
   t.deepEqual(params, {
     params: [],
-    restParam: null,
     namedParams: [],
-    namedRestParam: null,
   });
 });
 
@@ -26,10 +24,8 @@ test("All param types can be extracted from a given", (t) => {
   const f = kpeval(
     given(
       {
-        params: ["a"],
-        restParam: "b",
-        namedParams: ["c"],
-        namedRestParam: "d",
+        params: ["a", { rest: "b" }],
+        namedParams: ["c", { rest: "d" }],
       },
       literal(null)
     )
@@ -38,10 +34,8 @@ test("All param types can be extracted from a given", (t) => {
   const params = paramsFromGiven(f);
 
   t.deepEqual(params, {
-    params: ["a"],
-    restParam: "b",
-    namedParams: ["c"],
-    namedRestParam: "d",
+    params: ["a", kpobject(["rest", "b"])],
+    namedParams: ["c", kpobject(["rest", "d"])],
   });
 });
 
@@ -52,9 +46,7 @@ test("A builtin with an empty param spec has no params", (t) => {
 
   t.deepEqual(params, {
     params: [],
-    restParam: null,
     namedParams: [],
-    namedRestParam: null,
   });
 });
 
@@ -62,10 +54,8 @@ test("All param types can be extracted from a builtin", (t) => {
   const f = builtin(
     "foo",
     {
-      params: ["a"],
-      restParam: "b",
-      namedParams: ["c"],
-      namedRestParam: "d",
+      params: ["a", { rest: "b" }],
+      namedParams: ["c", { rest: "d" }],
     },
     literal(null)
   );
@@ -73,10 +63,8 @@ test("All param types can be extracted from a builtin", (t) => {
   const params = paramsFromBuiltin(f);
 
   t.deepEqual(params, {
-    params: ["a"],
-    restParam: "b",
-    namedParams: ["c"],
-    namedRestParam: "d",
+    params: ["a", { rest: "b" }],
+    namedParams: ["c", { rest: "d" }],
   });
 });
 
@@ -100,18 +88,17 @@ test("Normalizing a Kenpali object param yields an equivalent JS object", (t) =>
 
 test("We can normalize all params", (t) => {
   const params = {
-    params: ["a"],
-    restParam: { name: "b", type: "string" },
-    namedParams: [kpobject(["name", "c"], ["type", "string"])],
-    namedRestParam: "d",
+    params: ["a", { rest: { name: "b", type: "string" } }],
+    namedParams: [
+      kpobject(["name", "c"], ["type", "string"]),
+      kpobject(["rest", "d"]),
+    ],
   };
 
   const normalized = normalizeAllParams(params);
 
   t.deepEqual(normalized, {
-    params: [{ name: "a" }],
-    restParam: { name: "b", type: "string" },
-    namedParams: [{ name: "c", type: "string" }],
-    namedRestParam: { name: "d" },
+    params: [{ name: "a" }, { rest: { name: "b", type: "string" } }],
+    namedParams: [{ name: "c", type: "string" }, { rest: { name: "d" } }],
   });
 });

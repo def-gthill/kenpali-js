@@ -14,7 +14,7 @@ export function toJsFunction(kpf) {
 export function toKpFunction(jsf) {
   return builtin(
     jsf.name || "<anonymous>",
-    { restParam: "args", namedRestParam: "namedArgs" },
+    { params: [{ rest: "args" }], namedParams: [{ rest: "namedArgs" }] },
     (args, namedArgs) => jsf(...args, toJsObject(namedArgs))
   );
 }
