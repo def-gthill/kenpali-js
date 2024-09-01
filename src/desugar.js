@@ -5,6 +5,7 @@ import {
   defining,
   given,
   literal,
+  module,
   name,
   object,
   quote,
@@ -17,6 +18,8 @@ export default function desugar(expression) {
     return desugarArray(expression);
   } else if ("object" in expression) {
     return desugarObject(expression);
+  } else if ("module" in expression) {
+    return desugarModule(expression);
   } else if ("defining" in expression) {
     return desugarDefining(expression);
   } else if ("given" in expression) {
@@ -70,6 +73,12 @@ function desugarPropertyDefinition(expression) {
   } else {
     return desugaredKey;
   }
+}
+
+function desugarModule(expression) {
+  return module(
+    ...expression.module.map(([name, value]) => [name, desugar(value)])
+  );
 }
 
 function desugarDefining(expression) {

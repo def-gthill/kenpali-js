@@ -1,4 +1,4 @@
-import { isError } from "../src/builtins.js";
+import { isError, toString } from "../src/builtins.js";
 import kpeval, { deepToJsObject } from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
 import { runSpecFile } from "./specRunner.js";
@@ -10,12 +10,15 @@ runSpecFile(
   (input) => kpeval(kpparse(input)),
   (t, actualOutputValue, expectedOutput) => {
     const expectedOutputValue = kpeval(kpparse(expectedOutput));
-    t.deepEqual(actualOutputValue, expectedOutputValue);
+    t.deepEqual(
+      deepToJsObject(actualOutputValue),
+      deepToJsObject(expectedOutputValue)
+    );
   },
   (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {
     t.assert(
       isError(actualOutputValue),
-      `${actualOutputValue} isn't an error object`
+      `${toString(actualOutputValue)} isn't an error object`
     );
     t.like(deepToJsObject(actualOutputValue), {
       "#error": expectedErrorName,

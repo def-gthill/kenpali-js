@@ -45,9 +45,10 @@ function eagerBindInternal(value, schema) {
 }
 
 export function force(value) {
-  if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
-  } else if (isExpression(value)) {
+  // if (isThrown(value)) {
+  //   return withReason(errorPassed(), value);
+  // } else if (isExpression(value)) {
+  if (isExpression(value)) {
     return evalWithBuiltins(value.expression, value.context);
   } else if (isThunk(value)) {
     return value.thunk();
@@ -758,6 +759,9 @@ export function matches(value, schema) {
 }
 
 export function is(type, namedArgs = kpobject()) {
+  if (namedArgs.get("where") === null) {
+    namedArgs.delete("where");
+  }
   return kpoMerge(kpobject(["#type", type]), namedArgs);
 }
 
@@ -766,6 +770,9 @@ export function oneOf(values) {
 }
 
 export function arrayOf(elementSchema, namedArgs = kpobject()) {
+  if (namedArgs.get("where") === null) {
+    namedArgs.delete("where");
+  }
   return kpoMerge(
     kpobject(["#type", "array"], ["elements", elementSchema]),
     namedArgs
@@ -773,11 +780,14 @@ export function arrayOf(elementSchema, namedArgs = kpobject()) {
 }
 
 export function objectOf(namedArgs) {
+  if (namedArgs.get("where") === null) {
+    namedArgs.delete("where");
+  }
   return kpoMerge(kpobject(["#type", "object"]), namedArgs);
 }
 
 export function optional(schema) {
-  return kpobject(["#optional", schema]);
+  return kpobject(["#default", null], ["for", either(schema, "null")]);
 }
 
 export function either(...schemas) {

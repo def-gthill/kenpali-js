@@ -2,13 +2,18 @@ import test from "ava";
 import decompose from "../src/decompose.js";
 import {
   array,
+  arrayPattern,
+  at,
   calling,
   catching,
   defining,
+  given,
   literal,
   name,
   object,
+  withDefault,
 } from "../src/kpast.js";
+import { assertDecompositionIs } from "./assertExpansionIs.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("A literal node doesn't decompose any further", (t) => {
@@ -42,7 +47,9 @@ test("An object node decomposes into a step for each value", (t) => {
 
 test("A name node doesn't decompose any further", (t) => {
   const expression = name("foo");
-  const result = decompose(expression, new Map([["foo", literal(42)]]));
+  const result = decompose(expression, {
+    builtins: new Map([["foo", literal(42)]]),
+  });
   t.deepEqual(result, { steps: [], result: expression });
 });
 
@@ -66,16 +73,75 @@ test("A defining node decomposes into a step for each defined name", (t) => {
   ]);
 });
 
-// test("A given node decomposes into the steps for its body, with an invocation placeholder", (t) => {
-//   const expression = given(
-//     {
-//       params: ["foo"],
-//     },
-//     calling(name("plus"), [name("foo"), literal(42)])
-//   );
-//   const result = decompose(expression);
-//   t.deepEqual(result)
-// });
+test("A defining node with an array pattern decomposes into a step for each element", (t) => {
+  const expression = defining(
+    [arrayPattern("foo", "bar"), name("baz")],
+    name("foo")
+  );
+  const result = decompose(expression, {
+    builtins: new Map([["baz", literal(42)]]),
+  });
+  assertDecompositionIs(t, result, {
+    steps: [
+      { find: "$def.foo", as: at(name("baz"), literal(1)) },
+      { find: "$def.bar", as: at(name("baz"), literal(2)) },
+    ],
+    result: name("$def.foo"),
+  });
+});
+
+test("A given node has its body decomposed", (t) => {
+  const expression = given(
+    { params: ["foo"] },
+    calling(name("plus"), [name("foo"), literal(42)])
+  );
+  const result = decompose(expression, {
+    builtins: new Map([["plus", literal(42)]]),
+  });
+  t.deepEqual(result, {
+    steps: [],
+    result: given(
+      { params: ["$f.{callId}.$param.foo"] },
+      {
+        steps: [{ find: "$f.{callId}.$call.$pa2", as: literal(42) }],
+        result: calling(name("plus"), [
+          name("$f.{callId}.$param.foo"),
+          name("$f.{callId}.$call.$pa2"),
+        ]),
+      }
+    ),
+  });
+});
+
+test("A given node with a parameter default has a step for its default extracted", (t) => {
+  const expression = given(
+    { params: [withDefault("foo", literal(73))] },
+    calling(name("plus"), [name("foo"), literal(42)])
+  );
+  const result = decompose(expression, {
+    builtins: new Map([["plus", literal(42)]]),
+  });
+  t.deepEqual(result, {
+    steps: [{ find: "$f.$param.foo.$default", as: literal(73) }],
+    result: given(
+      {
+        params: [
+          {
+            name: "$f.{callId}.$param.foo",
+            defaultValue: { name: "$f.$param.foo.$default" },
+          },
+        ],
+      },
+      {
+        steps: [{ find: "$f.{callId}.$call.$pa2", as: literal(42) }],
+        result: calling(name("plus"), [
+          name("$f.{callId}.$param.foo"),
+          name("$f.{callId}.$call.$pa2"),
+        ]),
+      }
+    ),
+  });
+});
 
 test("A calling node decomposes into a step for each argument", (t) => {
   const expression = calling(
@@ -83,7 +149,9 @@ test("A calling node decomposes into a step for each argument", (t) => {
     [literal(42)],
     [["bar", literal("baz")]]
   );
-  const result = decompose(expression, new Map([["foo", literal(42)]]));
+  const result = decompose(expression, {
+    builtins: new Map([["foo", literal(42)]]),
+  });
   t.deepEqual(
     result.result,
     calling(name("foo"), [name("$call.$pa1")], [["bar", name("$call.$na1")]])

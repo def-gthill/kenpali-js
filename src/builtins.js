@@ -5,15 +5,26 @@ import {
   eagerBind,
   either,
   is,
-  matches,
   objectOf,
   oneOf,
   optional,
   rest,
 } from "./bind.js";
-import { given, literal } from "./kpast.js";
+import { push } from "./decompose.js";
+import {
+  array,
+  bind,
+  calling,
+  ifThrown,
+  if_,
+  literal,
+  name,
+  passThrown,
+  rest as restNode,
+  spread,
+} from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { argumentError, callOnValues } from "./kpeval.js";
+import { argumentError, callOnValues, expansion, wrongType } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -220,6 +231,10 @@ const rawBuiltins = [
     { params: [{ rest: { name: "rest", type: "boolean" } }] },
     function (argGetter) {
       for (let i = 0; i < argGetter.numRestArgs; i++) {
+        const arg = argGetter.restArg(i);
+        if (!isBoolean(arg)) {
+          return argumentError(wrongType(arg, "boolean"), []);
+        }
         if (!argGetter.restArg(i)) {
           return false;
         }
@@ -232,7 +247,11 @@ const rawBuiltins = [
     { params: [{ rest: { name: "rest", type: "boolean" } }] },
     function (argGetter) {
       for (let i = 0; i < argGetter.numRestArgs; i++) {
-        if (argGetter.restArg(i)) {
+        const arg = argGetter.restArg(i);
+        if (!isBoolean(arg)) {
+          return argumentError(wrongType(arg, "boolean"), []);
+        }
+        if (arg) {
           return true;
         }
       }
@@ -300,25 +319,143 @@ const rawBuiltins = [
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
-  lazyBuiltin(
+  selfInliningBuiltin(
     "if",
     {
       params: [{ name: "condition", type: "boolean" }],
       namedParams: ["then", "else"],
     },
-    function (argGetter) {
-      if (argGetter.arg("condition")) {
-        return argGetter.arg("then");
-      } else {
-        return argGetter.arg("else");
-      }
+    function (_scopeId, paramNames) {
+      return {
+        expansion: {
+          steps: [],
+          result: if_(
+            name(paramNames.get("condition")),
+            name(paramNames.get("then")),
+            name(paramNames.get("else"))
+          ),
+        },
+      };
     }
   ),
-  builtin(
+  // TODO Remove this abomination once iteration mechanisms based on streams are implemented
+  selfInliningBuiltin(
     "repeat",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
-      return loop("repeat", start, step, () => {});
+    {
+      params: ["start", { name: "step", type: "function" }],
+    },
+    function (scopeId, paramNames, computed) {
+      const functionName = "repeat";
+      const stepsNeeded = [];
+      let start, step;
+      if (computed.has(paramNames.get("start"))) {
+        start = computed.get(paramNames.get("start"));
+      } else {
+        stepsNeeded.push(paramNames.get("start"));
+      }
+      if (computed.has(paramNames.get("step"))) {
+        step = computed.get(paramNames.get("step"));
+      } else {
+        stepsNeeded.push(paramNames.get("step"));
+      }
+      if (stepsNeeded.length > 0) {
+        return { stepsNeeded };
+      }
+      const stepCall = calling(literal(step), [literal(start)]);
+      const continuation = selfInliningBuiltin(
+        "repeat.continuation",
+        {
+          params: ["stepResult"],
+        },
+        function (scopeId, paramNames, computed) {
+          if (!computed.has(paramNames.get("stepResult"))) {
+            return {
+              stepsNeeded: [paramNames.get("stepResult")],
+            };
+          }
+          const stepResult = computed.get(paramNames.get("stepResult"));
+          const whileCondition = stepResult.has("while")
+            ? stepResult.get("while")
+            : true;
+          if (!isBoolean(whileCondition)) {
+            if (isThrown(whileCondition)) {
+              return { value: whileCondition };
+            }
+            return {
+              value: kpthrow(
+                "wrongElementType",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "while"],
+                ["value", whileCondition],
+                ["expectedType", "boolean"]
+              ),
+            };
+          }
+          if (!whileCondition) {
+            return { value: start };
+          }
+          const continueIf = stepResult.has("continueIf")
+            ? stepResult.get("continueIf")
+            : true;
+          if (!isBoolean(continueIf)) {
+            if (isThrown(continueIf)) {
+              return { value: continueIf };
+            }
+            return {
+              value: kpthrow(
+                "wrongElementType",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "continueIf"],
+                ["value", continueIf],
+                ["expectedType", "boolean"]
+              ),
+            };
+          }
+          if (!stepResult.has("next")) {
+            return {
+              value: kpthrow(
+                "requiredKeyMissing",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "next"]
+              ),
+            };
+          }
+          const next = stepResult.get("next");
+          if (isThrown(next)) {
+            return {
+              value: kpthrow(
+                "errorInIteration",
+                ["function", functionName],
+                ["currentValue", current],
+                ["error", next]
+              ),
+            };
+          }
+          if (!continueIf) {
+            return { value: next };
+          }
+          return {
+            expansion: {
+              steps: [],
+              result: calling(name(functionName), [
+                literal(next),
+                literal(step),
+              ]),
+            },
+          };
+        }
+      );
+      return {
+        expansion: {
+          steps: [{ find: push(scopeId, "stepResult"), as: stepCall }],
+          result: calling(literal(continuation), [
+            name(push(scopeId, "stepResult")),
+          ]),
+        },
+      };
     }
   ),
   builtin(
@@ -369,21 +506,154 @@ const rawBuiltins = [
       return sequence.length;
     }
   ),
-  builtin(
+  // TODO Remove this abomination once iteration mechanisms based on streams are implemented
+  selfInliningBuiltin(
     "build",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
-      const result = [];
-      const loopResult = loop("build", start, step, (stepResult) => {
-        if (stepResult.get("where") ?? true) {
-          result.push(stepResult.get("out") ?? stepResult.get("next"));
-        }
-      });
-      if (isThrown(loopResult)) {
-        return loopResult;
+    {
+      params: [
+        "start",
+        { name: "step", type: "function" },
+        { name: "acc", type: "array", defaultValue: array() },
+      ],
+    },
+    function (scopeId, paramNames, computed) {
+      const functionName = "build";
+      const stepsNeeded = [];
+      let start, step, acc;
+      if (computed.has(paramNames.get("start"))) {
+        start = computed.get(paramNames.get("start"));
       } else {
-        return result;
+        stepsNeeded.push(paramNames.get("start"));
       }
+      if (computed.has(paramNames.get("step"))) {
+        step = computed.get(paramNames.get("step"));
+      } else {
+        stepsNeeded.push(paramNames.get("step"));
+      }
+      if (computed.has(paramNames.get("acc"))) {
+        acc = computed.get(paramNames.get("acc"));
+      } else {
+        stepsNeeded.push(paramNames.get("acc"));
+      }
+      if (stepsNeeded.length > 0) {
+        return { stepsNeeded };
+      }
+      const stepCall = calling(literal(step), [literal(start)]);
+      const continuation = selfInliningBuiltin(
+        "repeat.continuation",
+        {
+          params: ["stepResult"],
+        },
+        function (scopeId, paramNames, computed) {
+          if (!computed.has(paramNames.get("stepResult"))) {
+            return {
+              stepsNeeded: [paramNames.get("stepResult")],
+            };
+          }
+          const stepResult = computed.get(paramNames.get("stepResult"));
+          const whileCondition = stepResult.has("while")
+            ? stepResult.get("while")
+            : true;
+          if (!isBoolean(whileCondition)) {
+            if (isThrown(whileCondition)) {
+              return { value: whileCondition };
+            }
+            return {
+              value: kpthrow(
+                "wrongElementType",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "while"],
+                ["value", whileCondition],
+                ["expectedType", "boolean"]
+              ),
+            };
+          }
+          if (!whileCondition) {
+            return { value: acc };
+          }
+          const continueIf = stepResult.has("continueIf")
+            ? stepResult.get("continueIf")
+            : true;
+          if (!isBoolean(continueIf)) {
+            if (isThrown(continueIf)) {
+              return { value: continueIf };
+            }
+            return {
+              value: kpthrow(
+                "wrongElementType",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "continueIf"],
+                ["value", continueIf],
+                ["expectedType", "boolean"]
+              ),
+            };
+          }
+          if (!stepResult.has("next")) {
+            return {
+              value: kpthrow(
+                "requiredKeyMissing",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "next"]
+              ),
+            };
+          }
+          const next = stepResult.get("next");
+          if (isThrown(next)) {
+            return {
+              value: kpthrow(
+                "errorInIteration",
+                ["function", functionName],
+                ["currentValue", start],
+                ["error", next]
+              ),
+            };
+          }
+          const where = stepResult.get("where") ?? true;
+          if (!isBoolean(where)) {
+            if (isThrown(where)) {
+              return { value: where };
+            }
+            return {
+              value: kpthrow(
+                "wrongElementType",
+                ["function", functionName],
+                ["object", stepResult],
+                ["key", "continueIf"],
+                ["value", continueIf],
+                ["expectedType", "boolean"]
+              ),
+            };
+          }
+          const nextAcc =
+            stepResult.get("where") ?? true
+              ? [...acc, stepResult.has("out") ? stepResult.get("out") : next]
+              : acc;
+          if (!continueIf) {
+            return { value: nextAcc };
+          }
+          return {
+            expansion: {
+              steps: [],
+              result: calling(name(functionName), [
+                literal(next),
+                literal(step),
+                literal(nextAcc),
+              ]),
+            },
+          };
+        }
+      );
+      return {
+        expansion: {
+          steps: [{ find: push(scopeId, "stepResult"), as: stepCall }],
+          result: calling(literal(continuation), [
+            name(push(scopeId, "stepResult")),
+          ]),
+        },
+      };
     }
   ),
   builtin(
@@ -400,28 +670,81 @@ const rawBuiltins = [
       return kpobject(...properties);
     }
   ),
-  builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
-    return eagerBind(value, schema);
-  }),
-  builtin(
-    "matches",
+  selfInliningBuiltin(
+    "bind",
     { params: ["value", "schema"] },
-    function ([value, schema]) {
-      return matches(value, schema);
+    function (_scopeId, paramNames) {
+      return expansion(
+        bind(name(paramNames.get("value")), name(paramNames.get("schema")))
+      );
     }
   ),
-  builtin(
+  selfInliningBuiltin(
+    "matches",
+    { params: ["value", "schema"] },
+    function (scopeId, paramNames) {
+      return expansion(
+        ifThrown(name(push(scopeId, "trueIfNotError")), literal(false)),
+        [
+          {
+            find: push(scopeId, "trueIfNotError"),
+            as: passThrown(name(push(scopeId, "all")), literal(true)),
+          },
+          {
+            find: push(scopeId, "all"),
+            as: calling(name("at"), [
+              name(push(scopeId, "binding")),
+              literal("all"),
+            ]),
+          },
+          {
+            find: push(scopeId, "binding"),
+            as: bind(
+              name(paramNames.get("value")),
+              name(paramNames.get("schema"))
+            ),
+          },
+        ]
+      );
+    }
+  ),
+  selfInliningBuiltin(
     "switch",
     {
       params: ["value", { rest: { name: "cases", type: ["any", "any"] } }],
     },
-    function ([value, ...cases]) {
+    function (scopeId, paramNames, computed) {
+      const stepsNeeded = [];
+      let value, cases;
+      if (computed.has(paramNames.get("value"))) {
+        value = computed.get(paramNames.get("value"));
+      } else {
+        stepsNeeded.push(paramNames.get("value"));
+      }
+      if (computed.has(paramNames.get("cases"))) {
+        cases = computed.get(paramNames.get("cases"));
+      } else {
+        stepsNeeded.push(paramNames.get("cases"));
+      }
+      if (stepsNeeded.length > 0) {
+        return { stepsNeeded };
+      }
       for (const [schema, f] of cases) {
         const bindings = eagerBind(value, schema);
         if (!isThrown(bindings)) {
-          return callOnValues(toFunction(f), [value], bindings);
+          return {
+            expansion: {
+              steps: [],
+              result: calling(
+                literal(toFunction(f)),
+                [literal(value)],
+                [spread(literal(bindings))]
+              ),
+            },
+          };
         }
       }
+      return { value: kpthrow("noCasesMatched", ["value", value]) };
     }
   ),
   builtin(
@@ -431,8 +754,8 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: literal(null),
         },
       ],
     },
@@ -456,8 +779,8 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: literal(null),
         },
       ],
     },
@@ -473,8 +796,8 @@ const rawBuiltins = [
         "values",
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", null),
+          defaultValue: literal(null),
         },
       ],
     },
@@ -537,6 +860,7 @@ export function builtin(name, paramSpec, f) {
   return f;
 }
 
+// TODO Remove this once everything is moved over to the compilation pipeline
 export function lazyBuiltin(name, paramSpec, f) {
   f.builtinName = name;
   f.isLazy = true;
@@ -544,6 +868,81 @@ export function lazyBuiltin(name, paramSpec, f) {
     f[property] = paramSpec[property];
   }
   return f;
+}
+
+export function selfInliningBuiltin(name, paramSpec, f) {
+  const scopeId = push("$builtins", name, "{callId}");
+  const paramNames = new Map();
+  const scopedParams = [];
+  for (const param of paramSpec.params ?? []) {
+    const { simpleName, scopedName, scopedParam } = scopeParam(param, scopeId);
+    paramNames.set(simpleName, scopedName);
+    scopedParams.push(scopedParam);
+  }
+  const scopedNamedParams = [];
+  for (const param of paramSpec.namedParams ?? []) {
+    const { simpleName, scopedName, scopedParam } = scopeParam(param, scopeId);
+    paramNames.set(simpleName, scopedName);
+    scopedNamedParams.push(scopedParam);
+  }
+  let wrapper = (injectCallId, ...args) =>
+    f(
+      scopeId,
+      new Map(
+        [...paramNames].map(([localName, globalName]) => [
+          localName,
+          injectCallId(globalName),
+        ])
+      ),
+      ...args
+    );
+  wrapper = builtin(
+    name,
+    { params: scopedParams, namedParams: scopedNamedParams },
+    wrapper
+  );
+  wrapper.isSelfInlining = true;
+  wrapper.paramNames = paramNames;
+  return wrapper;
+}
+
+export function demandParameterValues(params, paramNames, computed) {
+  const result = {};
+  const stepsNeeded = [];
+  for (const param of params) {
+    if (computed.has(paramNames.get(param))) {
+      result[param] = computed.get(paramNames.get(param));
+      if (isThrown(result[param])) {
+        return [result, { value: result[param] }];
+      }
+    } else {
+      stepsNeeded.push(paramNames.get(param));
+    }
+  }
+  if (stepsNeeded.length > 0) {
+    return [result, { stepsNeeded }];
+  } else {
+    return [result, undefined];
+  }
+}
+
+function scopeParam(param, scopeId) {
+  if (typeof param === "string") {
+    return {
+      simpleName: param,
+      scopedName: push(scopeId, "$param", param),
+      scopedParam: push(scopeId, "$param", param),
+    };
+  } else if ("name" in param) {
+    return {
+      simpleName: param.name,
+      scopedName: push(scopeId, "$param", param.name),
+      scopedParam: { ...param, name: push(scopeId, "$param", param.name) },
+    };
+  } else if ("rest" in param) {
+    const restResult = scopeParam(param.rest, scopeId);
+    return { ...restResult, scopedParam: restNode(restResult.scopedParam) };
+  }
 }
 
 export function equals(a, b) {

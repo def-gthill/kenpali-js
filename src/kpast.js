@@ -26,6 +26,10 @@ export function name(name) {
   return { name };
 }
 
+export function module(...args) {
+  return { module: args };
+}
+
 export function defining(...args) {
   const names = args.slice(0, -1);
   const result = args.at(-1);
@@ -34,6 +38,14 @@ export function defining(...args) {
 
 export function given(params, result) {
   return { given: params, result };
+}
+
+export function rest(param) {
+  return { rest: param };
+}
+
+export function withDefault(name, defaultValue) {
+  return { name, defaultValue };
 }
 
 export function calling(f, args = [], namedArgs = []) {
@@ -79,4 +91,54 @@ export function arraySpread(expression) {
 
 export function objectSpread(expression) {
   return { objectSpread: expression };
+}
+
+// Instructions
+
+export function if_(condition, ifTrue, ifFalse) {
+  return { if: condition, then: ifTrue, else: ifFalse };
+}
+
+export function ifThrown(possibleError, valueIfError) {
+  return { ifThrown: possibleError, then: valueIfError };
+}
+
+export function passThrown(possibleError, valueIfNotError) {
+  return { passThrown: possibleError, otherwise: valueIfNotError };
+}
+
+export function at(collection, index) {
+  return { at: index, in: collection };
+}
+
+export function bind(value, schema) {
+  return { bind: value, to: schema };
+}
+
+export function bindValid(value, schema) {
+  return { bindValid: value, to: schema };
+}
+
+export function bindArrayElement(array, index, schema) {
+  return { bindElementOf: array, index, to: schema };
+}
+
+export function bindArrayRest(array, schema) {
+  return { bindArrayRest: array, to: schema };
+}
+
+export function bindObjectEntry(object, key, schema) {
+  return { bindEntryOf: object, key, to: schema };
+}
+
+export function bindObjectRest(object, schema) {
+  return { bindObjectRest: object, to: schema };
+}
+
+export function assert(value, condition) {
+  return { assert: value, satisfies: condition };
+}
+
+export function checkType(value, type) {
+  return { check: value, type };
 }

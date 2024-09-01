@@ -1,0 +1,299 @@
+{
+  "steps": [
+    {
+      "find": "$def.twiddle",
+      "as": {
+        "given": {
+          "params": [
+            "$def.twiddle.$f.{callId}.$param.x"
+          ]
+        },
+        "result": {
+          "steps": [
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1.$call.$pa1",
+              "as": {
+                "literal": "string"
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1.$call.$pa2",
+              "as": {
+                "literal": "s"
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1",
+              "as": {
+                "calling": {
+                  "name": "as"
+                },
+                "args": [
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1.$call.$pa1"
+                  },
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1.$call.$pa2"
+                  }
+                ]
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$2",
+              "as": {
+                "given": {
+                  "namedParams": [
+                    "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$param.s"
+                  ]
+                },
+                "result": {
+                  "steps": [
+                    {
+                      "find": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1.$arr.$1",
+                      "as": {
+                        "literal": "Hello, "
+                      }
+                    },
+                    {
+                      "find": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1.$arr.$3",
+                      "as": {
+                        "literal": "!"
+                      }
+                    },
+                    {
+                      "find": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1",
+                      "as": {
+                        "array": [
+                          {
+                            "name": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1.$arr.$1"
+                          },
+                          {
+                            "name": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$param.s"
+                          },
+                          {
+                            "name": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1.$arr.$3"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "result": {
+                    "calling": {
+                      "name": "join"
+                    },
+                    "args": [
+                      {
+                        "name": "$def.twiddle.$f.$call.$pa2.$arr.$2.$f.{callId}.$call.$pa1"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa2",
+              "as": {
+                "array": [
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$1"
+                  },
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa2.$arr.$2"
+                  }
+                ]
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1.$call.$pa1",
+              "as": {
+                "literal": "number"
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1.$call.$pa2",
+              "as": {
+                "literal": "n"
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1",
+              "as": {
+                "calling": {
+                  "name": "as"
+                },
+                "args": [
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1.$call.$pa1"
+                  },
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1.$call.$pa2"
+                  }
+                ]
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$2",
+              "as": {
+                "given": {
+                  "namedParams": [
+                    "$def.twiddle.$f.$call.$pa3.$arr.$2.$f.{callId}.$param.n"
+                  ]
+                },
+                "result": {
+                  "steps": [
+                    {
+                      "find": "$def.twiddle.$f.$call.$pa3.$arr.$2.$f.{callId}.$call.$pa2",
+                      "as": {
+                        "literal": 5
+                      }
+                    }
+                  ],
+                  "result": {
+                    "calling": {
+                      "name": "plus"
+                    },
+                    "args": [
+                      {
+                        "name": "$def.twiddle.$f.$call.$pa3.$arr.$2.$f.{callId}.$param.n"
+                      },
+                      {
+                        "name": "$def.twiddle.$f.$call.$pa3.$arr.$2.$f.{callId}.$call.$pa2"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa3",
+              "as": {
+                "array": [
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$1"
+                  },
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa3.$arr.$2"
+                  }
+                ]
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa4.$arr.$1",
+              "as": {
+                "literal": "any"
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa4.$arr.$2",
+              "as": {
+                "literal": null
+              }
+            },
+            {
+              "find": "$def.twiddle.$f.{callId}.$call.$pa4",
+              "as": {
+                "array": [
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa4.$arr.$1"
+                  },
+                  {
+                    "name": "$def.twiddle.$f.{callId}.$call.$pa4.$arr.$2"
+                  }
+                ]
+              }
+            }
+          ],
+          "result": {
+            "calling": {
+              "name": "switch"
+            },
+            "args": [
+              {
+                "name": "$def.twiddle.$f.{callId}.$param.x"
+              },
+              {
+                "name": "$def.twiddle.$f.{callId}.$call.$pa2"
+              },
+              {
+                "name": "$def.twiddle.$f.{callId}.$call.$pa3"
+              },
+              {
+                "name": "$def.twiddle.$f.{callId}.$call.$pa4"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "find": "$def.$arr.$1.$call.$pa1",
+      "as": {
+        "literal": "world"
+      }
+    },
+    {
+      "find": "$def.$arr.$1",
+      "as": {
+        "calling": {
+          "name": "$def.twiddle"
+        },
+        "args": [
+          {
+            "name": "$def.$arr.$1.$call.$pa1"
+          }
+        ]
+      }
+    },
+    {
+      "find": "$def.$arr.$2.$call.$pa1",
+      "as": {
+        "literal": 42
+      }
+    },
+    {
+      "find": "$def.$arr.$2",
+      "as": {
+        "calling": {
+          "name": "$def.twiddle"
+        },
+        "args": [
+          {
+            "name": "$def.$arr.$2.$call.$pa1"
+          }
+        ]
+      }
+    },
+    {
+      "find": "$def.$arr.$3.$call.$pa1",
+      "as": {
+        "array": []
+      }
+    },
+    {
+      "find": "$def.$arr.$3",
+      "as": {
+        "calling": {
+          "name": "$def.twiddle"
+        },
+        "args": [
+          {
+            "name": "$def.$arr.$3.$call.$pa1"
+          }
+        ]
+      }
+    }
+  ],
+  "result": {
+    "array": [
+      {
+        "name": "$def.$arr.$1"
+      },
+      {
+        "name": "$def.$arr.$2"
+      },
+      {
+        "name": "$def.$arr.$3"
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import {
   given,
   group,
   literal,
+  module,
   name,
   object,
   objectPattern,
@@ -19,8 +20,8 @@ import {
 } from "./kpast.js";
 import kplex from "./kplex.js";
 
-export default function kpparse(code) {
-  const sugar = kpparseSugared(code);
+export default function kpparse(code, rootNode = parse) {
+  const sugar = kpparseSugared(code, rootNode);
   if ("error" in sugar) {
     return sugar;
   } else {
@@ -28,9 +29,9 @@ export default function kpparse(code) {
   }
 }
 
-export function kpparseSugared(code) {
+export function kpparseSugared(code, rootNode = parse) {
   const tokens = kplex(code);
-  const result = kpparseTokens(tokens);
+  const result = kpparseTokens(tokens, rootNode);
   if ("error" in result) {
     return { ...result, code };
   } else {
@@ -38,9 +39,9 @@ export function kpparseSugared(code) {
   }
 }
 
-export function kpparseTokens(tokens) {
+export function kpparseTokens(tokens, rootNode = parse) {
   const tokenList = [...tokens];
-  const parseResult = parseAll(tokenList);
+  const parseResult = parseAll(tokenList, rootNode);
   if ("error" in parseResult) {
     return parseResult;
   } else {
@@ -48,11 +49,15 @@ export function kpparseTokens(tokens) {
   }
 }
 
-function parseAll(tokens) {
-  return parseAllOf([parse, consume("EOF", "unparsedInput")], (ast) => ast)(
+function parseAll(tokens, rootNode = parse) {
+  return parseAllOf([rootNode, consume("EOF", "unparsedInput")], (ast) => ast)(
     tokens,
     0
   );
+}
+
+export function kpparseModule(code) {
+  return kpparse(code, parseModule);
 }
 
 function parse(tokens, start) {
@@ -148,6 +153,23 @@ function parseObjectPatternPropertyName(tokens, start) {
   return parseAllOf(
     [parseName, consume("COLON", "expectedPropertyName")],
     (name) => name.name
+  )(tokens, start);
+}
+
+function parseModule(tokens, start) {
+  return convert(
+    parseZeroOrMore(
+      parseAllOf([
+        convert(parseName, (name) => name.name),
+        consume("EQUALS", "missingEqualsInDefinition"),
+        parseAssignable,
+      ]),
+      {
+        terminator: consume("SEMICOLON"),
+        errorIfTerminatorMissing: "missingDefinitionSeparator",
+      }
+    ),
+    (definitions) => module(...definitions)
   )(tokens, start);
 }
 
