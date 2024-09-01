@@ -24,7 +24,7 @@ import {
   spread,
 } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { argumentError, callOnValues, expansion, wrongType } from "./kpeval.js";
+import { argumentError, expansion, wrongType } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -1104,75 +1104,6 @@ export function toFunction(value) {
 
 function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
-}
-
-function loop(functionName, start, step, callback) {
-  let current = start;
-  for (let i = 0; i < 1000; i++) {
-    const stepResult = callOnValues(step, [current]);
-    const whileCondition = stepResult.has("while")
-      ? stepResult.get("while")
-      : true;
-    if (!isBoolean(whileCondition)) {
-      if (isThrown(whileCondition)) {
-        return whileCondition;
-      }
-      return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "while"],
-        ["value", whileCondition],
-        ["expectedType", "boolean"]
-      );
-    }
-    if (!whileCondition) {
-      return current;
-    }
-    const continueIf = stepResult.has("continueIf")
-      ? stepResult.get("continueIf")
-      : true;
-    if (!isBoolean(continueIf)) {
-      if (isThrown(continueIf)) {
-        return continueIf;
-      }
-      return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "continueIf"],
-        ["value", continueIf],
-        ["expectedType", "boolean"]
-      );
-    }
-    if (!stepResult.has("next")) {
-      return kpthrow(
-        "requiredKeyMissing",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "next"]
-      );
-    }
-    callback(stepResult);
-    const next = stepResult.get("next");
-    if (isThrown(next)) {
-      return kpthrow(
-        "errorInIteration",
-        ["function", functionName],
-        ["currentValue", current],
-        ["error", next]
-      );
-    }
-    if (!continueIf) {
-      return next;
-    }
-    current = next;
-  }
-  return kpthrow(
-    "tooManyIterations",
-    ["function", functionName],
-    ["currentValue", current]
-  );
 }
 
 function validateArgument(value, schema) {

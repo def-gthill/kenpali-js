@@ -1,25 +1,23 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import { given, literal } from "../src/kpast.js";
-import kpeval, {
-  deepToJsObject,
+import { literal } from "../src/kpast.js";
+import {
   normalizeAllParams,
   normalizeParam,
   paramsFromBuiltin,
-  paramsFromGiven,
 } from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 
-test("A given with an empty param spec has no params", (t) => {
-  const f = kpeval(given({}, literal(null)));
+// test("A given with an empty param spec has no params", (t) => {
+//   const f = kpeval(given({}, literal(null)));
 
-  const params = paramsFromGiven(f);
+//   const params = paramsFromGiven(f);
 
-  t.deepEqual(deepToJsObject(params), {
-    params: [],
-    namedParams: [],
-  });
-});
+//   t.deepEqual(deepToJsObject(params), {
+//     params: [],
+//     namedParams: [],
+//   });
+// });
 
 // test("All param types can be extracted from a given", (t) => {
 //   const f = kpeval(

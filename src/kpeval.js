@@ -6,7 +6,6 @@ import {
   eagerBind,
   either,
   force,
-  lazyBind,
   objectOf,
   rest,
 } from "./bind.js";
@@ -24,7 +23,6 @@ import {
   isThrown,
   loadBuiltins,
   selfInliningBuiltin,
-  toString,
   typeOf,
 } from "./builtins.js";
 import { core as coreCode } from "./core.js";
@@ -70,9 +68,8 @@ export function kpevalJson(
 
 export default function kpeval(
   expression,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject() } = {}
 ) {
-  tracing = trace;
   const compiled = kpcompile(expression, { names, modules });
   if (isError(compiled)) {
     return compiled;
@@ -97,9 +94,8 @@ export function kpcompile(
   if (isError(decomposed)) {
     return decomposed;
   }
-  // TODO remove the conversion to scope once everything is moved over to the compilation pipeline
-  const nameScope = new Scope(builtins, names);
-  return { instructions: decomposed, moduleInstructions, names: nameScope };
+  const allNames = kpoMerge(builtins, names);
+  return { instructions: decomposed, moduleInstructions, names: allNames };
 }
 
 export function evalCompiled({ instructions, moduleInstructions, names }) {
@@ -107,7 +103,7 @@ export function evalCompiled({ instructions, moduleInstructions, names }) {
     steps: [...instructions.steps, ...moduleInstructions],
     result: instructions.result,
   };
-  return deepForce(deepCatch(evalWithBuiltins(allInstructions, names)));
+  return deepForce(deepCatch(evalPlan(allInstructions, names)));
 }
 
 function validateExpression(expression) {
@@ -254,38 +250,8 @@ function loadCore(builtins) {
   return core;
 }
 
-export function evalWithBuiltins(expression, names) {
-  if (expression === null || typeof expression !== "object") {
-    return kpthrow("notAnExpression", ["value", expression]);
-  } else if ("steps" in expression) {
-    return evalPlan(expression, names);
-  } else if ("literal" in expression) {
-    return evalThis.literal(expression, names);
-  } else if ("array" in expression) {
-    return evalThis.array(expression, names);
-  } else if ("object" in expression) {
-    return evalThis.object(expression, names);
-  } else if ("name" in expression) {
-    return evalThis.name(expression, names);
-  } else if ("defining" in expression) {
-    return evalThis.defining(expression, names);
-  } else if ("given" in expression) {
-    return evalThis.given(expression, names);
-  } else if ("calling" in expression) {
-    return evalThis.calling(expression, names);
-  } else if ("catching" in expression) {
-    return evalThis.catching(expression, names);
-  } else if ("quote" in expression) {
-    return evalThis.quote(expression, names);
-  } else if ("unquote" in expression) {
-    return evalThis.unquote(expression, names);
-  } else {
-    return kpthrow("notAnExpression", ["value", expression]);
-  }
-}
-
 function evalPlan(plan, names) {
-  const computed = names.toMap();
+  const computed = names;
   const steps = [...plan.steps, { find: "$result", as: plan.result }];
   const stepsByName = new Map(steps.map((step) => [step.find, step]));
   let nextCallId = 1;
@@ -311,9 +277,9 @@ function evalPlan(plan, names) {
         step.callId = nextCallId;
         nextCallId += 1;
       }
-      result = tryEvalCalling(step.as, step.callId, computed, names);
+      result = tryEvalCalling(step.as, step.callId, computed);
     } else {
-      result = tryEvalNode(step.find, step.as, computed, names);
+      result = tryEvalNode(step.find, step.as, computed);
     }
     // console.log(step);
     // console.log(result);
@@ -363,12 +329,7 @@ export function expansion(result, steps = []) {
   return { expansion: { steps, result } };
 }
 
-export function tryEvalNode(
-  name,
-  node,
-  computed = kpobject(),
-  names = kpobject()
-) {
+export function tryEvalNode(name, node, computed = kpobject()) {
   if ("literal" in node) {
     return { value: node.literal };
   } else if ("name" in node) {
@@ -406,47 +367,7 @@ export function tryEvalNode(
   } else if ("bindObjectRest" in node) {
     return tryEvalBindObjectRest(node, computed);
   } else {
-    // TODO Remove this once everything is moved over to the compilation pipeline
-    try {
-      const value = evalWithBuiltins(node, new BridgingScope(names, computed));
-      return { value };
-    } catch (error) {
-      if (isThrown(error) && error.get("#thrown") === "stepNeeded") {
-        return { stepsNeeded: [error.get("name")] };
-      } else {
-        throw error;
-      }
-    }
-  }
-}
-
-// TODO Remove this once everything is moved over to the compilation pipeline
-Error.stackTraceLimit = Infinity;
-class BridgingScope {
-  constructor(oldStyleNames, newStyleNames) {
-    this.oldStyleNames = oldStyleNames;
-    this.newStyleNames = newStyleNames;
-  }
-
-  has(key) {
-    return true;
-  }
-
-  get(key) {
-    if (this.oldStyleNames.has(key)) {
-      return this.oldStyleNames.get(key);
-    } else if (this.newStyleNames.has(key)) {
-      return this.newStyleNames.get(key);
-    } else {
-      // if (key === "$def.$call.$pa1") {
-      //   throw new Error(key);
-      // }
-      throw kpthrow("stepNeeded", ["name", key]);
-    }
-  }
-
-  set(key, value) {
-    this.oldStyleNames.set(key, value);
+    throw new Error(`Invalid instruction ${node}`);
   }
 }
 
@@ -530,7 +451,7 @@ function tryEvalGiven(node, computed, names) {
   };
 }
 
-function tryEvalCalling(node, callId, computed, names) {
+function tryEvalCalling(node, callId, computed) {
   const stepsNeeded = [];
   let f;
   if ("bound" in node.calling) {
@@ -2084,147 +2005,6 @@ function demandValue(node, computed) {
   }
 }
 
-const evalThis = {
-  literal(expression) {
-    return expression.literal;
-  },
-  array(expression, names) {
-    const result = [];
-    for (const element of expression.array) {
-      if ("spread" in element) {
-        result.push(...evalWithBuiltins(element.spread, names));
-      } else {
-        result.push(evalWithBuiltins(element, names));
-      }
-    }
-    return result;
-  },
-  object(expression, names) {
-    const result = [];
-    for (const element of expression.object) {
-      if ("spread" in element) {
-        result.push(...kpoEntries(evalWithBuiltins(element.spread, names)));
-      } else {
-        const [key, value] = element;
-        result.push([
-          typeof key === "string" ? key : evalWithBuiltins(key, names),
-          evalWithBuiltins(value, names),
-        ]);
-      }
-    }
-    return kpobject(...result);
-  },
-  name(expression, names) {
-    if (!names.has(expression.name)) {
-      return kpthrow("nameNotDefined", ["name", expression.name]);
-    }
-    const binding = names.get(expression.name);
-    if (binding === null) {
-      return binding;
-    } else if (typeof binding === "object" && "expression" in binding) {
-      const result = evalWithBuiltins(binding.expression, binding.context);
-      names.set(expression.name, result);
-      return result;
-    } else if (typeof binding === "object" && "thunk" in binding) {
-      const result = binding.thunk();
-      names.set(expression.name, result);
-      return result;
-    } else {
-      return binding;
-    }
-  },
-  defining(expression, names) {
-    const definedNames = defineNames(expression.defining, names);
-    const scope = selfReferentialScope(names, definedNames);
-    return evalWithBuiltins(expression.result, scope);
-  },
-  given(expression, names) {
-    const result = kpobject(
-      ["#given", paramSpecToKpValue_OLD(expression.given)],
-      ["result", expression.result],
-      ["closure", names]
-    );
-    return result;
-  },
-  calling(expression, names) {
-    const f = evalWithBuiltins(expression.calling, names);
-    const args = expression.args ?? [];
-    const namedArgs = expression.namedArgs ?? kpobject();
-    return callOnExpressionsTracing(f, args, namedArgs, names);
-  },
-  catching(expression, names) {
-    return catch_(evalWithBuiltins(expression.catching, names));
-  },
-  quote(expression, names) {
-    return quote(expression.quote, names);
-  },
-  unquote(expression, names) {
-    return evalWithBuiltins(
-      deepToJsObject(evalWithBuiltins(expression.unquote, names)),
-      names
-    );
-  },
-};
-
-function defineNames(definitions, names) {
-  let result = kpobject();
-  for (const definition of definitions) {
-    result = kpoMerge(result, defineNamesInDefinition(definition, names));
-  }
-  return result;
-}
-
-function defineNamesInDefinition(definition, names) {
-  const [pattern, value] = definition;
-  const schema = createPatternSchema(pattern);
-  let forcedValue;
-  if (typeof pattern === "string") {
-    forcedValue = value;
-  } else if ("arrayPattern" in pattern) {
-    forcedValue = evalWithBuiltins(value, names).map(literal);
-  } else if ("objectPattern" in pattern) {
-    forcedValue = kpoMap(evalWithBuiltins(value, names), ([key, value]) => [
-      key,
-      literal(value),
-    ]);
-  } else {
-    return kpthrow("invalidPattern", ["pattern", pattern]);
-  }
-  const bindings = lazyBind(forcedValue, schema);
-  return bindings;
-}
-
-function createPatternSchema(pattern) {
-  if (typeof pattern === "string") {
-    return as("any", pattern);
-  } else if ("arrayPattern" in pattern) {
-    return pattern.arrayPattern.map(createPatternSchema);
-  } else if ("objectPattern" in pattern) {
-    return kpobject(
-      ...pattern.objectPattern.map((element) => [element, "any"])
-    );
-  }
-}
-
-function selfReferentialScope(enclosingScope, localNames) {
-  const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
-    name,
-    { expression: value },
-  ]);
-  const scope = new Scope(enclosingScope, localNamesWithContext);
-  for (const [_, value] of localNamesWithContext) {
-    value.context = scope;
-  }
-  return scope;
-}
-
-function paramSpecToKpValue_OLD(paramSpec) {
-  return {
-    params: (paramSpec.params ?? []).map(paramToKpValue),
-    namedParams: (paramSpec.namedParams ?? []).map(paramToKpValue),
-  };
-}
-
 function paramSpecToKpValue(paramSpec) {
   return kpobject(
     ["params", (paramSpec.params ?? []).map(paramToKpValue)],
@@ -2240,230 +2020,6 @@ function paramToKpValue(param) {
   } else {
     return param;
   }
-}
-
-let tracing = false;
-
-class Tracer {
-  constructor() {
-    this.indent = "";
-  }
-
-  push() {
-    this.indent = this.indent + "| ";
-  }
-
-  pop() {
-    this.indent = this.indent.slice(0, -2);
-  }
-
-  trace(text) {
-    console.log(this.indent + text);
-  }
-}
-
-let tracer = new Tracer();
-
-function callOnExpressionsTracing(f, args, namedArgs, names) {
-  if (tracing) {
-    tracer.trace("Calling " + toString(f));
-    tracer.push();
-  }
-  const result = callOnExpressions(f, args, namedArgs, names);
-  if (tracing) {
-    tracer.pop();
-    tracer.trace("Called " + toString(f));
-    tracer.trace("Result was " + toString(result));
-  }
-  return result;
-}
-
-function callOnExpressions(f, args, namedArgs, names) {
-  const allArgs = {
-    args: evalExpressionArgs(args, names),
-    namedArgs: evalExpressionNamedArgs(namedArgs, names),
-  };
-  if (f instanceof Map && f.has("#given")) {
-    return callGiven(f, allArgs, names);
-  } else if (typeof f === "function") {
-    if (f.isLazy) {
-      return callLazyBuiltin(f, allArgs, names);
-    } else {
-      return callBuiltin(f, allArgs, names);
-    }
-  } else {
-    return kpthrow("notCallable", ["value", f]);
-  }
-}
-
-function evalExpressionArgs(args, names) {
-  const result = [];
-  for (const element of args) {
-    if ("spread" in element) {
-      result.push(...evalWithBuiltins(element.spread, names).map(literal));
-    } else {
-      result.push(element);
-    }
-  }
-  return result;
-}
-
-function evalExpressionNamedArgs(namedArgs, names) {
-  const result = [];
-  for (const element of namedArgs) {
-    if ("spread" in element) {
-      result.push(
-        ...kpoEntries(evalWithBuiltins(element.spread, names)).map(
-          ([name, value]) => [name, literal(value)]
-        )
-      );
-    } else {
-      result.push(element);
-    }
-  }
-  return kpobject(...result);
-}
-
-// For use by the host program.
-// This expects already-evaluated arguments, rather than expressions.
-export function callOnValues(f, args, namedArgs = kpobject()) {
-  const argExpressions = args.map((arg) => literal(arg));
-  const namedArgExpressions = kpoMap(namedArgs, ([name, value]) => [
-    name,
-    literal(value),
-  ]);
-  const allArgs = {
-    args: argExpressions,
-    namedArgs: namedArgExpressions,
-  };
-  if (f instanceof Map && f.has("#given")) {
-    return callGiven(f, allArgs, kpobject());
-  } else if (typeof f === "function") {
-    return callBuiltin(f, allArgs, kpobject());
-  } else {
-    return kpthrow("notCallable", ["value", f]);
-  }
-}
-
-function callGiven(f, allArgs, names) {
-  const allParams = paramsFromGiven(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const args = captureArgContext(allArgs.args, names);
-  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  const schema = createParamSchema(paramObjects);
-  const bindings = kpoMerge(
-    lazyBind(args, schema[0]),
-    lazyBind(namedArgs, schema[1])
-  );
-  if (isThrown(bindings)) {
-    return argumentErrorGivenParamObjects(paramObjects, bindings);
-  }
-  return evalWithBuiltins(
-    f.get("result"),
-    new Scope(f.get("closure") ?? kpobject(), bindings)
-  );
-}
-
-export function paramsFromGiven(f) {
-  return f.get("#given");
-}
-
-class Scope {
-  constructor(enclosingScope, localNames) {
-    if (!enclosingScope) {
-      throw new Error(`Invalid enclosing scope: ${enclosingScope}`);
-    }
-    if (!localNames) {
-      throw new Error(`Invalid local names: ${localNames}`);
-    }
-    this.enclosingScope = enclosingScope;
-    this.localNames = localNames;
-  }
-
-  *names() {
-    for (const name of this.localNames.keys()) {
-      yield name;
-    }
-    if (this.enclosingScope instanceof Scope) {
-      for (const name of this.enclosingScope.names()) {
-        yield name;
-      }
-    } else {
-      for (const name of this.enclosingScope.keys()) {
-        yield name;
-      }
-    }
-  }
-
-  has(key) {
-    return this.localNames.has(key) || this.enclosingScope.has(key);
-  }
-
-  get(key) {
-    if (this.localNames.has(key)) {
-      return this.localNames.get(key);
-    } else {
-      return this.enclosingScope.get(key);
-    }
-  }
-
-  set(key, value) {
-    if (this.localNames.has(key)) {
-      this.localNames.set(key, value);
-    } else {
-      this.enclosingScope.set(key, value);
-    }
-  }
-
-  toMap() {
-    const map = new Map();
-    for (const name of this.names()) {
-      map.set(name, this.get(name));
-    }
-    return map;
-  }
-}
-
-function callBuiltin(f, allArgs, names) {
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const args = captureArgContext(allArgs.args, names);
-  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  const schema = createParamSchema(paramObjects);
-  const bindings = kpoMerge(
-    eagerBind(args, schema[0]),
-    eagerBind(namedArgs, schema[1])
-  );
-  if (isThrown(bindings)) {
-    return argumentErrorGivenParamObjects(paramObjects, bindings);
-  }
-  const argValues = [];
-  for (const param of paramObjects.params) {
-    if ("rest" in param) {
-      argValues.push(...bindings.get(param.rest.name).map(force));
-    } else {
-      argValues.push(force(bindings.get(param.name)));
-    }
-  }
-  const namedArgValues = kpobject();
-  for (const param of paramObjects.namedParams) {
-    if ("rest" in param) {
-      for (const [name, value] of bindings.get(param.rest.name)) {
-        namedArgValues.set(name, force(value));
-      }
-    } else {
-      namedArgValues.set(param.name, force(bindings.get(param.name)));
-    }
-  }
-  return f(argValues, namedArgValues);
-}
-
-function captureArgContext(args, names) {
-  return args.map((arg) => captureContext(arg, names));
-}
-
-function captureNamedArgContext(namedArgs, names) {
-  return kpoMap(namedArgs, ([name, arg]) => [name, captureContext(arg, names)]);
 }
 
 function captureContext(expression, names) {
@@ -2511,54 +2067,6 @@ export function argumentError(err, argumentNames) {
 
 function simpleName(name) {
   return name.split(".").at(-1);
-}
-
-function callLazyBuiltin(f, allArgs, names) {
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const args = captureArgContext(allArgs.args, names);
-  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  const schema = createParamSchema(paramObjects);
-  const bindings = kpoMerge(
-    lazyBind(args, schema[0]),
-    lazyBind(namedArgs, schema[1])
-  );
-  if (isThrown(bindings)) {
-    return argumentErrorGivenParamObjects(paramObjects, bindings);
-  }
-  const restArgs = paramObjects.params.some((param) => "rest" in param)
-    ? force(
-        bindings.get(
-          paramObjects.params.find((param) => "rest" in param).rest.name
-        )
-      )
-    : [];
-  const argGetter = {
-    arg(name) {
-      const argValue = force(bindings.get(name));
-      if (isThrown(argValue)) {
-        throw argumentErrorGivenParamObjects(paramObjects, argValue);
-      }
-      return argValue;
-    },
-    numRestArgs: restArgs.length,
-    restArg(index) {
-      const argValue = force(restArgs[index]);
-      if (isThrown(argValue)) {
-        throw argumentErrorGivenParamObjects(paramObjects, argValue);
-      }
-      return argValue;
-    },
-  };
-  try {
-    return f(argGetter);
-  } catch (error) {
-    if (isThrown(error)) {
-      return error;
-    } else {
-      throw error;
-    }
-  }
 }
 
 export function paramsFromBuiltin(f) {
@@ -2646,29 +2154,6 @@ export function rethrow(err) {
     ["#thrown", err.get("#error")],
     ...kpoFilter(err, ([name, _]) => name !== "#error")
   );
-}
-
-function quote(expression, names) {
-  if (typeof expression !== "object") {
-    return expression;
-  } else if ("unquote" in expression) {
-    return deepToKpObject(evalWithBuiltins(expression.unquote, names));
-  } else if ("array" in expression) {
-    return deepToKpObject(
-      array(...expression.array.map((element) => quote(element, names)))
-    );
-  } else if ("object" in expression) {
-    return deepToKpObject(
-      object(
-        ...expression.object.map(([key, value]) => [
-          quote(key, names),
-          quote(value, names),
-        ])
-      )
-    );
-  } else {
-    return deepToKpObject(expression);
-  }
 }
 
 function deepToKpObject(expression) {

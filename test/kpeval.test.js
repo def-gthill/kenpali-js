@@ -1,13 +1,6 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import {
-  calling,
-  defining,
-  given,
-  literal,
-  name,
-  quote,
-} from "../src/kpast.js";
+import { calling, defining, given, literal, name } from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import { assertIsError } from "./assertIsError.js";
@@ -59,26 +52,6 @@ test("Function arguments can reference names", (t) => {
       )
     ),
     45
-  );
-});
-
-test("Eval results are Kenpali objects, not JavaScript objects", (t) => {
-  t.deepEqual(
-    kpeval(
-      quote(
-        given({ params: ["x"] }, calling(name("plus"), [name("x"), literal(3)]))
-      )
-    ),
-    kpobject(
-      ["given", kpobject(["params", ["x"]])],
-      [
-        "result",
-        kpobject(
-          ["calling", kpobject(["name", "plus"])],
-          ["args", [kpobject(["name", "x"]), kpobject(["literal", 3])]]
-        ),
-      ]
-    )
   );
 });
 

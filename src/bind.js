@@ -9,7 +9,7 @@ import {
   typeOf,
 } from "./builtins.js";
 import kpthrow from "./kperror.js";
-import { callOnValues, catch_, evalWithBuiltins, rethrow } from "./kpeval.js";
+import { catch_, rethrow } from "./kpeval.js";
 import kpobject, {
   kpoEntries,
   kpoKeys,
@@ -45,11 +45,8 @@ function eagerBindInternal(value, schema) {
 }
 
 export function force(value) {
-  // if (isThrown(value)) {
-  //   return withReason(errorPassed(), value);
-  // } else if (isExpression(value)) {
   if (isExpression(value)) {
-    return evalWithBuiltins(value.expression, value.context);
+    return value.expression.literal;
   } else if (isThunk(value)) {
     return value.thunk();
   } else {
