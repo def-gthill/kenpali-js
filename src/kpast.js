@@ -95,6 +95,10 @@ export function objectSpread(expression) {
 
 // Instructions
 
+export function findAll(value) {
+  return { findAll: value };
+}
+
 export function if_(condition, ifTrue, ifFalse) {
   return { if: condition, then: ifTrue, else: ifFalse };
 }

@@ -38,6 +38,7 @@ import {
   bindValid,
   calling,
   checkType,
+  findAll,
   if_,
   literal,
   name,
@@ -252,7 +253,11 @@ function loadCore(builtins) {
 
 function evalPlan(plan, names) {
   const computed = names;
-  const steps = [...plan.steps, { find: "$result", as: plan.result }];
+  const steps = [
+    ...plan.steps,
+    { find: "$lazyResult", as: plan.result },
+    { find: "$result", as: findAll(name("$lazyResult")) },
+  ];
   const stepsByName = new Map(steps.map((step) => [step.find, step]));
   let nextCallId = 1;
 
@@ -342,6 +347,8 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalGiven(node, computed);
   } else if ("catching" in node) {
     return tryEvalCatching(node, computed);
+  } else if ("findAll" in node) {
+    return tryEvalFindAll(node, computed);
   } else if ("if" in node) {
     return tryEvalIf(node, computed);
   } else if ("ifThrown" in node) {
@@ -367,7 +374,7 @@ export function tryEvalNode(name, node, computed = kpobject()) {
   } else if ("bindObjectRest" in node) {
     return tryEvalBindObjectRest(node, computed);
   } else {
-    throw new Error(`Invalid instruction ${node}`);
+    throw new Error(`Invalid instruction ${JSON.stringify(node)}`);
   }
 }
 
@@ -390,11 +397,12 @@ function tryEvalArray(node, computed) {
         stepsNeeded.push(element.spread.name);
       }
     } else {
-      if (computed.has(element.name)) {
-        result.push(computed.get(element.name));
-      } else {
-        stepsNeeded.push(element.name);
-      }
+      // if (computed.has(element.name)) {
+      //   result.push(computed.get(element.name));
+      // } else {
+      //   stepsNeeded.push(element.name);
+      // }
+      result.push(element);
     }
   }
   if (stepsNeeded.length > 0) {
@@ -471,14 +479,18 @@ function tryEvalCalling(node, callId, computed) {
   const args = [];
   for (const arg of rawArgs) {
     if ("spread" in arg) {
+      let spreadValue;
       if ("literal" in arg.spread) {
-        args.push(arg);
-        // TODO Doesn't this need to be:
-        // args.push(...arg.spread.literal.map(literal));
+        spreadValue = arg.spread.literal;
       } else if (computed.has(arg.spread.name)) {
-        args.push(...computed.get(arg.spread.name).map(literal));
+        spreadValue = computed.get(arg.spread.name);
       } else {
         stepsNeeded.push(arg.spread.name);
+      }
+      if (spreadValue) {
+        for (const arg of spreadValue) {
+          args.push(arg);
+        }
       }
     } else {
       args.push(arg);
@@ -594,38 +606,6 @@ function tryEvalCallingGiven(f, callId, args, namedArgs) {
   }
 
   const steps = [...paramSteps, ...bodySteps];
-  //   console.log("Evaling given");
-  //   console.log(`Call ID ${callId}`);
-  //   console.log("Steps");
-  //   for (const step of steps) {
-  //     console.log(step.as);
-  //     if ("given" in step.as) {
-  //       for (const givenStep of step.as.result.steps) {
-  //         console.log("(Step in nested given)");
-  //         console.log(givenStep.as);
-  //       }
-  //       console.log("(Result in nested given)");
-  //       console.log(step.as.result.result);
-  //     }
-  //   }
-  //   console.log("Injected steps");
-  //   for (const step of steps.map((step) =>
-  //     injectCallIdIntoStep(step, callId)
-  //   )) {
-  //     console.log(step.as);
-  //     if ("given" in step.as) {
-  //       for (const givenStep of step.as.result.steps) {
-  //         console.log("(Step in nested given)");
-  //         console.log(givenStep.as);
-  //       }
-  //       console.log("(Result in nested given)");
-  //       console.log(step.as.result.result);
-  //     }
-  //   }
-  //   console.log("Result");
-  //   console.log(result);
-  //   console.log("Injected result");
-  //   console.log(injectCallIdIntoNode(result, callId));
   return {
     expansion: {
       steps: steps.map((step) => injectCallIdIntoStep(step, callId)),
@@ -785,12 +765,11 @@ function tryEvalCallingEagerBuiltin(f, args, namedArgs, computed) {
   const namedArgValues = kpobject();
   const stepsNeeded = [];
   for (const arg of args) {
-    if ("literal" in arg) {
-      argValues.push(arg.literal);
-    } else if (computed.has(arg.name)) {
-      argValues.push(computed.get(arg.name));
+    const argResult = tryFindAll(arg, computed);
+    if ("stepsNeeded" in argResult) {
+      stepsNeeded.push(...argResult.stepsNeeded);
     } else {
-      stepsNeeded.push(arg.name);
+      argValues.push(argResult.value);
     }
   }
   for (const [name, arg] of namedArgs) {
@@ -902,6 +881,60 @@ function tryEvalCatching(node, computed) {
   }
 }
 
+function tryEvalFindAll(node, computed) {
+  return tryFindAll(node.findAll, computed);
+}
+
+export function tryFindAll(node, computed) {
+  let value;
+  if (isNode(node)) {
+    if ("literal" in node) {
+      value = node.literal;
+    } else if (computed.has(node.name)) {
+      value = computed.get(node.name);
+    } else {
+      return { stepsNeeded: [node.name] };
+    }
+  } else {
+    value = node;
+  }
+  if (isArray(value)) {
+    const result = [];
+    const stepsNeeded = [];
+    for (const element of value) {
+      const elementResult = tryFindAll(element, computed);
+      if ("stepsNeeded" in elementResult) {
+        stepsNeeded.push(...elementResult.stepsNeeded);
+      } else {
+        result.push(elementResult.value);
+      }
+    }
+    if (stepsNeeded.length > 0) {
+      return { stepsNeeded };
+    } else {
+      return { value: result };
+    }
+  } else if (isObject(value)) {
+    const result = kpobject();
+    const stepsNeeded = [];
+    for (const [key, propertyValue] of kpoEntries(value)) {
+      const propertyResult = tryFindAll(propertyValue, computed);
+      if ("stepsNeeded" in propertyResult) {
+        stepsNeeded.push(...propertyResult.stepsNeeded);
+      } else {
+        result.set(key, propertyResult.value);
+      }
+    }
+    if (stepsNeeded.length > 0) {
+      return { stepsNeeded };
+    } else {
+      return { value: result };
+    }
+  } else {
+    return { value };
+  }
+}
+
 function tryEvalIf(node, computed) {
   const [{ condition }, earlyReturn] = demandValues_NEW(
     { condition: node.if },
@@ -958,11 +991,70 @@ function tryEvalAt(node, computed) {
   if (earlyReturn) {
     return earlyReturn;
   }
-  if (isArray(collection)) {
-    return { value: collection[index - 1] };
-  } else {
+  if (isString(collection) || isArray(collection)) {
+    const check = validateArgument(index, "number");
+    if (isThrown(check)) {
+      return { value: check };
+    }
+    if (index < 1 || index > collection.length) {
+      return {
+        value: kpthrow(
+          "indexOutOfBounds",
+          ["function", "at"],
+          ["value", collection],
+          ["length", collection.length],
+          ["index", index]
+        ),
+      };
+    }
+    if (isString(collection)) {
+      return { value: collection[index - 1] };
+    } else {
+      if (isNode(collection[index - 1])) {
+        const [{ element }, earlyReturn] = demandValues_NEW(
+          { element: collection[index - 1] },
+          computed
+        );
+        if (earlyReturn) {
+          return earlyReturn;
+        }
+        return { value: element };
+      } else {
+        return { value: collection[index - 1] };
+      }
+    }
+  } else if (isObject(collection)) {
+    const check = validateArgument(index, "string");
+    if (isThrown(check)) {
+      return { value: check };
+    }
+    if (!collection.has(index)) {
+      return {
+        value: kpthrow(
+          "missingProperty",
+          ["value", collection],
+          ["key", index]
+        ),
+      };
+    }
     return { value: collection.get(index) };
+  } else {
+    return {
+      value: kpthrow(
+        "wrongArgumentType",
+        ["value", collection],
+        ["expectedType", either("sequence", "object")]
+      ),
+    };
   }
+}
+
+function validateArgument(value, schema) {
+  const check = eagerBind(value, schema);
+  if (isThrown(check)) {
+    return argumentError(check);
+  }
+  return null;
 }
 
 function tryEvalCheck(node, computed) {
@@ -1034,10 +1126,19 @@ function tryEvalBind(stepName, node) {
 }
 
 function tryEvalBindValid(stepName, node, computed) {
-  const [{ schema }, stepsNeeded] = demandValues({ schema: node.to }, computed);
+  const [{ schema: shallowSchema }, stepsNeeded] = demandValues(
+    { schema: node.to },
+    computed
+  );
   if (stepsNeeded.length > 0) {
     return { stepsNeeded };
   }
+  const schemaResult = tryFindAll(shallowSchema, computed);
+  if ("stepsNeeded" in schemaResult) {
+    return schemaResult;
+  }
+  const schema = schemaResult.value;
+
   const value = node.bindValid;
   if (isString(schema)) {
     return bindTypeSchema(stepName, value, schema);
@@ -1547,21 +1648,21 @@ function tryEvalBindElementOf(node, computed) {
     return earlyReturn;
   }
   if (index <= array.length) {
+    const element = isNode(array[index - 1])
+      ? array[index - 1]
+      : literal(array[index - 1]);
     if (isObject(schema[index - 1]) && schema[index - 1].has("#default")) {
       return {
         expansion: {
           steps: [],
-          result: bind(
-            literal(array[index - 1]),
-            literal(schema[index - 1].get("for"))
-          ),
+          result: bind(element, literal(schema[index - 1].get("for"))),
         },
       };
     } else {
       return {
         expansion: {
           steps: [],
-          result: bind(literal(array[index - 1]), literal(schema[index - 1])),
+          result: bind(element, literal(schema[index - 1])),
         },
       };
     }
@@ -1795,18 +1896,15 @@ function bindUnionSchema(stepName, value, schema) {
       params: ["value", { rest: "bindResults" }],
     },
     function (_scopeId, paramNames, computed) {
-      const stepsNeeded = [];
-      if (!computed.has(paramNames.get("value"))) {
-        stepsNeeded.push(paramNames.get("value"));
+      const [{ value, bindResults }, earlyReturn] = demandParameterValues(
+        ["value", "bindResults"],
+        paramNames,
+        computed
+      );
+      if (earlyReturn) {
+        return earlyReturn;
       }
-      if (!computed.has(paramNames.get("bindResults"))) {
-        stepsNeeded.push(paramNames.get("bindResults"));
-      }
-      if (stepsNeeded.length > 0) {
-        return { stepsNeeded };
-      }
-      const value = computed.get(paramNames.get("value"));
-      const bindResults = computed.get(paramNames.get("bindResults"));
+
       const errors = [];
       for (const bindResult of bindResults) {
         if (isThrown(bindResult.get("all"))) {
@@ -2153,6 +2251,15 @@ export function rethrow(err) {
   return kpobject(
     ["#thrown", err.get("#error")],
     ...kpoFilter(err, ([name, _]) => name !== "#error")
+  );
+}
+
+export function isNode(value) {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !isArray(value) &&
+    !isObject(value)
   );
 }
 

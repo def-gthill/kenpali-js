@@ -13,6 +13,7 @@ import {
 import { push } from "./decompose.js";
 import {
   array,
+  at,
   bind,
   calling,
   ifThrown,
@@ -24,7 +25,7 @@ import {
   spread,
 } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { argumentError, expansion, wrongType } from "./kpeval.js";
+import { argumentError, expansion, tryFindAll, wrongType } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -458,7 +459,48 @@ const rawBuiltins = [
       };
     }
   ),
-  builtin(
+  // builtin(
+  //   "at",
+  //   {
+  //     params: [
+  //       { name: "collection", type: either("sequence", "object") },
+  //       "index",
+  //     ],
+  //   },
+  //   function ([collection, index]) {
+  //     if (isString(collection) || isArray(collection)) {
+  //       const check = validateArgument(index, "number");
+  //       if (isThrown(check)) {
+  //         return check;
+  //       }
+  //       if (index < 1 || index > collection.length) {
+  //         return kpthrow(
+  //           "indexOutOfBounds",
+  //           ["function", "at"],
+  //           ["value", collection],
+  //           ["length", collection.length],
+  //           ["index", index]
+  //         );
+  //       }
+  //       return collection[index - 1];
+  //     } else if (isObject(collection)) {
+  //       const check = validateArgument(index, "string");
+  //       if (isThrown(check)) {
+  //         return check;
+  //       }
+  //       if (collection.has(index)) {
+  //         return collection.get(index);
+  //       } else {
+  //         return kpthrow(
+  //           "missingProperty",
+  //           ["value", collection],
+  //           ["key", index]
+  //         );
+  //       }
+  //     }
+  //   }
+  // ),
+  selfInliningBuiltin(
     "at",
     {
       params: [
@@ -466,37 +508,16 @@ const rawBuiltins = [
         "index",
       ],
     },
-    function ([collection, index]) {
-      if (isString(collection) || isArray(collection)) {
-        const check = validateArgument(index, "number");
-        if (isThrown(check)) {
-          return check;
-        }
-        if (index < 1 || index > collection.length) {
-          return kpthrow(
-            "indexOutOfBounds",
-            ["function", "at"],
-            ["value", collection],
-            ["length", collection.length],
-            ["index", index]
-          );
-        }
-        return collection[index - 1];
-      } else if (isObject(collection)) {
-        const check = validateArgument(index, "string");
-        if (isThrown(check)) {
-          return check;
-        }
-        if (collection.has(index)) {
-          return collection.get(index);
-        } else {
-          return kpthrow(
-            "missingProperty",
-            ["value", collection],
-            ["key", index]
-          );
-        }
-      }
+    function (_scopeId, paramNames) {
+      return {
+        expansion: {
+          steps: [],
+          result: at(
+            name(paramNames.get("collection")),
+            name(paramNames.get("index"))
+          ),
+        },
+      };
     }
   ),
   builtin(
@@ -714,20 +735,13 @@ const rawBuiltins = [
       params: ["value", { rest: { name: "cases", type: ["any", "any"] } }],
     },
     function (scopeId, paramNames, computed) {
-      const stepsNeeded = [];
-      let value, cases;
-      if (computed.has(paramNames.get("value"))) {
-        value = computed.get(paramNames.get("value"));
-      } else {
-        stepsNeeded.push(paramNames.get("value"));
-      }
-      if (computed.has(paramNames.get("cases"))) {
-        cases = computed.get(paramNames.get("cases"));
-      } else {
-        stepsNeeded.push(paramNames.get("cases"));
-      }
-      if (stepsNeeded.length > 0) {
-        return { stepsNeeded };
+      const [{ value, cases }, earlyReturn] = demandParameterValues(
+        ["value", "cases"],
+        paramNames,
+        computed
+      );
+      if (earlyReturn) {
+        return earlyReturn;
       }
       for (const [schema, f] of cases) {
         const bindings = eagerBind(value, schema);
@@ -910,13 +924,13 @@ export function demandParameterValues(params, paramNames, computed) {
   const result = {};
   const stepsNeeded = [];
   for (const param of params) {
-    if (computed.has(paramNames.get(param))) {
-      result[param] = computed.get(paramNames.get(param));
-      if (isThrown(result[param])) {
-        return [result, { value: result[param] }];
-      }
+    const paramResult = tryFindAll(name(paramNames.get(param)), computed);
+    if ("stepsNeeded" in paramResult) {
+      stepsNeeded.push(...paramResult.stepsNeeded);
+    } else if (isThrown(paramResult.value)) {
+      return [result, { value: paramResult.value }];
     } else {
-      stepsNeeded.push(paramNames.get(param));
+      result[param] = paramResult.value;
     }
   }
   if (stepsNeeded.length > 0) {
