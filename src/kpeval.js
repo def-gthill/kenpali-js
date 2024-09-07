@@ -10,9 +10,10 @@ import {
   rest,
 } from "./bind.js";
 import {
-  demandParameterValues,
+  demandFullParameterValues,
   equals,
   isArray,
+  isBoolean,
   isBuiltin,
   isError,
   isFunction,
@@ -351,6 +352,10 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalFindAll(node, computed);
   } else if ("if" in node) {
     return tryEvalIf(node, computed);
+  } else if ("and" in node) {
+    return tryEvalAnd(node, computed);
+  } else if ("or" in node) {
+    return tryEvalOr(node, computed);
   } else if ("ifThrown" in node) {
     return tryEvalIfThrown(node, computed);
   } else if ("passThrown" in node) {
@@ -522,9 +527,7 @@ function tryEvalCalling(node, callId, computed) {
   if (isGiven(f)) {
     return tryEvalCallingGiven(f, callId, args, namedArgs);
   } else if (isBuiltin(f)) {
-    if (f.isLazy) {
-      return tryEvalCallingLazyBuiltin(f, args, namedArgs, computed);
-    } else if (f.isSelfInlining) {
+    if (f.isSelfInlining) {
       return tryEvalCallingSelfInliningBuiltin(
         f,
         callId,
@@ -612,64 +615,6 @@ function tryEvalCallingGiven(f, callId, args, namedArgs) {
       result: injectCallIdIntoNode(result, callId),
     },
   };
-}
-
-function tryEvalCallingLazyBuiltin(f, args, namedArgs, computed) {
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const posArgsByName = kpobject();
-  for (let i = 0; i < paramObjects.params.length; i++) {
-    posArgsByName.set(paramObjects.params[i].name, args[i]);
-  }
-  const allArgs = kpoMerge(posArgsByName, namedArgs);
-
-  const restParamIndex = paramObjects.params.findIndex(
-    (param) => "rest" in param
-  );
-  const restArgs =
-    restParamIndex >= 0
-      ? args.slice(
-          restParamIndex,
-          restParamIndex + args.length - paramObjects.params.length + 1
-        )
-      : [];
-
-  const argGetter = {
-    arg(name) {
-      const arg = allArgs.get(name);
-      if ("literal" in arg) {
-        return arg.literal;
-      } else if (computed.has(arg.name)) {
-        return computed.get(arg.name);
-      } else {
-        throw kpthrow("stepNeeded", ["name", arg.name]);
-      }
-    },
-    numRestArgs: restArgs.length,
-    restArg(index) {
-      const arg = restArgs[index];
-      if ("literal" in arg) {
-        return arg.literal;
-      } else if (computed.has(arg.name)) {
-        return computed.get(arg.name);
-      } else {
-        throw kpthrow("stepNeeded", ["name", arg.name]);
-      }
-    },
-  };
-  try {
-    return { value: f(argGetter) };
-  } catch (error) {
-    if (isThrown(error)) {
-      if (error.get("#thrown") === "stepNeeded") {
-        return { stepsNeeded: [error.get("name")] };
-      } else {
-        return error;
-      }
-    } else {
-      throw error;
-    }
-  }
 }
 
 function tryEvalCallingSelfInliningBuiltin(
@@ -950,6 +895,48 @@ function tryEvalIf(node, computed) {
   }
 }
 
+function tryEvalAnd(node, computed) {
+  const [{ a }, earlyReturnA] = demandValues_NEW({ a: node.and[0] }, computed);
+  if (earlyReturnA) {
+    return earlyReturnA;
+  }
+  if (!isBoolean(a)) {
+    return { value: argumentError(wrongType(a, "boolean"), []) };
+  }
+  if (!a) {
+    return { value: false };
+  }
+  const [{ b }, earlyReturnB] = demandValues_NEW({ b: node.and[1] }, computed);
+  if (earlyReturnB) {
+    return earlyReturnB;
+  }
+  if (!isBoolean(b)) {
+    return { value: argumentError(wrongType(b, "boolean"), []) };
+  }
+  return { value: b };
+}
+
+function tryEvalOr(node, computed) {
+  const [{ a }, earlyReturnA] = demandValues_NEW({ a: node.or[0] }, computed);
+  if (earlyReturnA) {
+    return earlyReturnA;
+  }
+  if (!isBoolean(a)) {
+    return { value: argumentError(wrongType(a, "boolean"), []) };
+  }
+  if (a) {
+    return { value: true };
+  }
+  const [{ b }, earlyReturnB] = demandValues_NEW({ b: node.or[1] }, computed);
+  if (earlyReturnB) {
+    return earlyReturnB;
+  }
+  if (!isBoolean(b)) {
+    return { value: argumentError(wrongType(b, "boolean"), []) };
+  }
+  return { value: b };
+}
+
 function tryEvalIfThrown(node, computed) {
   const [{ possibleError }, earlyReturn] = demandValuesWithoutShortCircuiting(
     { possibleError: node.ifThrown },
@@ -1195,7 +1182,7 @@ function bindTypeWithConditionsSchema(stepName, value, schema, computed) {
       },
       function (_scopeId, paramNames, computed) {
         const [{ value, index, bindResult, bindings }, earlyReturn] =
-          demandParameterValues(
+          demandFullParameterValues(
             ["value", "index", "bindResult", "bindings"],
             paramNames,
             computed
@@ -1312,7 +1299,7 @@ function bindTypeWithConditionsSchema(stepName, value, schema, computed) {
         },
         function (_scopeId, paramNames, computed) {
           const [{ value, keys, index, bindResult }, earlyReturn] =
-            demandParameterValues(
+            demandFullParameterValues(
               ["value", "keys", "index", "bindResult"],
               paramNames,
               computed
@@ -1425,7 +1412,7 @@ function bindTypeWithConditionsSchema(stepName, value, schema, computed) {
         },
         function (_scopeId, paramNames, computed) {
           const [{ value, keys, index, bindResult }, earlyReturn] =
-            demandParameterValues(
+            demandFullParameterValues(
               ["value", "keys", "index", "bindResult"],
               paramNames,
               computed
@@ -1588,7 +1575,7 @@ function bindArraySchema(stepName, value, schema) {
       params: ["value", { rest: "bindResults" }],
     },
     function (_scopeId, paramNames, computed) {
-      const [{ value, bindResults }, earlyReturn] = demandParameterValues(
+      const [{ value, bindResults }, earlyReturn] = demandFullParameterValues(
         ["value", "bindResults"],
         paramNames,
         computed
@@ -1737,7 +1724,7 @@ function bindObjectSchema(stepName, value, schema) {
       namedParams: [{ rest: "bindResults" }],
     },
     function (_scopeId, paramNames, computed) {
-      const [{ value, bindResults }, earlyReturn] = demandParameterValues(
+      const [{ value, bindResults }, earlyReturn] = demandFullParameterValues(
         ["value", "bindResults"],
         paramNames,
         computed
@@ -1896,7 +1883,7 @@ function bindUnionSchema(stepName, value, schema) {
       params: ["value", { rest: "bindResults" }],
     },
     function (_scopeId, paramNames, computed) {
-      const [{ value, bindResults }, earlyReturn] = demandParameterValues(
+      const [{ value, bindResults }, earlyReturn] = demandFullParameterValues(
         ["value", "bindResults"],
         paramNames,
         computed

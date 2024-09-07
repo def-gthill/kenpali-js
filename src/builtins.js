@@ -12,6 +12,7 @@ import {
 } from "./bind.js";
 import { push } from "./decompose.js";
 import {
+  and,
   array,
   at,
   bind,
@@ -20,12 +21,13 @@ import {
   if_,
   literal,
   name,
+  or,
   passThrown,
   rest as restNode,
   spread,
 } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { argumentError, expansion, tryFindAll, wrongType } from "./kpeval.js";
+import { argumentError, expansion, tryFindAll } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -227,36 +229,52 @@ const rawBuiltins = [
       return compareResult >= 0;
     }
   ),
-  lazyBuiltin(
+  selfInliningBuiltin(
     "and",
     { params: [{ rest: { name: "rest", type: "boolean" } }] },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        const arg = argGetter.restArg(i);
-        if (!isBoolean(arg)) {
-          return argumentError(wrongType(arg, "boolean"), []);
-        }
-        if (!argGetter.restArg(i)) {
-          return false;
-        }
+    function (scopeId, paramNames, computed) {
+      const [{ rest }, earlyReturn] = demandParameterValues(
+        ["rest"],
+        paramNames,
+        computed
+      );
+      if (earlyReturn) {
+        return earlyReturn;
       }
-      return true;
+      if (rest.length === 0) {
+        return { value: true };
+      }
+      let axis = rest[0];
+      const steps = [];
+      for (let i = 1; i < rest.length; i++) {
+        steps.push({ find: push(scopeId, "$and", `$${i}`), as: axis });
+        axis = and(axis, rest[i]);
+      }
+      return expansion(axis, steps);
     }
   ),
-  lazyBuiltin(
+  selfInliningBuiltin(
     "or",
     { params: [{ rest: { name: "rest", type: "boolean" } }] },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        const arg = argGetter.restArg(i);
-        if (!isBoolean(arg)) {
-          return argumentError(wrongType(arg, "boolean"), []);
-        }
-        if (arg) {
-          return true;
-        }
+    function (scopeId, paramNames, computed) {
+      const [{ rest }, earlyReturn] = demandParameterValues(
+        ["rest"],
+        paramNames,
+        computed
+      );
+      if (earlyReturn) {
+        return earlyReturn;
       }
-      return false;
+      if (rest.length === 0) {
+        return { value: true };
+      }
+      let axis = rest[0];
+      const steps = [];
+      for (let i = 1; i < rest.length; i++) {
+        steps.push({ find: push(scopeId, "$or", `$${i}`), as: axis });
+        axis = or(axis, rest[i]);
+      }
+      return expansion(axis, steps);
     }
   ),
   builtin("not", { params: [{ name: "x", type: "boolean" }] }, function ([x]) {
@@ -735,7 +753,7 @@ const rawBuiltins = [
       params: ["value", { rest: { name: "cases", type: ["any", "any"] } }],
     },
     function (scopeId, paramNames, computed) {
-      const [{ value, cases }, earlyReturn] = demandParameterValues(
+      const [{ value, cases }, earlyReturn] = demandFullParameterValues(
         ["value", "cases"],
         paramNames,
         computed
@@ -874,16 +892,6 @@ export function builtin(name, paramSpec, f) {
   return f;
 }
 
-// TODO Remove this once everything is moved over to the compilation pipeline
-export function lazyBuiltin(name, paramSpec, f) {
-  f.builtinName = name;
-  f.isLazy = true;
-  for (const property in paramSpec) {
-    f[property] = paramSpec[property];
-  }
-  return f;
-}
-
 export function selfInliningBuiltin(name, paramSpec, f) {
   const scopeId = push("$builtins", name, "{callId}");
   const paramNames = new Map();
@@ -920,7 +928,7 @@ export function selfInliningBuiltin(name, paramSpec, f) {
   return wrapper;
 }
 
-export function demandParameterValues(params, paramNames, computed) {
+export function demandFullParameterValues(params, paramNames, computed) {
   const result = {};
   const stepsNeeded = [];
   for (const param of params) {
@@ -931,6 +939,27 @@ export function demandParameterValues(params, paramNames, computed) {
       return [result, { value: paramResult.value }];
     } else {
       result[param] = paramResult.value;
+    }
+  }
+  if (stepsNeeded.length > 0) {
+    return [result, { stepsNeeded }];
+  } else {
+    return [result, undefined];
+  }
+}
+
+export function demandParameterValues(params, paramNames, computed) {
+  const result = {};
+  const stepsNeeded = [];
+  for (const param of params) {
+    const name = paramNames.get(param);
+    if (computed.has(name)) {
+      result[param] = computed.get(name);
+      if (isThrown(result[param])) {
+        return [result, { value: result[param] }];
+      }
+    } else {
+      stepsNeeded.push(name);
     }
   }
   if (stepsNeeded.length > 0) {

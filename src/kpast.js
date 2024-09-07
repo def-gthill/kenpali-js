@@ -103,6 +103,14 @@ export function if_(condition, ifTrue, ifFalse) {
   return { if: condition, then: ifTrue, else: ifFalse };
 }
 
+export function and(a, b) {
+  return { and: [a, b] };
+}
+
+export function or(a, b) {
+  return { or: [a, b] };
+}
+
 export function ifThrown(possibleError, valueIfError) {
   return { ifThrown: possibleError, then: valueIfError };
 }
