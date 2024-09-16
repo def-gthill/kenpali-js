@@ -119,11 +119,18 @@ export function passThrown(possibleError, valueIfNotError) {
   return { passThrown: possibleError, otherwise: valueIfNotError };
 }
 
+export function firstError(possibleErrors) {
+  return { firstError: possibleErrors };
+}
+
 export function at(collection, index) {
   return { at: index, in: collection };
 }
 
 export function bind(value, schema) {
+  if (value === 10) {
+    throw new Error("Not acceptable!");
+  }
   return { bind: value, to: schema };
 }
 
@@ -153,4 +160,19 @@ export function assert(value, condition) {
 
 export function checkType(value, type) {
   return { check: value, type };
+}
+
+export function callingEagerBuiltin(f, args = [], namedArgs = []) {
+  const result = { callingEagerBuiltin: f };
+  if (args.length > 0) {
+    result.args = args;
+  }
+  if (namedArgs.length > 0) {
+    result.namedArgs = namedArgs;
+  }
+  return result;
+}
+
+export function toArgumentError(value) {
+  return { toArgumentError: value };
 }

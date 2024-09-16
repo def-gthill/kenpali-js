@@ -3,9 +3,7 @@ import {
   as,
   deepForce,
   default_,
-  eagerBind,
   either,
-  force,
   objectOf,
   rest,
 } from "./bind.js";
@@ -18,6 +16,7 @@ import {
   isError,
   isFunction,
   isGiven,
+  isNumber,
   isObject,
   isSequence,
   isString,
@@ -31,6 +30,7 @@ import decompose, { decomposeModule, push } from "./decompose.js";
 import {
   array,
   assert,
+  at,
   bind,
   bindArrayElement,
   bindArrayRest,
@@ -38,8 +38,10 @@ import {
   bindObjectRest,
   bindValid,
   calling,
+  callingEagerBuiltin,
   checkType,
   findAll,
+  firstError,
   if_,
   literal,
   name,
@@ -270,9 +272,8 @@ function evalPlan(plan, names) {
     //   stack.pop();
     //   continue;
     // }
-    // TODO Make this an *exception* once everything is moved over to the compilation pipeline
     if (!step) {
-      return kpthrow("nameNotDefined", ["name", stack.at(-1)]);
+      throw new Error(`Name not defined: ${stack.at(-1)}`);
     }
     let result;
     if ("calling" in step.as) {
@@ -283,11 +284,13 @@ function evalPlan(plan, names) {
         step.callId = nextCallId;
         nextCallId += 1;
       }
-      result = tryEvalCalling(step.as, step.callId, computed);
+      result = tryEvalCalling(step.find, step.as, step.callId, computed);
     } else {
       result = tryEvalNode(step.find, step.as, computed);
     }
+    // console.log("Step");
     // console.log(step);
+    // console.log("Result");
     // console.log(result);
     if ("value" in result) {
       stack.pop();
@@ -360,12 +363,10 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalIfThrown(node, computed);
   } else if ("passThrown" in node) {
     return tryEvalPassThrown(node, computed);
+  } else if ("firstError" in node) {
+    return tryEvalFirstError(node, computed);
   } else if ("at" in node) {
     return tryEvalAt(node, computed);
-  } else if ("assert" in node) {
-    return tryEvalAssert(name, node, computed);
-  } else if ("check" in node) {
-    return tryEvalCheck(node, computed);
   } else if ("bind" in node) {
     return tryEvalBind(name, node);
   } else if ("bindValid" in node) {
@@ -378,6 +379,14 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalBindEntryOf(node, computed);
   } else if ("bindObjectRest" in node) {
     return tryEvalBindObjectRest(node, computed);
+  } else if ("assert" in node) {
+    return tryEvalAssert(name, node, computed);
+  } else if ("check" in node) {
+    return tryEvalCheck(node, computed);
+  } else if ("callingEagerBuiltin" in node) {
+    return tryEvalCallingEagerBuiltin(node, computed);
+  } else if ("toArgumentError" in node) {
+    return tryEvalToArgumentError(node, computed);
   } else {
     throw new Error(`Invalid instruction ${JSON.stringify(node)}`);
   }
@@ -464,7 +473,7 @@ function tryEvalGiven(node, computed, names) {
   };
 }
 
-function tryEvalCalling(node, callId, computed) {
+function tryEvalCalling(name, node, callId, computed) {
   const stepsNeeded = [];
   let f;
   if ("bound" in node.calling) {
@@ -494,7 +503,11 @@ function tryEvalCalling(node, callId, computed) {
       }
       if (spreadValue) {
         for (const arg of spreadValue) {
-          args.push(arg);
+          if (isNode(arg)) {
+            args.push(arg);
+          } else {
+            args.push(literal(arg));
+          }
         }
       }
     } else {
@@ -536,7 +549,8 @@ function tryEvalCalling(node, callId, computed) {
         computed
       );
     } else {
-      return tryEvalCallingEagerBuiltin(f, args, namedArgs, computed);
+      return makeEagerBuiltinCall(name, f, callId, args, namedArgs);
+      // return tryEvalCallingEagerBuiltin(f, args, namedArgs, computed);
     }
   } else {
     return { value: kpthrow("notCallable", ["value", f]) };
@@ -705,11 +719,148 @@ function tryEvalCallingBoundSelfInliningBuiltin(f, callId, computed) {
   }
 }
 
-function tryEvalCallingEagerBuiltin(f, args, namedArgs, computed) {
+function makeEagerBuiltinCall(callName, f, callId, args, namedArgs) {
+  const allParams = paramsFromBuiltin(f);
+  const { params, namedParams } = normalizeAllParams(allParams);
+  const allUsedArgs = [];
+  const checkingSteps = [];
+  const checkedArgs = [];
+  const checkedNamedArgs = [];
+
+  let j = 0;
+  for (let i = 0; i < params.length; i++) {
+    if (params[i].rest) {
+      const numRemainingArgs = args.length - params.length + 1;
+      for (let k = j; k < j + numRemainingArgs; k++) {
+        if (params[i].rest.type) {
+          const stepName = push(
+            callName,
+            `#${callId}`,
+            params[i].rest.name,
+            `$${k - j + 1}`
+          );
+          checkingSteps.push({
+            find: push(stepName, "$bind"),
+            as: bind(args[k], literal(params[i].rest.type)),
+          });
+          checkingSteps.push({
+            find: push(stepName, "$all"),
+            as: at(name(push(stepName, "$bind")), literal("all")),
+          });
+          checkedArgs.push(name(push(stepName, "$all")));
+        } else {
+          checkedArgs.push(args[k]);
+        }
+        allUsedArgs.push(args[k]);
+      }
+      j += numRemainingArgs;
+    } else if (j < args.length) {
+      if (params[i].type) {
+        const stepName = push(callName, `#${callId}`, params[i].name);
+        checkingSteps.push({
+          find: push(stepName, "$bind"),
+          as: bind(args[j], literal(params[i].type)),
+        });
+        checkingSteps.push({
+          find: push(stepName, "$all"),
+          as: at(name(push(stepName, "$bind")), literal("all")),
+        });
+        checkedArgs.push(name(push(stepName, "$all")));
+      } else {
+        checkedArgs.push(args[j]);
+      }
+      allUsedArgs.push(args[j]);
+      j++;
+    } else if (params[i].defaultValue) {
+      checkedArgs.push(params[i].defaultValue);
+      allUsedArgs.push(params[i].defaultValue);
+    } else {
+      return { value: kpthrow("missingArgument", ["name", params[i].name]) };
+    }
+  }
+  const namedParamsByName = new Map();
+  for (const param of namedParams) {
+    if (!param.rest) {
+      namedParamsByName.set(param.name, param);
+    }
+  }
+  const namedArgsByName = new Map();
+  for (const [name, value] of namedArgs) {
+    namedArgsByName.set(name, value);
+  }
+  for (const param of namedParams) {
+    if (param.rest) {
+      for (const [argName, value] of namedArgs) {
+        if (!namedParamsByName.has(argName)) {
+          if (param.rest.type) {
+            const stepName = push(
+              callName,
+              `#${callId}`,
+              param.rest.name,
+              argName
+            );
+            checkingSteps.push({
+              find: push(stepName, "$bind"),
+              as: bind(value, literal(param.rest.type)),
+            });
+            checkingSteps.push({
+              find: push(stepName, "$all"),
+              as: at(name(push(stepName, "$bind")), literal("all")),
+            });
+            checkedNamedArgs.push([argName, name(push(stepName, "$all"))]);
+          } else {
+            checkedNamedArgs.push([argName, value]);
+          }
+          allUsedArgs.push(value);
+        }
+      }
+    } else if (namedArgsByName.has(param.name)) {
+      if (param.type) {
+        const stepName = push(callName, `#${callId}`, param.name);
+        checkingSteps.push({
+          find: push(stepName, "$bind"),
+          as: bind(namedArgs.get(param.name), literal(param.type)),
+        });
+        checkingSteps.push({
+          find: push(stepName, "$all"),
+          as: at(name(push(stepName, "$bind")), literal("all")),
+        });
+        checkedNamedArgs.push([param.name, name(push(stepName, "$all"))]);
+      } else {
+        checkedNamedArgs.push([param.name, namedArgs.get(param.name)]);
+      }
+      allUsedArgs.push(namedArgs.get(param.name));
+    } else if (param.defaultValue) {
+      checkedNamedArgs.push([param.name, param.defaultValue]);
+      allUsedArgs.push(param.defaultValue);
+    } else {
+      return {
+        value: kpthrow("missingArgument", ["name", param.name]),
+      };
+    }
+  }
+
+  const callingStep = {
+    find: push(callName, "$result"),
+    as: callingEagerBuiltin(f, checkedArgs, checkedNamedArgs),
+  };
+
+  const shortCircuitingStep = {
+    find: push(callName, "$short"),
+    as: firstError(allUsedArgs),
+  };
+
+  return expansion(
+    passThrown(name(push(callName, "$short")), name(push(callName, "$result"))),
+    [...checkingSteps, callingStep, shortCircuitingStep]
+  );
+}
+
+function tryEvalCallingEagerBuiltin(node, computed) {
   const argValues = [];
   const namedArgValues = kpobject();
   const stepsNeeded = [];
-  for (const arg of args) {
+  for (const arg of node.args ?? []) {
     const argResult = tryFindAll(arg, computed);
     if ("stepsNeeded" in argResult) {
       stepsNeeded.push(...argResult.stepsNeeded);
@@ -717,13 +868,12 @@ function tryEvalCallingEagerBuiltin(f, args, namedArgs, computed) {
       argValues.push(argResult.value);
     }
   }
-  for (const [name, arg] of namedArgs) {
-    if ("literal" in arg) {
-      namedArgValues.set(name, arg.literal);
-    } else if (computed.has(arg.name)) {
-      namedArgValues.set(name, computed.get(arg.name));
+  for (const [name, arg] of node.namedArgs ?? []) {
+    const argResult = tryFindAll(arg, computed);
+    if ("stepsNeeded" in argResult) {
+      stepsNeeded.push(...argResult.stepsNeeded);
     } else {
-      stepsNeeded.push(arg.name);
+      namedArgValues.set(name, argResult.value);
     }
   }
   if (stepsNeeded.length > 0) {
@@ -731,43 +881,30 @@ function tryEvalCallingEagerBuiltin(f, args, namedArgs, computed) {
   }
   for (const argValue of argValues) {
     if (isThrown(argValue)) {
-      return { value: argValue };
+      return { value: argumentError(argValue) };
     }
   }
   for (const [_, argValue] of kpoEntries(namedArgValues)) {
     if (isThrown(argValue)) {
-      return { value: argValue };
+      return { value: argumentError(argValue) };
     }
   }
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
-  const schema = createParamSchema(paramObjects);
-  const bindings = kpoMerge(
-    eagerBind(argValues, schema[0]),
-    eagerBind(namedArgValues, schema[1])
+  return { value: node.callingEagerBuiltin(argValues, namedArgValues) };
+}
+
+function tryEvalToArgumentError(node, computed) {
+  const [{ value }, earlyReturn] = demandValuesWithoutShortCircuiting(
+    { value: node.toArgumentError },
+    computed
   );
-  if (isThrown(bindings)) {
-    return { value: argumentErrorGivenParamObjects(paramObjects, bindings) };
+  if (earlyReturn) {
+    return earlyReturn;
   }
-  const boundArgs = [];
-  for (const param of paramObjects.params) {
-    if ("rest" in param) {
-      boundArgs.push(...bindings.get(param.rest.name).map(force));
-    } else {
-      boundArgs.push(force(bindings.get(param.name)));
-    }
+  if (isThrown(value)) {
+    return { value: argumentError(value) };
+  } else {
+    return { value };
   }
-  const boundNamedArgs = kpobject();
-  for (const param of paramObjects.namedParams) {
-    if ("rest" in param) {
-      for (const [name, value] of bindings.get(param.rest.name)) {
-        boundNamedArgs.set(name, force(value));
-      }
-    } else {
-      boundNamedArgs.set(param.name, force(bindings.get(param.name)));
-    }
-  }
-  return { value: f(boundArgs, boundNamedArgs) };
 }
 
 function injectCallIdIntoParam(param, callId) {
@@ -967,6 +1104,20 @@ function tryEvalPassThrown(node, computed) {
   }
 }
 
+function tryEvalFirstError(node, computed) {
+  const possibleErrorsResult = tryFindAll(node.firstError, computed);
+  if ("stepsNeeded" in possibleErrorsResult) {
+    return possibleErrorsResult;
+  }
+  const possibleErrors = possibleErrorsResult.value;
+  for (const possibleError of possibleErrors) {
+    if (isThrown(possibleError)) {
+      return { value: possibleError };
+    }
+  }
+  return { value: null };
+}
+
 function tryEvalAt(node, computed) {
   const [{ collection, index }, earlyReturn] = demandValues_NEW(
     {
@@ -979,9 +1130,8 @@ function tryEvalAt(node, computed) {
     return earlyReturn;
   }
   if (isString(collection) || isArray(collection)) {
-    const check = validateArgument(index, "number");
-    if (isThrown(check)) {
-      return { value: check };
+    if (!isNumber(index)) {
+      return { value: argumentError(wrongType(index, "number"), []) };
     }
     if (index < 1 || index > collection.length) {
       return {
@@ -1011,9 +1161,8 @@ function tryEvalAt(node, computed) {
       }
     }
   } else if (isObject(collection)) {
-    const check = validateArgument(index, "string");
-    if (isThrown(check)) {
-      return { value: check };
+    if (!isString(index)) {
+      return { value: argumentError(wrongType(index, "string"), []) };
     }
     if (!collection.has(index)) {
       return {
@@ -1034,14 +1183,6 @@ function tryEvalAt(node, computed) {
       ),
     };
   }
-}
-
-function validateArgument(value, schema) {
-  const check = eagerBind(value, schema);
-  if (isThrown(check)) {
-    return argumentError(check);
-  }
-  return null;
 }
 
 function tryEvalCheck(node, computed) {
@@ -2119,35 +2260,17 @@ function argumentErrorGivenParamObjects(paramObjects, err) {
 }
 
 export function argumentError(err, argumentNames) {
-  let updatedErr = err;
-  if (updatedErr.get("#thrown") === "badElement") {
-    updatedErr = rethrow(updatedErr.get("reason"));
-  }
-  if (updatedErr.get("#thrown") === "badElement") {
-    updatedErr = kpoMerge(
-      updatedErr,
-      kpobject(["#thrown", "badArgumentValue"])
-    );
-  } else if (updatedErr.get("#thrown") === "wrongType") {
-    updatedErr = kpoMerge(
-      updatedErr,
-      kpobject(["#thrown", "wrongArgumentType"])
-    );
-  } else if (updatedErr.get("#thrown") === "badValue") {
-    updatedErr = kpoMerge(
-      updatedErr,
-      kpobject(["#thrown", "badArgumentValue"])
-    );
-  } else if (updatedErr.get("#thrown") === "missingElement") {
-    updatedErr = kpoMerge(
-      updatedErr,
-      kpobject(
-        ["#thrown", "missingArgument"],
-        ["name", simpleName(argumentNames[updatedErr.get("index") - 1])]
-      )
+  if (err.get("#thrown") === "wrongType") {
+    return kpoMerge(err, kpobject(["#thrown", "wrongArgumentType"]));
+  } else if (err.get("#thrown") === "badValue") {
+    return kpoMerge(err, kpobject(["#thrown", "badArgumentValue"]));
+  } else {
+    return kpthrow(
+      "badArgumentValue",
+      ["value", err.get("value")],
+      ["reason", catch_(err)]
     );
   }
-  return updatedErr;
 }
 
 function simpleName(name) {
