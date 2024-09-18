@@ -9,6 +9,7 @@ import {
   given,
   group,
   literal,
+  module,
   name,
   object,
   objectPattern,
@@ -19,8 +20,8 @@ import {
 } from "./kpast.js";
 import kplex from "./kplex.js";
 
-export default function kpparse(code) {
-  const sugar = kpparseSugared(code);
+export default function kpparse(code, rootNode = parse) {
+  const sugar = kpparseSugared(code, rootNode);
   if ("error" in sugar) {
     return sugar;
   } else {
@@ -28,9 +29,9 @@ export default function kpparse(code) {
   }
 }
 
-export function kpparseSugared(code) {
+export function kpparseSugared(code, rootNode = parse) {
   const tokens = kplex(code);
-  const result = kpparseTokens(tokens);
+  const result = kpparseTokens(tokens, rootNode);
   if ("error" in result) {
     return { ...result, code };
   } else {
@@ -38,9 +39,9 @@ export function kpparseSugared(code) {
   }
 }
 
-export function kpparseTokens(tokens) {
+export function kpparseTokens(tokens, rootNode = parse) {
   const tokenList = [...tokens];
-  const parseResult = parseAll(tokenList);
+  const parseResult = parseAll(tokenList, rootNode);
   if ("error" in parseResult) {
     return parseResult;
   } else {
@@ -48,11 +49,15 @@ export function kpparseTokens(tokens) {
   }
 }
 
-function parseAll(tokens) {
-  return parseAllOf([parse, consume("EOF", "unparsedInput")], (ast) => ast)(
+function parseAll(tokens, rootNode = parse) {
+  return parseAllOf([rootNode, consume("EOF", "unparsedInput")], (ast) => ast)(
     tokens,
     0
   );
+}
+
+export function kpparseModule(code) {
+  return kpparse(code, parseModule);
 }
 
 function parse(tokens, start) {
@@ -151,6 +156,23 @@ function parseObjectPatternPropertyName(tokens, start) {
   )(tokens, start);
 }
 
+function parseModule(tokens, start) {
+  return convert(
+    parseZeroOrMore(
+      parseAllOf([
+        convert(parseName, (name) => name.name),
+        consume("EQUALS", "missingEqualsInDefinition"),
+        parseAssignable,
+      ]),
+      {
+        terminator: consume("SEMICOLON"),
+        errorIfTerminatorMissing: "missingDefinitionSeparator",
+      }
+    ),
+    (definitions) => module(...definitions)
+  )(tokens, start);
+}
+
 function parseAssignable(tokens, start) {
   return parseAnyOf(parseArrowFunction, parsePipeline)(tokens, start);
 }
@@ -206,23 +228,11 @@ function parseParameterList(tokens, start) {
       if (posParams.length > 0) {
         result.params = posParams;
       }
-      const restParam = params
-        .filter((param) => "rest" in param)
-        .map((param) => param.rest);
-      if (restParam.length > 0) {
-        result.restParam = restParam[0];
-      }
       const namedParams = params
         .filter((param) => "named" in param)
         .map((param) => param.named);
       if (namedParams.length > 0) {
         result.namedParams = namedParams;
-      }
-      const namedRestParam = params
-        .filter((param) => "namedRest" in param)
-        .map((param) => param.namedRest);
-      if (namedRestParam.length > 0) {
-        result.namedRestParam = namedRestParam[0];
       }
       return result;
     }
@@ -247,11 +257,11 @@ function parseParameter(tokens, start) {
     ),
     parseAllOf(
       [consume("STAR", "expectedRestParameter"), parseName],
-      (name) => ({ rest: name.name })
+      (name) => ({ positional: { rest: name.name } })
     ),
     parseAllOf(
       [consume("DOUBLE_STAR", "expectedNamedRestParameter"), parseName],
-      (name) => ({ namedRest: name.name })
+      (name) => ({ named: { rest: name.name } })
     ),
     parseParameterName
   )(tokens, start);
