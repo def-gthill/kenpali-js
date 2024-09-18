@@ -2,7 +2,6 @@ import {
   arrayOf,
   as,
   default_,
-  eagerBind,
   either,
   is,
   objectOf,
@@ -28,7 +27,7 @@ import {
   throwing,
 } from "./kpast.js";
 import kpthrow from "./kperror.js";
-import { argumentError, expansion, tryFindAll } from "./kpeval.js";
+import { expansion, tryFindAll } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 
 const rawBuiltins = [
@@ -159,9 +158,12 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
+      if (typeOf(b) !== typeOf(a)) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b],
+          ["expectedType", typeOf(a)]
+        );
       }
       const compareResult = compare(a, b);
       if (isThrown(compareResult)) {
@@ -179,9 +181,12 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
+      if (typeOf(b) !== typeOf(a)) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b],
+          ["expectedType", typeOf(a)]
+        );
       }
       const compareResult = compare(a, b);
       if (isThrown(compareResult)) {
@@ -199,9 +204,12 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
+      if (typeOf(b) !== typeOf(a)) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b],
+          ["expectedType", typeOf(a)]
+        );
       }
       const compareResult = compare(a, b);
       if (isThrown(compareResult)) {
@@ -219,9 +227,12 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
+      if (typeOf(b) !== typeOf(a)) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b],
+          ["expectedType", typeOf(a)]
+        );
       }
       const compareResult = compare(a, b);
       if (isThrown(compareResult)) {
@@ -1056,23 +1067,26 @@ function compare(a, b) {
       if (i >= b.length) {
         return 1;
       }
-      const checkA = validateArgument(
-        a[i],
-        either("number", "string", "boolean", "array")
-      );
-      if (isThrown(checkA)) {
-        return checkA;
+      if (!["number", "string", "boolean", "array"].includes(typeOf(a[i]))) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", a[i]],
+          ["expectedType", either("number", "string", "boolean", "array")]
+        );
       }
-      const checkB = validateArgument(
-        b[i],
-        either("number", "string", "boolean", "array")
-      );
-      if (isThrown(checkB)) {
-        return checkB;
+      if (!["number", "string", "boolean", "array"].includes(typeOf(b[i]))) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b[i]],
+          ["expectedType", either("number", "string", "boolean", "array")]
+        );
       }
-      const checkSame = validateArgument(b[i], typeOf(a[i]));
-      if (isThrown(checkSame)) {
-        return checkSame;
+      if (typeOf(b[i]) !== typeOf(a[i])) {
+        return kpthrow(
+          "wrongArgumentType",
+          ["value", b[i]],
+          ["expectedType", typeOf(a[i])]
+        );
       }
       const elementCompare = compare(a[i], b[i]);
       if (elementCompare !== 0) {
@@ -1185,14 +1199,6 @@ export function toFunction(value) {
 
 function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
-}
-
-function validateArgument(value, schema) {
-  const check = eagerBind(value, schema);
-  if (isThrown(check)) {
-    return argumentError(check);
-  }
-  return null;
 }
 
 export function loadBuiltins(modules = kpobject()) {
