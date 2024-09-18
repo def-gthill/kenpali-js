@@ -1,12 +1,4 @@
-import {
-  arrayOf,
-  as,
-  deepForce,
-  default_,
-  either,
-  objectOf,
-  rest,
-} from "./bind.js";
+import { arrayOf, as, default_, either, objectOf, rest } from "./bind.js";
 import {
   demandFullParameterValues,
   equals,
@@ -107,7 +99,7 @@ export function evalCompiled({ instructions, moduleInstructions, names }) {
     steps: [...instructions.steps, ...moduleInstructions],
     result: instructions.result,
   };
-  return deepForce(deepCatch(evalPlan(allInstructions, names)));
+  return deepCatch(evalPlan(allInstructions, names));
 }
 
 function validateExpression(expression) {
@@ -255,7 +247,7 @@ function loadCore(builtins) {
 }
 
 function evalPlan(plan, names) {
-  const computed = names;
+  const computed = new Map([...names]);
   const steps = [
     ...plan.steps,
     { find: "$lazyResult", as: plan.result },
