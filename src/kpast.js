@@ -111,6 +111,10 @@ export function or(a, b) {
   return { or: [a, b] };
 }
 
+export function throwing(type, properties) {
+  return { throwing: type, with: properties };
+}
+
 export function ifThrown(possibleError, valueIfError) {
   return { ifThrown: possibleError, then: valueIfError };
 }
@@ -128,9 +132,6 @@ export function at(collection, index) {
 }
 
 export function bind(value, schema) {
-  if (value === 10) {
-    throw new Error("Not acceptable!");
-  }
   return { bind: value, to: schema };
 }
 

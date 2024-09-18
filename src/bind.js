@@ -747,14 +747,6 @@ function isThunk(value) {
   return value !== null && typeof value === "object" && "thunk" in value;
 }
 
-export function matches(value, schema) {
-  if (isThrown(eagerBind(value, schema))) {
-    return false;
-  } else {
-    return true;
-  }
-}
-
 export function is(type, namedArgs = kpobject()) {
   if (namedArgs.get("where") === null) {
     namedArgs.delete("where");

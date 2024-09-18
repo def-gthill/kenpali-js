@@ -25,6 +25,7 @@ import {
   passThrown,
   rest as restNode,
   spread,
+  throwing,
 } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import { argumentError, expansion, tryFindAll } from "./kpeval.js";
@@ -753,30 +754,67 @@ const rawBuiltins = [
       params: ["value", { rest: { name: "cases", type: ["any", "any"] } }],
     },
     function (scopeId, paramNames, computed) {
-      const [{ value, cases }, earlyReturn] = demandFullParameterValues(
-        ["value", "cases"],
+      const [{ cases }, earlyReturn] = demandFullParameterValues(
+        ["cases"],
         paramNames,
         computed
       );
       if (earlyReturn) {
         return earlyReturn;
       }
-      for (const [schema, f] of cases) {
-        const bindings = eagerBind(value, schema);
-        if (!isThrown(bindings)) {
-          return {
-            expansion: {
-              steps: [],
-              result: calling(
-                literal(toFunction(f)),
-                [literal(value)],
-                [spread(literal(bindings))]
-              ),
-            },
-          };
+      const steps = [];
+      let axis = push(scopeId, "noMatch");
+      steps.push({
+        find: axis,
+        as: throwing(literal("noCasesMatched"), [
+          [literal("value"), name(paramNames.get("value"))],
+        ]),
+      });
+      for (let i = cases.length - 1; i >= 0; i--) {
+        const [schema, f] = cases[i];
+        steps.push({
+          find: push(scopeId, `case${i + 1}`, "binding"),
+          as: bind(name(paramNames.get("value")), literal(schema)),
+        });
+        steps.push({
+          find: push(scopeId, `case${i + 1}`, "all"),
+          as: at(
+            name(push(scopeId, `case${i + 1}`, "binding")),
+            literal("all")
+          ),
+        });
+        if (isFunction(f)) {
+          steps.push({
+            find: push(scopeId, `case${i + 1}`, "call"),
+            as: calling(
+              literal(f),
+              [name(push(scopeId, `case${i + 1}`, "all"))],
+              [spread(name(push(scopeId, `case${i + 1}`, "binding")))]
+            ),
+          });
+        } else {
+          steps.push({
+            find: push(scopeId, `case${i + 1}`, "call"),
+            as: literal(f),
+          });
         }
+        steps.push({
+          find: push(scopeId, `case${i + 1}`, "tryMatch"),
+          as: passThrown(
+            name(push(scopeId, `case${i + 1}`, "all")),
+            name(push(scopeId, `case${i + 1}`, "call"))
+          ),
+        });
+        steps.push({
+          find: push(scopeId, `case${i + 1}`, "tryNext"),
+          as: ifThrown(
+            name(push(scopeId, `case${i + 1}`, "tryMatch")),
+            name(axis)
+          ),
+        });
+        axis = push(scopeId, `case${i + 1}`, "tryNext");
       }
-      return { value: kpthrow("noCasesMatched", ["value", value]) };
+      return expansion(name(axis), steps);
     }
   ),
   builtin(

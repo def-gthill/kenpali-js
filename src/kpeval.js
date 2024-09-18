@@ -359,6 +359,8 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalAnd(node, computed);
   } else if ("or" in node) {
     return tryEvalOr(node, computed);
+  } else if ("throwing" in node) {
+    return tryEvalThrowing(node, computed);
   } else if ("ifThrown" in node) {
     return tryEvalIfThrown(node, computed);
   } else if ("passThrown" in node) {
@@ -1072,6 +1074,30 @@ function tryEvalOr(node, computed) {
     return { value: argumentError(wrongType(b, "boolean"), []) };
   }
   return { value: b };
+}
+
+function tryEvalThrowing(node, computed) {
+  const stepsNeeded = [];
+  const errorType = demandValue(node.throwing, computed);
+  if (errorType === undefined) {
+    stepsNeeded.push(node.throwing.name);
+  }
+  const properties = [];
+  for (const [name, value] of node.with) {
+    const nameResult = demandValue(name, computed);
+    if (nameResult === undefined) {
+      stepsNeeded.push(nameResult.name);
+    }
+    const valueResult = demandValue(value, computed);
+    if (valueResult === undefined) {
+      stepsNeeded.push(valueResult.name);
+    }
+    properties.push([nameResult, valueResult]);
+  }
+  if (stepsNeeded.length > 0) {
+    return { stepsNeeded };
+  }
+  return { value: kpthrow(errorType, ...properties) };
 }
 
 function tryEvalIfThrown(node, computed) {
