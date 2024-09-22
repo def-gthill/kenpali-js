@@ -103,6 +103,14 @@ export function if_(condition, ifTrue, ifFalse) {
   return { if: condition, then: ifTrue, else: ifFalse };
 }
 
+export function last(stream) {
+  return { last: stream };
+}
+
+export function collect(stream) {
+  return { collect: stream };
+}
+
 export function and(a, b) {
   return { and: [a, b] };
 }

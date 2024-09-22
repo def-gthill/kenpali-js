@@ -43,6 +43,10 @@ joinLines = (strings) => (strings | join(with: "\n"));
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
 );
+stream = (array, start: = 1) => [
+    array @ start,
+    stream(array, start: increment(start)) | butIf(start | isAtLeast(length(array)), null)
+];
 isEmpty = (coll) => (length(coll) | equals(0));
 dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
 dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
@@ -53,13 +57,8 @@ slice = (coll, indices) => (
     result | butIf(isString(coll), join(result))
 );
 to = (start, end, by: = 1) => (
-    start | build(
-        (i) => {
-            while: i | isAtMost(end),
-            next: i | plus(by),
-            out: i
-        }
-    )
+    next = start | plus(by);
+    [start, next | to(end, by: by) | butIf(next | isMoreThan(end), null)]
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
 transform = (array, f) => (

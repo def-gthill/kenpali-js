@@ -347,6 +347,10 @@ export function tryEvalNode(name, node, computed = kpobject()) {
     return tryEvalFindAll(node, computed);
   } else if ("if" in node) {
     return tryEvalIf(node, computed);
+  } else if ("last" in node) {
+    return tryEvalLast(node, computed);
+  } else if ("collect" in node) {
+    return tryEvalCollect(node, computed);
   } else if ("and" in node) {
     return tryEvalAnd(node, computed);
   } else if ("or" in node) {
@@ -1024,6 +1028,36 @@ function tryEvalIf(node, computed) {
   } else {
     return expansion(node.else);
   }
+}
+
+function tryEvalLast(node, computed) {
+  const streamResult = tryFindAll(node.last, computed);
+  if ("stepsNeeded" in streamResult) {
+    return streamResult;
+  }
+  const stream = streamResult.value;
+  let next = stream;
+  let current;
+  while (next !== null) {
+    [current, next] = next;
+  }
+  return { value: current };
+}
+
+function tryEvalCollect(node, computed) {
+  const streamResult = tryFindAll(node.collect, computed);
+  if ("stepsNeeded" in streamResult) {
+    return streamResult;
+  }
+  const stream = streamResult.value;
+  let next = stream;
+  let current;
+  const finalArray = [];
+  while (next !== null) {
+    [current, next] = next;
+    finalArray.push(current);
+  }
+  return { value: finalArray };
 }
 
 function tryEvalAnd(node, computed) {

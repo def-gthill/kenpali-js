@@ -16,8 +16,10 @@ import {
   at,
   bind,
   calling,
+  collect,
   ifThrown,
   if_,
+  last,
   literal,
   name,
   or,
@@ -826,6 +828,20 @@ const rawBuiltins = [
         axis = push(scopeId, `case${i + 1}`, "tryNext");
       }
       return expansion(name(axis), steps);
+    }
+  ),
+  selfInliningBuiltin(
+    "last",
+    { params: [{ name: "stream", type: "array" }] },
+    function (_scopeId, paramNames) {
+      return expansion(last(name(paramNames.get("stream"))));
+    }
+  ),
+  selfInliningBuiltin(
+    "collect",
+    { params: [{ name: "stream", type: "array" }] },
+    function (_scopeId, paramNames) {
+      return expansion(collect(name(paramNames.get("stream"))));
     }
   ),
   builtin(
