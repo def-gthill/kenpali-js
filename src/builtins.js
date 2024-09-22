@@ -662,26 +662,10 @@ const rawBuiltins = [
               ),
             };
           }
-          const where = stepResult.get("where") ?? true;
-          if (!isBoolean(where)) {
-            if (isThrown(where)) {
-              return { value: where };
-            }
-            return {
-              value: kpthrow(
-                "wrongElementType",
-                ["function", functionName],
-                ["object", stepResult],
-                ["key", "continueIf"],
-                ["value", continueIf],
-                ["expectedType", "boolean"]
-              ),
-            };
-          }
-          const nextAcc =
-            stepResult.get("where") ?? true
-              ? [...acc, stepResult.has("out") ? stepResult.get("out") : next]
-              : acc;
+          const nextAcc = [
+            ...acc,
+            ...(stepResult.has("out") ? stepResult.get("out") : [next]),
+          ];
           if (!continueIf) {
             return { value: nextAcc };
           }

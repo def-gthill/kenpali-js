@@ -21,8 +21,7 @@ split = (string, delimiter) => (
                     then: i | plus(length(delimiter)),
                     else: i | increment
                 ),
-                out: i,
-                where: delimiterMatched,
+                out: if(delimiterMatched, then: [i], else: []),
             }
         )
     );
@@ -57,7 +56,7 @@ to = (start, end, by: = 1) => (
         (i) => {
             while: i | isAtMost(end),
             next: i | plus(by),
-            out: i
+            out: [i]
         }
     )
 );
@@ -67,7 +66,7 @@ transform = (array, f) => (
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: f(array @ i)
+            out: [f(array @ i)]
         }
     )
 );
@@ -76,8 +75,7 @@ where = (array, condition) => (
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: array @ i,
-            where: condition(array @ i),
+            out: if(condition(array @ i), then: [array @ i], else: []),
         }
     )
 );
@@ -86,7 +84,7 @@ zip = (*arrays) => (
         (i) => {
             while: arrays | forAll((array) => (i | isAtMost(length(array)))),
             next: increment(i),
-            out: arrays | transform((array) => (array @ i)),
+            out: [arrays | transform((array) => (array @ i))],
         }
     )
 );
@@ -104,7 +102,7 @@ flatten = (array) => (
                     then: [i, increment(j)],
                     else: [increment(i), 1],
                 ),
-                out: array @ i @ j,
+                out: [array @ i @ j],
             }
         )
     )
