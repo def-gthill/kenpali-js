@@ -29,7 +29,10 @@ test("Kenpali positional parameters become JavaScript positional parameters", (t
 
 test("Kenpali rest parameters become JavaScript rest parameters", (t) => {
   const kpf = kpeval(
-    given({ restParam: "rest" }, calling(name("length"), [name("rest")]))
+    given(
+      { params: [{ rest: "rest" }] },
+      calling(name("length"), [name("rest")])
+    )
   );
 
   const jsf = toJsFunction(kpf);

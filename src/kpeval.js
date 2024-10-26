@@ -480,7 +480,7 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
 
 function callGiven(f, allArgs, names) {
   const allParams = paramsFromGiven(f);
-  const paramObjects = normalizeAllParams(allParams);
+  const paramObjects = normalizeAllParams_NEW(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
@@ -556,7 +556,7 @@ class Scope {
 
 function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
+  const paramObjects = normalizeAllParams_NEW(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
@@ -647,7 +647,7 @@ export function argumentError(err, argumentNames) {
 
 function callLazyBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams(allParams);
+  const paramObjects = normalizeAllParams_NEW(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
@@ -712,13 +712,26 @@ export function normalizeAllParams(params) {
   };
 }
 
+export function normalizeAllParams_NEW(params) {
+  const normalizedParams = params.params.map(normalizeParam);
+  const normalizedNamedParams = params.namedParams.map(normalizeParam);
+  return {
+    params: normalizedParams.filter((param) => !("rest" in param)),
+    restParam: normalizedParams.find((param) => "rest" in param)?.rest,
+    namedParams: normalizedNamedParams.filter((param) => !("rest" in param)),
+    namedRestParam: normalizedNamedParams.find((param) => "rest" in param)
+      ?.rest,
+  };
+}
+
 export function normalizeParam(param) {
-  if (typeof param === "string") {
-    return { name: param };
-  } else if (param instanceof Map) {
-    return toJsObject(param);
+  const jsParam = deepToJsObject(param);
+  if (typeof jsParam === "string") {
+    return { name: jsParam };
+  } else if ("rest" in jsParam) {
+    return { rest: normalizeParam(jsParam.rest) };
   } else {
-    return param;
+    return jsParam;
   }
 }
 
