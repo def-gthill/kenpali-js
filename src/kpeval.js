@@ -3,10 +3,8 @@ import {
   deepForce,
   default_,
   eagerBind,
-  eagerParamBinder,
   force,
   lazyBind,
-  lazyParamBinder,
   rest,
 } from "./bind.js";
 import {
@@ -77,9 +75,7 @@ export default function kpeval(
   const builtins = loadBuiltins(modules);
   const withCore = loadCore(builtins);
   const withCustomNames = new Scope(withCore, names);
-  compileScope(withCustomNames, withCustomNames);
-  const compiled = compile(expression, withCustomNames);
-  return deepForce(deepCatch(evalWithBuiltins(compiled, withCustomNames)));
+  return deepForce(deepCatch(evalWithBuiltins(expression, withCustomNames)));
 }
 
 function validateExpression(expression) {
@@ -98,72 +94,6 @@ function validateExpression(expression) {
       throw error;
     }
   }
-}
-
-function compileScope(scope, names) {
-  for (const name of scope.names()) {
-    scope.set(name, compile(scope.get(name), names));
-  }
-}
-
-function compile(expression, names) {
-  const prebound = prebind(expression);
-  const tagged = tagNodesWithType(prebound);
-  return tagged;
-}
-
-function prebind(expression) {
-  return transformTree(expression, {
-    handleGiven(node, _recurse, handleDefault) {
-      const allParams = paramSpecToKpValue(node.given);
-      const paramObjects = normalizeAllParams(allParams);
-      const schema = createParamSchema(paramObjects);
-      node.binder = lazyParamBinder(...schema);
-      return handleDefault(node);
-    },
-    handleOther(node, _recurse, handleDefault) {
-      if (typeof node === "function") {
-        const allParams = paramsFromBuiltin(node);
-        const paramObjects = normalizeAllParams(allParams);
-        const schema = createParamSchema(paramObjects);
-        if (node.isLazy) {
-          node.binder = lazyParamBinder(...schema);
-        } else {
-          node.binder = eagerParamBinder(...schema);
-        }
-      }
-      return handleDefault(node);
-    },
-  });
-}
-
-function tagNodesWithType(expression) {
-  return transformTree(expression, {
-    handleLiteral(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "literal", ...node });
-    },
-    handleArray(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "array", ...node });
-    },
-    handleObject(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "object", ...node });
-    },
-    handleName(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "name", ...node });
-    },
-    handleDefining(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "defining", ...node });
-    },
-    handleGiven(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "given", ...node });
-    },
-    handleCalling(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "calling", ...node });
-    },
-    handleCatching(node, _recurse, defaultHandler) {
-      return defaultHandler({ type: "catching", ...node });
-    },
-  });
 }
 
 function transformTree(expression, handlers) {
