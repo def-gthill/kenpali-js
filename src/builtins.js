@@ -215,24 +215,56 @@ const rawBuiltins = [
       return compareResult >= 0;
     }
   ),
-  lazyBuiltin(
+  builtin(
     "and",
-    { params: [{ rest: { name: "rest", type: "boolean" } }] },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        if (!argGetter.restArg(i)) {
+    {
+      params: [
+        { name: "first", type: "boolean" },
+        { rest: { name: "rest", type: "function" } },
+      ],
+    },
+    function ([first, ...rest]) {
+      if (!first) {
+        return false;
+      }
+      for (const f of rest) {
+        const condition = callOnValues(f, []);
+        if (!isBoolean(condition)) {
+          return kpthrow(
+            "wrongReturnType",
+            ["value", condition],
+            ["expectedType", "boolean"]
+          );
+        }
+        if (!condition) {
           return false;
         }
       }
       return true;
     }
   ),
-  lazyBuiltin(
+  builtin(
     "or",
-    { params: [{ rest: { name: "rest", type: "boolean" } }] },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        if (argGetter.restArg(i)) {
+    {
+      params: [
+        { name: "first", type: "boolean" },
+        { rest: { name: "rest", type: "function" } },
+      ],
+    },
+    function ([first, ...rest]) {
+      if (first) {
+        return true;
+      }
+      for (const f of rest) {
+        const condition = callOnValues(f, []);
+        if (!isBoolean(condition)) {
+          return kpthrow(
+            "wrongReturnType",
+            ["value", condition],
+            ["expectedType", "boolean"]
+          );
+        }
+        if (condition) {
           return true;
         }
       }
@@ -300,17 +332,20 @@ const rawBuiltins = [
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
-  lazyBuiltin(
+  builtin(
     "if",
     {
       params: [{ name: "condition", type: "boolean" }],
-      namedParams: ["then", "else"],
+      namedParams: [
+        { name: "then", type: "function" },
+        { name: "else", type: "function" },
+      ],
     },
-    function (argGetter) {
-      if (argGetter.arg("condition")) {
-        return argGetter.arg("then");
+    function ([condition], namedArgs) {
+      if (condition) {
+        return callOnValues(namedArgs.get("then"), []);
       } else {
-        return argGetter.arg("else");
+        return callOnValues(namedArgs.get("else"), []);
       }
     }
   ),

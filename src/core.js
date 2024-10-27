@@ -18,10 +18,10 @@ split = (string, delimiter) => (
                 while: i | isAtMost(length(string)),
                 next: if(
                     delimiterMatched,
-                    then: i | plus(length(delimiter)),
-                    else: i | increment
+                    then: () => i | plus(length(delimiter)),
+                    else: () => i | increment
                 ),
-                out: if(delimiterMatched, then: [i], else: []),
+                out: if(delimiterMatched, then: () => [i], else: () => []),
             }
         )
     );
@@ -40,16 +40,16 @@ split = (string, delimiter) => (
 splitLines = (string) => (string | split("\n"));
 joinLines = (strings) => (strings | join(with: "\n"));
 butIf = (value, condition, ifTrue) => (
-    if(toFunction(condition)(value), then: toFunction(ifTrue)(value), else: value)
+    if(toFunction(condition)(value), then: () => ifTrue(value), else: () => value)
 );
 isEmpty = (coll) => (length(coll) | equals(0));
 dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
 dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
 slice = (coll, indices) => (
     result = indices
-        | where((index) => and(index | isAtLeast(1), index | isAtMost(length(coll))))
+        | where((index) => and(index | isAtLeast(1), () => index | isAtMost(length(coll))))
         | transform((index) => (coll @ index));
-    result | butIf(isString(coll), join(result))
+    result | butIf(isString(coll), () => join(result))
 );
 to = (start, end, by: = 1) => (
     start | build(
@@ -72,7 +72,7 @@ rebuild = (array, f) => (
 );
 transform = (array, f) => array | rebuild((element) => [f(element)]);
 where = (array, condition) => array | rebuild(
-    (element) => if(condition(element), then: [element], else: [])
+    (element) => if(condition(element), then: () => [element], else: () => [])
 );
 zip = (*arrays) => (
     1 | build(

@@ -31,7 +31,7 @@ test("The object spread operator merges objects", (t) => {
 
 test("A function can be called with spread named arguments", (t) => {
   const code =
-    "options = {then: 1, else: 2}; [if(true, **options), if(false, **options)]";
+    "options = {then: () => 1, else: () => 2}; [if(true, **options), if(false, **options)]";
   const result = kpeval(kpparse(code));
   t.deepEqual(result, [1, 2]);
 });
