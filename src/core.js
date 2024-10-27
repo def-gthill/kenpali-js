@@ -21,8 +21,7 @@ split = (string, delimiter) => (
                     then: i | plus(length(delimiter)),
                     else: i | increment
                 ),
-                out: [i],
-                where: delimiterMatched,
+                out: if(delimiterMatched, then: [i], else: []),
             }
         )
     );
@@ -62,24 +61,18 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-transform = (array, f) => (
+rebuild = (array, f) => (
     1 | build(
         (i) => {
             while: i | isAtMost(length(array)),
             next: increment(i),
-            out: [f(array @ i)]
+            out: f(array @ i)
         }
     )
 );
-where = (array, condition) => (
-    1 | build(
-        (i) => {
-            while: i | isAtMost(length(array)),
-            next: increment(i),
-            out: [array @ i],
-            where: condition(array @ i),
-        }
-    )
+transform = (array, f) => array | rebuild((element) => [f(element)]);
+where = (array, condition) => array | rebuild(
+    (element) => if(condition(element), then: [element], else: [])
 );
 zip = (*arrays) => (
     1 | build(
@@ -93,22 +86,7 @@ zip = (*arrays) => (
 count = (array, condition) => (array | where(condition) | length);
 forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
 forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
-flatten = (array) => (
-    [1, 1] | build(
-        (indices) => (
-            [i, j] = indices;
-            {
-                while: i | isAtMost(length(array)),
-                next: if(
-                    j | isLessThan(length(array @ i)),
-                    then: [i, increment(j)],
-                    else: [increment(i), 1],
-                ),
-                out: [array @ i @ j],
-            }
-        )
-    )
-);
+flatten = (array) => array | rebuild((element) => element);
 chunk = (array, size) => (
     starts = 1 | to(length(array), by: size);
     starts | transform((start) => (array | slice(start | toSize(size))))
