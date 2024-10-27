@@ -1,12 +1,4 @@
-import {
-  as,
-  deepForce,
-  default_,
-  eagerBind,
-  force,
-  lazyBind,
-  rest,
-} from "./bind.js";
+import { as, bind, deepForce, default_, force, rest } from "./bind.js";
 import {
   isArray,
   isObject,
@@ -328,7 +320,7 @@ function defineNamesInDefinition(definition, names) {
   } else {
     return kpthrow("invalidPattern", ["pattern", pattern]);
   }
-  const bindings = lazyBind(forcedValue, schema);
+  const bindings = bind(forcedValue, schema);
   return bindings;
 }
 
@@ -479,16 +471,8 @@ function callGiven(f, allArgs, names) {
   const paramObjects = normalizeAllParams(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  let bindings;
-  if (f.has("binder")) {
-    bindings = f.get("binder")([args, namedArgs]);
-  } else {
-    const schema = createParamSchema(paramObjects);
-    bindings = kpoMerge(
-      lazyBind(args, schema[0]),
-      lazyBind(namedArgs, schema[1])
-    );
-  }
+  const schema = createParamSchema(paramObjects);
+  const bindings = kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]));
   if (isThrown(bindings)) {
     return argumentErrorGivenParamObjects(paramObjects, bindings);
   }
@@ -555,16 +539,8 @@ function callBuiltin(f, allArgs, names) {
   const paramObjects = normalizeAllParams(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  let bindings;
-  if ("binder" in f) {
-    bindings = f.binder([args, namedArgs]);
-  } else {
-    const schema = createParamSchema(paramObjects);
-    bindings = kpoMerge(
-      eagerBind(args, schema[0]),
-      eagerBind(namedArgs, schema[1])
-    );
-  }
+  const schema = createParamSchema(paramObjects);
+  const bindings = kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]));
   if (isThrown(bindings)) {
     return argumentErrorGivenParamObjects(paramObjects, bindings);
   }

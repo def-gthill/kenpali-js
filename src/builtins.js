@@ -1,8 +1,8 @@
 import {
   arrayOf,
   as,
+  bind,
   default_,
-  eagerBind,
   either,
   is,
   matches,
@@ -436,7 +436,7 @@ const rawBuiltins = [
     }
   ),
   builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
-    return eagerBind(value, schema);
+    return bind(value, schema);
   }),
   builtin(
     "matches",
@@ -450,7 +450,7 @@ const rawBuiltins = [
     { params: ["value", { rest: { name: "cases", type: ["any", "any"] } }] },
     function ([value, ...cases]) {
       for (const [schema, f] of cases) {
-        const bindings = eagerBind(value, schema);
+        const bindings = bind(value, schema);
         if (!isThrown(bindings)) {
           return callOnValues(toFunction(f), [value], bindings);
         }
@@ -789,7 +789,7 @@ function loop(functionName, start, step, callback) {
 }
 
 function validateArgument(value, schema) {
-  const check = eagerBind(value, schema);
+  const check = bind(value, schema);
   if (isThrown(check)) {
     return argumentError(check);
   }
