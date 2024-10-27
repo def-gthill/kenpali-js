@@ -100,10 +100,8 @@ test("Normalizing a Kenpali object param yields an equivalent JS object", (t) =>
 
 test("We can normalize all params", (t) => {
   const params = {
-    params: ["a"],
-    restParam: { name: "b", type: "string" },
-    namedParams: [kpobject(["name", "c"], ["type", "string"])],
-    namedRestParam: "d",
+    params: ["a", { rest: { name: "b", type: "string" } }],
+    namedParams: [kpobject(["name", "c"], ["type", "string"]), { rest: "d" }],
   };
 
   const normalized = normalizeAllParams(params);

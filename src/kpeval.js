@@ -419,11 +419,7 @@ function callOnExpressions(f, args, namedArgs, names) {
   if (f instanceof Map && f.has("#given")) {
     return callGiven(f, allArgs, names);
   } else if (typeof f === "function") {
-    if (f.isLazy) {
-      return callLazyBuiltin(f, allArgs, names);
-    } else {
-      return callBuiltin(f, allArgs, names);
-    }
+    return callBuiltin(f, allArgs, names);
   } else {
     return kpthrow("notCallable", ["value", f]);
   }
@@ -480,7 +476,7 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
 
 function callGiven(f, allArgs, names) {
   const allParams = paramsFromGiven(f);
-  const paramObjects = normalizeAllParams_NEW(allParams);
+  const paramObjects = normalizeAllParams(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
@@ -556,7 +552,7 @@ class Scope {
 
 function callBuiltin(f, allArgs, names) {
   const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams_NEW(allParams);
+  const paramObjects = normalizeAllParams(allParams);
   const args = captureArgContext(allArgs.args, names);
   const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
   let bindings;
@@ -645,55 +641,6 @@ export function argumentError(err, argumentNames) {
   return updatedErr;
 }
 
-function callLazyBuiltin(f, allArgs, names) {
-  const allParams = paramsFromBuiltin(f);
-  const paramObjects = normalizeAllParams_NEW(allParams);
-  const args = captureArgContext(allArgs.args, names);
-  const namedArgs = captureNamedArgContext(allArgs.namedArgs, names);
-  let bindings;
-  if ("binder" in f) {
-    bindings = f.binder([args, namedArgs]);
-  } else {
-    const schema = createParamSchema(paramObjects);
-    bindings = kpoMerge(
-      lazyBind(args, schema[0]),
-      lazyBind(namedArgs, schema[1])
-    );
-  }
-  if (isThrown(bindings)) {
-    return argumentErrorGivenParamObjects(paramObjects, bindings);
-  }
-  const restArgs = paramObjects.restParam
-    ? force(bindings.get(paramObjects.restParam.name))
-    : [];
-  const argGetter = {
-    arg(name) {
-      const argValue = force(bindings.get(name));
-      if (isThrown(argValue)) {
-        throw argumentErrorGivenParamObjects(paramObjects, argValue);
-      }
-      return argValue;
-    },
-    numRestArgs: restArgs.length,
-    restArg(index) {
-      const argValue = force(restArgs[index]);
-      if (isThrown(argValue)) {
-        throw argumentErrorGivenParamObjects(paramObjects, argValue);
-      }
-      return argValue;
-    },
-  };
-  try {
-    return f(argGetter);
-  } catch (error) {
-    if (isThrown(error)) {
-      return error;
-    } else {
-      throw error;
-    }
-  }
-}
-
 export function paramsFromBuiltin(f) {
   return {
     params: f.params ?? [],
@@ -704,15 +651,6 @@ export function paramsFromBuiltin(f) {
 }
 
 export function normalizeAllParams(params) {
-  return {
-    params: params.params.map(normalizeParam),
-    restParam: mapNullable(params.restParam, normalizeParam),
-    namedParams: params.namedParams.map(normalizeParam),
-    namedRestParam: mapNullable(params.namedRestParam, normalizeParam),
-  };
-}
-
-export function normalizeAllParams_NEW(params) {
   const normalizedParams = params.params.map(normalizeParam);
   const normalizedNamedParams = params.namedParams.map(normalizeParam);
   return {

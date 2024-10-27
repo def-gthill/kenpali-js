@@ -558,15 +558,6 @@ export function builtin(name, paramSpec, f) {
   return f;
 }
 
-export function lazyBuiltin(name, paramSpec, f) {
-  f.builtinName = name;
-  f.isLazy = true;
-  for (const property in paramSpec) {
-    f[property] = paramSpec[property];
-  }
-  return f;
-}
-
 export function equals(a, b) {
   if (isArray(a) && isArray(b)) {
     if (a.length !== b.length) {
