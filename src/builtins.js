@@ -376,7 +376,7 @@ const rawBuiltins = [
       const result = [];
       const loopResult = loop("build", start, step, (stepResult) => {
         if (stepResult.get("where") ?? true) {
-          result.push(stepResult.get("out") ?? stepResult.get("next"));
+          result.push(...(stepResult.get("out") ?? stepResult.get("next")));
         }
       });
       if (isThrown(loopResult)) {
