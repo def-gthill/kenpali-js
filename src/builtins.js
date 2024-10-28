@@ -11,7 +11,7 @@ import {
   optional,
   rest,
 } from "./bind.js";
-import { given, literal } from "./kpast.js";
+import { array, given, literal, name } from "./kpast.js";
 import kpthrow from "./kperror.js";
 import { argumentError, callOnValues } from "./kpeval.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
@@ -351,9 +351,39 @@ const rawBuiltins = [
   ),
   builtin(
     "repeat",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
-      return loop("repeat", start, step, () => {});
+    {
+      params: ["start"],
+      namedParams: [
+        {
+          name: "while",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+        { name: "next", type: "function" },
+        {
+          name: "continueIf",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+      ],
+    },
+    function ([start], namedArgs) {
+      let result = start;
+      const loopResult = loop(
+        "repeat",
+        start,
+        namedArgs.get("while"),
+        namedArgs.get("next"),
+        namedArgs.get("continueIf"),
+        (current) => {
+          result = current;
+        }
+      );
+      if (isThrown(loopResult)) {
+        return loopResult;
+      } else {
+        return result;
+      }
     }
   ),
   builtin(
@@ -406,14 +436,39 @@ const rawBuiltins = [
   ),
   builtin(
     "build",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
+    {
+      params: ["start"],
+      namedParams: [
+        {
+          name: "while",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+        { name: "next", type: "function" },
+        {
+          name: "out",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, array(name("current"))),
+        },
+        {
+          name: "continueIf",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+      ],
+    },
+    function ([start], namedArgs) {
       const result = [];
-      const loopResult = loop("build", start, step, (stepResult) => {
-        if (stepResult.get("where") ?? true) {
-          result.push(...(stepResult.get("out") ?? stepResult.get("next")));
+      const loopResult = loop(
+        "build",
+        start,
+        namedArgs.get("while"),
+        namedArgs.get("next"),
+        namedArgs.get("continueIf"),
+        (current) => {
+          result.push(...callOnValues(namedArgs.get("out"), [current]));
         }
-      });
+      );
       if (isThrown(loopResult)) {
         return loopResult;
       } else {
@@ -719,22 +774,16 @@ function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
 }
 
-function loop(functionName, start, step, callback) {
+function loop(functionName, start, while_, next, continueIf, callback) {
   let current = start;
   for (let i = 0; i < 1000; i++) {
-    const stepResult = callOnValues(step, [current]);
-    const whileCondition = stepResult.has("while")
-      ? stepResult.get("while")
-      : true;
+    const whileCondition = callOnValues(while_, [current]);
     if (!isBoolean(whileCondition)) {
       if (isThrown(whileCondition)) {
         return whileCondition;
       }
       return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "while"],
+        "wrongReturnType",
         ["value", whileCondition],
         ["expectedType", "boolean"]
       );
@@ -742,44 +791,31 @@ function loop(functionName, start, step, callback) {
     if (!whileCondition) {
       return current;
     }
-    const continueIf = stepResult.has("continueIf")
-      ? stepResult.get("continueIf")
-      : true;
-    if (!isBoolean(continueIf)) {
-      if (isThrown(continueIf)) {
-        return continueIf;
-      }
-      return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "continueIf"],
-        ["value", continueIf],
-        ["expectedType", "boolean"]
-      );
-    }
-    if (!stepResult.has("next")) {
-      return kpthrow(
-        "requiredKeyMissing",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "next"]
-      );
-    }
-    callback(stepResult);
-    const next = stepResult.get("next");
-    if (isThrown(next)) {
+    callback(current);
+    const nextResult = callOnValues(next, [current]);
+    if (isThrown(nextResult)) {
       return kpthrow(
         "errorInIteration",
         ["function", functionName],
         ["currentValue", current],
-        ["error", next]
+        ["error", nextResult]
       );
     }
-    if (!continueIf) {
-      return next;
+    const continueIfCondition = callOnValues(continueIf, [current]);
+    if (!isBoolean(continueIfCondition)) {
+      if (isThrown(continueIfCondition)) {
+        return continueIfCondition;
+      }
+      return kpthrow(
+        "wrongReturnType",
+        ["value", continueIfCondition],
+        ["expectedType", "boolean"]
+      );
     }
-    current = next;
+    current = nextResult;
+    if (!continueIfCondition) {
+      return current;
+    }
   }
   return kpthrow(
     "tooManyIterations",

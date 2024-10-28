@@ -7,23 +7,19 @@ characters = (string) => (
     1 | to(length(string)) | transform((i) => (string @ i))
 );
 split = (string, delimiter) => (
+    delimiterMatched = (i) => (
+        string
+        | slice(i | toSize(length(delimiter)))
+        | equals(delimiter)
+    );
     delimiterLocations = 1 | build(
-        (i) => (
-            delimiterMatched = (
-                string
-                | slice(i | toSize(length(delimiter)))
-                | equals(delimiter)
-            );
-            {
-                while: i | isAtMost(length(string)),
-                next: if(
-                    delimiterMatched,
-                    then: () => i | plus(length(delimiter)),
-                    else: () => i | increment
-                ),
-                out: if(delimiterMatched, then: () => [i], else: () => []),
-            }
-        )
+        while: (i) => i | isAtMost(length(string)),
+        next: (i) => if(
+            delimiterMatched(i),
+            then: () => i | plus(length(delimiter)),
+            else: () => i | increment
+        ),
+        out: (i) => if(delimiterMatched(i), then: () => [i], else: () => []),
     );
     startIndices = [
         1,
@@ -53,21 +49,16 @@ slice = (coll, indices) => (
 );
 to = (start, end, by: = 1) => (
     start | build(
-        (i) => {
-            while: i | isAtMost(end),
-            next: i | plus(by),
-            out: [i]
-        }
+        while: (i) => i | isAtMost(end),
+        next: (i) => i | plus(by),
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
 rebuild = (array, f) => (
     1 | build(
-        (i) => {
-            while: i | isAtMost(length(array)),
-            next: increment(i),
-            out: f(array @ i)
-        }
+        while: (i) => i | isAtMost(length(array)),
+        next: increment,
+        out: (i) => f(array @ i),
     )
 );
 transform = (array, f) => array | rebuild((element) => [f(element)]);
@@ -76,11 +67,9 @@ where = (array, condition) => array | rebuild(
 );
 zip = (*arrays) => (
     1 | build(
-        (i) => {
-            while: arrays | forAll((array) => (i | isAtMost(length(array)))),
-            next: increment(i),
-            out: [arrays | transform((array) => (array @ i))],
-        }
+        while: (i) => arrays | forAll((array) => (i | isAtMost(length(array)))),
+        next: increment,
+        out: (i) => [arrays | transform((array) => (array @ i))]
     )
 );
 count = (array, condition) => (array | where(condition) | length);
