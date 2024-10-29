@@ -221,9 +221,17 @@ const evalThis = {
     const result = [];
     for (const element of expression.array) {
       if ("spread" in element) {
-        result.push(...evalWithBuiltins(element.spread, names));
+        const values = evalWithBuiltins(element.spread, names);
+        if (isThrown(values)) {
+          return values;
+        }
+        result.push(...values);
       } else {
-        result.push(evalWithBuiltins(element, names));
+        const value = evalWithBuiltins(element, names);
+        if (isThrown(value)) {
+          return value;
+        }
+        result.push(value);
       }
     }
     return result;
@@ -232,13 +240,23 @@ const evalThis = {
     const result = [];
     for (const element of expression.object) {
       if ("spread" in element) {
-        result.push(...kpoEntries(evalWithBuiltins(element.spread, names)));
+        const entries = evalWithBuiltins(element.spread, names);
+        if (isThrown(entries)) {
+          return entries;
+        }
+        result.push(...kpoEntries(entries));
       } else {
         const [key, value] = element;
-        result.push([
-          typeof key === "string" ? key : evalWithBuiltins(key, names),
-          evalWithBuiltins(value, names),
-        ]);
+        const keyResult =
+          typeof key === "string" ? key : evalWithBuiltins(key, names);
+        if (isThrown(keyResult)) {
+          return keyResult;
+        }
+        const valueResult = evalWithBuiltins(value, names);
+        if (isThrown(valueResult)) {
+          return valueResult;
+        }
+        result.push([keyResult, valueResult]);
       }
     }
     return kpobject(...result);
