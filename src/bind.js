@@ -1,15 +1,20 @@
 import {
   equals,
   isArray,
+  isError,
   isFunction,
   isObject,
   isSequence,
   isString,
-  isThrown,
   typeOf,
 } from "./builtins.js";
-import kpthrow from "./kperror.js";
-import { callOnValues, catch_, evalWithBuiltins, rethrow } from "./kpeval.js";
+import kperror, {
+  catch_,
+  errorType,
+  foldError,
+  transformError,
+} from "./kperror.js";
+import { callOnValues, evalWithBuiltins } from "./kpeval.js";
 import kpobject, {
   kpoEntries,
   kpoKeys,
@@ -21,16 +26,11 @@ import kpobject, {
 
 export function bind(value, schema) {
   const forcedValue = deepForce(value);
-  if (isThrown(forcedValue)) {
-    return forcedValue;
-  }
-  return deepUnwrapErrorPassed(bindInternal(forcedValue, schema));
+  return bindInternal(forcedValue, schema);
 }
 
 export function force(value) {
-  if (isThrown(value)) {
-    return withReason(kpthrow("errorPassed"), value);
-  } else if (isExpression(value)) {
+  if (isExpression(value)) {
     return evalWithBuiltins(value.expression, value.context);
   } else {
     return value;
@@ -39,9 +39,7 @@ export function force(value) {
 
 export function deepForce(value) {
   const forcedValue = force(value);
-  if (isThrown(forcedValue)) {
-    return forcedValue;
-  } else if (isArray(forcedValue)) {
+  if (isArray(forcedValue)) {
     return forcedValue.map(deepForce);
   } else if (isObject(forcedValue)) {
     return kpoMap(forcedValue, ([key, propertyValue]) => [
@@ -115,14 +113,11 @@ function bindInternal(value, schema) {
       return bindObjectSchema(value, schema);
     }
   } else {
-    return invalidSchema(schema);
+    throw invalidSchema(schema);
   }
 }
 
 function bindTypeSchema(value, schema) {
-  if (isThrown(value)) {
-    return withReason(errorPassed(), value);
-  }
   if (typeOf(value) === schema) {
     return kpobject();
   } else if (schema === "any") {
@@ -134,18 +129,15 @@ function bindTypeSchema(value, schema) {
   } else if (schema === "sequence" && isSequence(value)) {
     return kpobject();
   } else {
-    return wrongType(value, schema);
+    throw wrongType(value, schema);
   }
 }
 
 function bindArraySchema(value, schema) {
   const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
   if (hasRest) {
-    if (isThrown(value)) {
-      return withReason(errorPassed(), value);
-    }
     if (!isArray(value)) {
-      return wrongType(value, "array");
+      throw wrongType(value, "array");
     }
     const result = kpobject();
     for (let i = 0; i < schema.length - 1; i++) {
@@ -154,45 +146,34 @@ function bindArraySchema(value, schema) {
           const forSchema = schema[i].get("for");
           result.set(forSchema.get("as"), schema[i].get("#default"));
         } else {
-          return missingElement(value, i + 1, schema);
+          throw missingElement(value, i + 1, schema);
         }
       } else {
-        const bindings = bindInternal(value[i], schema[i]);
-        const bindingsWithErrorWrapping = wrapErrorsInBindings(
-          bindings,
+        const bindings = transformError(
+          () => bindInternal(value[i], schema[i]),
           (err) => withReason(badElement(value, i + 1), err)
         );
-        if (isThrown(bindingsWithErrorWrapping)) {
-          return bindingsWithErrorWrapping;
-        } else {
-          for (const [name, binding] of bindingsWithErrorWrapping) {
-            result.set(name, binding);
-          }
+        for (const [name, binding] of bindings) {
+          result.set(name, binding);
         }
       }
     }
     const numNonRestElements = schema.length - 1;
-    const bindings = bindInternal(
-      value.slice(numNonRestElements),
-      arrayOf(schema.at(-1).get("#rest"))
+    const bindings = transformError(
+      () =>
+        bindInternal(
+          value.slice(numNonRestElements),
+          arrayOf(schema.at(-1).get("#rest"))
+        ),
+      (err) => kpoUpdate(err, "index", (index) => numNonRestElements + index)
     );
-    const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
-      kpoUpdate(err, "index", (index) => numNonRestElements + index)
-    );
-    if (isThrown(bindingsWithErrorWrapping)) {
-      return bindingsWithErrorWrapping;
-    } else {
-      for (const [name, binding] of bindingsWithErrorWrapping) {
-        result.set(name, binding);
-      }
+    for (const [name, binding] of bindings) {
+      result.set(name, binding);
     }
     return result;
   } else {
-    if (isThrown(value)) {
-      return withReason(errorPassed(), value);
-    }
     if (!isArray(value)) {
-      return wrongType(value, "array");
+      throw wrongType(value, "array");
     }
     const result = kpobject();
     for (let i = 0; i < schema.length; i++) {
@@ -201,20 +182,15 @@ function bindArraySchema(value, schema) {
           const forSchema = schema[i].get("for");
           result.set(forSchema.get("as"), schema[i].get("#default"));
         } else {
-          return missingElement(value, i + 1, schema);
+          throw missingElement(value, i + 1, schema);
         }
       } else {
-        const bindings = bindInternal(value[i], schema[i]);
-        const bindingsWithErrorWrapping = wrapErrorsInBindings(
-          bindings,
+        const bindings = transformError(
+          () => bindInternal(value[i], schema[i]),
           (err) => withReason(badElement(value, i + 1), err)
         );
-        if (isThrown(bindingsWithErrorWrapping)) {
-          return bindingsWithErrorWrapping;
-        } else {
-          for (const [name, binding] of bindingsWithErrorWrapping) {
-            result.set(name, binding);
-          }
+        for (const [name, binding] of bindings) {
+          result.set(name, binding);
         }
       }
     }
@@ -226,16 +202,15 @@ function bindUnionSchema(value, schema) {
   let succeeded = false;
   const result = kpobject();
   const options = schema.get("#either");
-  const bindings = options.map((option) => bindInternal(value, option));
+  const bindings = options.map((option) =>
+    catch_(() => bindInternal(value, option))
+  );
   const errors = [];
   const errorsByKey = kpobject();
   for (let i = 0; i < options.length; i++) {
     const option = options[i];
     const optionBindings = bindings[i];
-    if (isThrown(optionBindings)) {
-      if (optionBindings.get("#thrown") === "errorPassed") {
-        return optionBindings;
-      }
+    if (isError(optionBindings)) {
       errors.push([option, optionBindings]);
       for (const key of namesToBind(option)) {
         if (!errorsByKey.has(key)) {
@@ -252,11 +227,11 @@ function bindUnionSchema(value, schema) {
   if (succeeded) {
     return kpoMerge(errorsByKey, result);
   }
-  return combineUnionErrors(value, errors);
+  throw combineUnionErrors(value, errors);
 }
 
 function combineUnionErrors(value, errors) {
-  if (errors.every(([_, err]) => err.get("#thrown") === "wrongType")) {
+  if (errors.every(([_, err]) => errorType(err) === "wrongType")) {
     return wrongType(
       value,
       either(...errors.map(([_, err]) => err.get("expectedType")))
@@ -267,27 +242,24 @@ function combineUnionErrors(value, errors) {
 }
 
 function bindLiteralListSchema(value, schema) {
-  if (isThrown(value)) {
-    return withReason(errorPassed(), value);
-  }
   for (const option of schema.get("#oneOf")) {
     if (equals(value, option)) {
       return kpobject();
     }
   }
-  return badValue(value, ["options", schema.get("#oneOf")]);
+  throw badValue(value, ["options", schema.get("#oneOf")]);
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
-  const typeBindings = bindTypeSchema(value, schema.get("#type"));
-  if (isThrown(typeBindings)) {
-    return typeBindings;
-  }
+  bindTypeSchema(value, schema.get("#type"));
   const subschemaBindings = kpobject();
   if (schema.has("elements")) {
     const keys = namesToBind(schema);
-    const bindings = value.map((element) =>
-      bindInternal(element, schema.get("elements"))
+    const bindings = value.map((element, i) =>
+      transformError(
+        () => bindInternal(element, schema.get("elements")),
+        (err) => withReason(badElement(value, i + 1), err)
+      )
     );
 
     for (const key of keys) {
@@ -295,14 +267,9 @@ function bindTypeWithConditionsSchema(value, schema) {
     }
     for (let i = 0; i < value.length; i++) {
       const elementBindings = bindings[i];
-      if (isThrown(elementBindings)) {
-        return withReason(badElement(value, i + 1), elementBindings);
-      }
       for (const key of keys) {
         if (!elementBindings.has(key)) {
-          subschemaBindings
-            .get(key)
-            .push(catch_(missingProperty(bindings, key)));
+          subschemaBindings.get(key).push(missingProperty(bindings, key));
           continue;
         }
         const elementValue = elementBindings.get(key);
@@ -312,16 +279,19 @@ function bindTypeWithConditionsSchema(value, schema) {
   }
   if (schema.has("keys")) {
     for (const key of value.keys()) {
-      const bindings = bindInternal(key, schema.get("keys"));
-      if (isThrown(bindings)) {
-        return badKey(key, catch_(bindings));
-      }
+      transformError(
+        () => bindInternal(key, schema.get("keys")),
+        (err) => badKey(key, err)
+      );
     }
   }
   if (schema.has("values")) {
     const bindings = kpoMap(value, ([key, propertyValue]) => [
       key,
-      bindInternal(propertyValue, schema.get("values")),
+      transformError(
+        () => bindInternal(propertyValue, schema.get("values")),
+        (err) => withReason(badProperty(propertyValue, key), err)
+      ),
     ]);
 
     const subschemaKeys = [];
@@ -338,16 +308,13 @@ function bindTypeWithConditionsSchema(value, schema) {
       subschemaBindings.set(key, kpobject());
     }
 
-    for (const [key, propertyValue] of value) {
+    for (const [key, _] of value) {
       const propertyBindings = bindings.get(key);
-      if (isThrown(propertyBindings)) {
-        return withReason(badProperty(propertyValue, key), propertyBindings);
-      }
       for (const subschemaKey of subschemaKeys) {
         if (!propertyBindings.has(subschemaKey)) {
           subschemaBindings
             .get(subschemaKey)
-            .set(key, catch_(missingProperty(bindings, subschemaKey)));
+            .set(key, missingProperty(bindings, subschemaKey));
           continue;
         }
         const propertyValue = propertyBindings.get(subschemaKey);
@@ -356,7 +323,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     }
   }
   if (schema.has("where") && !callOnValues(schema.get("where"), [value])) {
-    return badValue(value, ["condition", schema.get("where")]);
+    throw badValue(value, ["condition", schema.get("where")]);
   }
   return subschemaBindings;
 }
@@ -364,9 +331,6 @@ function bindTypeWithConditionsSchema(value, schema) {
 function explicitBind(value, schema) {
   const bindSchema = schema.get("#bind");
   const bindings = bindInternal(value, bindSchema);
-  if (isThrown(bindings)) {
-    return bindings;
-  }
   const result = kpobject();
   result.set(schema.get("as"), value);
   for (const [name, binding] of bindings) {
@@ -376,11 +340,8 @@ function explicitBind(value, schema) {
 }
 
 function bindObjectSchema(value, schema) {
-  if (isThrown(value)) {
-    return withReason(errorPassed(), value);
-  }
   if (!isObject(value)) {
-    return wrongType(value, "object");
+    throw wrongType(value, "object");
   }
   let restName;
   const ownBindings = kpobject();
@@ -397,20 +358,16 @@ function bindObjectSchema(value, schema) {
         ownBindings.set(key, [propertySchema.get("#default"), "any"]);
         propertyBindings.push(kpobject([key, propertySchema.get("#default")]));
       } else {
-        return missingProperty(value, key);
+        throw missingProperty(value, key);
       }
     }
     if (value.has(key)) {
       ownBindings.set(key, [value.get(key), propertySchema]);
-      const bindings = bindInternal(value.get(key), propertySchema);
-      const bindingsWithErrorWrapping = wrapErrorsInBindings(bindings, (err) =>
-        withReason(badProperty(value, key), err)
+      const bindings = transformError(
+        () => bindInternal(value.get(key), propertySchema),
+        (err) => withReason(badProperty(value, key), err)
       );
-      if (isThrown(bindingsWithErrorWrapping)) {
-        return bindingsWithErrorWrapping;
-      } else {
-        propertyBindings.push(bindingsWithErrorWrapping);
-      }
+      propertyBindings.push(bindings);
     }
   }
   if (restName !== undefined) {
@@ -439,46 +396,8 @@ function bindObjectSchema(value, schema) {
   );
 }
 
-function wrapErrorsInBindings(bindings, wrapError) {
-  if (isThrown(bindings)) {
-    return wrapError(bindings);
-  } else {
-    return kpobject(
-      ...kpoEntries(bindings).map(([key, bindingValue]) => [key, bindingValue])
-    );
-  }
-}
-
-function unwrapErrorPassed(value) {
-  if (isThrown(value) && value.get("#thrown") === "errorPassed") {
-    return rethrow(value.get("reason"));
-  } else {
-    return value;
-  }
-}
-
-function deepUnwrapErrorPassed(value) {
-  const shallowUnwrapped = unwrapErrorPassed(value);
-  if (isThrown(shallowUnwrapped)) {
-    return shallowUnwrapped;
-  } else if (isArray(shallowUnwrapped)) {
-    return shallowUnwrapped.map(deepUnwrapErrorPassed);
-  } else if (isObject(shallowUnwrapped)) {
-    return kpoMap(shallowUnwrapped, ([key, propertyValue]) => [
-      key,
-      deepUnwrapErrorPassed(propertyValue),
-    ]);
-  } else {
-    return shallowUnwrapped;
-  }
-}
-
 function withReason(err, reason) {
-  if (reason.get("#thrown") === "errorPassed") {
-    return reason;
-  } else {
-    return kpoMerge(err, kpobject(["reason", catch_(reason)]));
-  }
+  return kpoMerge(err, kpobject(["reason", reason]));
 }
 
 function isExpression(value) {
@@ -486,11 +405,11 @@ function isExpression(value) {
 }
 
 export function matches(value, schema) {
-  if (isThrown(bind(value, schema))) {
-    return false;
-  } else {
-    return true;
-  }
+  return foldError(
+    () => bind(value, schema),
+    () => true,
+    () => false
+  );
 }
 
 export function is(type, namedArgs = kpobject()) {
@@ -537,27 +456,23 @@ export function rest(schema) {
 }
 
 function invalidSchema(schema) {
-  return kpthrow("invalidSchema", ["schema", schema]);
-}
-
-function errorPassed() {
-  return kpthrow("errorPassed");
+  return kperror("invalidSchema", ["schema", schema]);
 }
 
 function wrongType(value, schema) {
-  return kpthrow("wrongType", ["value", value], ["expectedType", schema]);
+  return kperror("wrongType", ["value", value], ["expectedType", schema]);
 }
 
 function badKey(key, reason) {
-  return kpthrow("badKey", ["key", key], ["reason", reason]);
+  return kperror("badKey", ["key", key], ["reason", reason]);
 }
 
 function badValue(value, ...details) {
-  return kpthrow("badValue", ["value", value], ...details);
+  return kperror("badValue", ["value", value], ...details);
 }
 
 function missingElement(value, index, schema) {
-  return kpthrow(
+  return kperror(
     "missingElement",
     ["value", value],
     ["index", index],
@@ -566,13 +481,13 @@ function missingElement(value, index, schema) {
 }
 
 function badElement(value, index) {
-  return kpthrow("badElement", ["value", value], ["index", index]);
+  return kperror("badElement", ["value", value], ["index", index]);
 }
 
 function missingProperty(value, key) {
-  return kpthrow("missingProperty", ["value", value], ["key", key]);
+  return kperror("missingProperty", ["value", value], ["key", key]);
 }
 
 function badProperty(value, key) {
-  return kpthrow("badProperty", ["value", value], ["key", key]);
+  return kperror("badProperty", ["value", value], ["key", key]);
 }

@@ -1,16 +1,17 @@
 import test from "ava";
 import { as, bind } from "../src/bind.js";
 import { literal } from "../src/kpast.js";
+import { catch_ } from "../src/kperror.js";
 import kpobject from "../src/kpobject.js";
-import { assertIsThrown } from "./assertIsError.js";
+import { assertIsError } from "./assertIsError.js";
 
 test("Eager binding forces evaluation", (t) => {
   const value = expression(literal("foo"));
   const schema = "number";
 
-  const result = bind(value, schema);
+  const result = catch_(() => bind(value, schema));
 
-  assertIsThrown(t, result, "wrongType");
+  assertIsError(t, result, "wrongType");
 });
 
 test("Eager binding can bind expressions inside arrays", (t) => {
@@ -27,9 +28,9 @@ test("The reason given for a bad object property is an #error object", (t) => {
   const value = kpobject(["foo", "bar"]);
   const schema = kpobject(["foo", "number"]);
 
-  const result = bind(value, schema);
+  const result = catch_(() => bind(value, schema));
 
-  assertIsThrown(t, result, "badProperty");
+  assertIsError(t, result, "badProperty");
   t.is(result.get("reason").get("#error"), "wrongType");
 });
 
