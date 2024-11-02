@@ -1,6 +1,6 @@
-import { isError } from "../src/builtins.js";
-import kpeval, { deepToJsObject } from "../src/kpeval.js";
+import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
+import { assertIsError } from "./assertIsError.js";
 import { runSpecFile } from "./specRunner.js";
 
 const specPath = "../kenpali/kenpali-builtin-errors.md";
@@ -13,13 +13,11 @@ runSpecFile(
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
   (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {
-    t.assert(
-      isError(actualOutputValue),
-      `${actualOutputValue} isn't an error object`
+    assertIsError(
+      t,
+      actualOutputValue,
+      expectedErrorName,
+      JSON.parse(expectedErrorDetails)
     );
-    t.like(deepToJsObject(actualOutputValue), {
-      "#error": expectedErrorName,
-      ...JSON.parse(expectedErrorDetails),
-    });
   }
 );

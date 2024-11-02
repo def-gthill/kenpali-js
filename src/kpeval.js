@@ -598,7 +598,7 @@ function argumentErrorGivenParamObjects(paramObjects, err) {
 export function argumentError(err, argumentNames) {
   let updatedErr = err;
   if (errorType(updatedErr) === "badElement") {
-    updatedErr = updatedErr.get("reason");
+    updatedErr = updatedErr.details.get("reason");
   }
   if (errorType(updatedErr) === "badElement") {
     updatedErr = withErrorType(updatedErr, "badArgumentValue");
@@ -609,7 +609,7 @@ export function argumentError(err, argumentNames) {
   } else if (errorType(updatedErr) === "missingElement") {
     updatedErr = withErrorType(updatedErr, "missingArgument", [
       "name",
-      argumentNames[updatedErr.get("index") - 1],
+      argumentNames[updatedErr.details.get("index") - 1],
     ]);
   }
   return updatedErr;
@@ -702,7 +702,7 @@ function quote(expression, names) {
   }
 }
 
-function deepToKpObject(expression) {
+export function deepToKpObject(expression) {
   if (expression === null) {
     return expression;
   } else if (Array.isArray(expression)) {

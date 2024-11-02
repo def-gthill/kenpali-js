@@ -561,6 +561,16 @@ const rawBuiltins = [
       return rest(schema);
     }
   ),
+  builtin(
+    "error",
+    {
+      params: [{ name: "type", type: "string" }],
+      namedParams: [{ rest: "details" }],
+    },
+    function ([type], details) {
+      return kperror(type, ...kpoEntries(details));
+    }
+  ),
 ];
 
 export function builtin(name, paramSpec, f) {
@@ -668,7 +678,7 @@ export function isGiven(value) {
 }
 
 export function isError(value) {
-  return isObject(value) && (value.has("#error") || value.has("#thrown"));
+  return value !== null && typeof value === "object" && "error" in value;
 }
 
 export function isObject(value) {

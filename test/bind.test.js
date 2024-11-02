@@ -24,14 +24,14 @@ test("Eager binding can bind expressions inside arrays", (t) => {
   t.is(word, "foo");
 });
 
-test("The reason given for a bad object property is an #error object", (t) => {
+test("The reason given for a bad object property is an error object", (t) => {
   const value = kpobject(["foo", "bar"]);
   const schema = kpobject(["foo", "number"]);
 
   const result = catch_(() => bind(value, schema));
 
   assertIsError(t, result, "badProperty");
-  t.is(result.get("reason").get("#error"), "wrongType");
+  assertIsError(t, result.details.get("reason"), "wrongType");
 });
 
 function expression(expr) {

@@ -1,16 +1,26 @@
 import { isError } from "./builtins.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 
-export default function kperror(type, ...properties) {
-  return kpobject(["#error", type], ...properties);
+export default function kperror(type, ...details) {
+  return { error: type, details: kpobject(...details) };
 }
 
 export function errorType(err) {
-  return err.get("#error");
+  return err.error;
 }
 
-export function withErrorType(err, newType, ...newProperties) {
-  return kpoMerge(err, kperror(newType, ...newProperties));
+export function withErrorType(err, newType, ...newDetails) {
+  return {
+    error: newType,
+    details: kpoMerge(err.details, kpobject(...newDetails)),
+  };
+}
+
+export function withDetails(err, ...newDetails) {
+  return {
+    error: err.error,
+    details: kpoMerge(err.details, kpobject(...newDetails)),
+  };
 }
 
 export function catch_(f) {

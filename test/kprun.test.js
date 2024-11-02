@@ -42,11 +42,11 @@ test("A function can be defined with a named rest parameter", (t) => {
   t.is(result, 42);
 });
 
-test("A wrong argument type error doesn't have a rest property", (t) => {
+test("A wrong argument type error doesn't have a rest detail", (t) => {
   const code = `1 | plus("two")`;
   const result = kpeval(kpparse(code));
   assertIsError(t, result, "wrongArgumentType");
-  t.false(result.has("rest"));
+  t.false(result.details.has("rest"));
 });
 
 test("Errors short-circuit through the @ operator", (t) => {

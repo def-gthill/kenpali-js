@@ -13,6 +13,7 @@ import kperror, {
   errorType,
   foldError,
   transformError,
+  withDetails,
 } from "./kperror.js";
 import { callOnValues, evalWithBuiltins } from "./kpeval.js";
 import kpobject, {
@@ -20,7 +21,6 @@ import kpobject, {
   kpoKeys,
   kpoMap,
   kpoMerge,
-  kpoUpdate,
   kpoValues,
 } from "./kpobject.js";
 
@@ -165,7 +165,11 @@ function bindArraySchema(value, schema) {
           value.slice(numNonRestElements),
           arrayOf(schema.at(-1).get("#rest"))
         ),
-      (err) => kpoUpdate(err, "index", (index) => numNonRestElements + index)
+      (err) =>
+        withDetails(err, [
+          "index",
+          numNonRestElements + err.details.get("index"),
+        ])
     );
     for (const [name, binding] of bindings) {
       result.set(name, binding);
@@ -234,7 +238,7 @@ function combineUnionErrors(value, errors) {
   if (errors.every(([_, err]) => errorType(err) === "wrongType")) {
     return wrongType(
       value,
-      either(...errors.map(([_, err]) => err.get("expectedType")))
+      either(...errors.map(([_, err]) => err.details.get("expectedType")))
     );
   } else {
     return badValue(value, ["errors", errors]);
@@ -397,7 +401,7 @@ function bindObjectSchema(value, schema) {
 }
 
 function withReason(err, reason) {
-  return kpoMerge(err, kpobject(["reason", reason]));
+  return withDetails(err, ["reason", reason]);
 }
 
 function isExpression(value) {
