@@ -664,7 +664,7 @@ export function isBuiltin(value) {
 }
 
 export function isGiven(value) {
-  return isObject(value) && value.has("#given");
+  return value !== null && typeof value === "object" && "given" in value;
 }
 
 export function isError(value) {

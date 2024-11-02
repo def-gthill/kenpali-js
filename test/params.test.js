@@ -16,9 +16,7 @@ test("A given with an empty param spec has no params", (t) => {
 
   t.deepEqual(params, {
     params: [],
-    restParam: null,
     namedParams: [],
-    namedRestParam: null,
   });
 });
 
@@ -26,10 +24,8 @@ test("All param types can be extracted from a given", (t) => {
   const f = kpeval(
     given(
       {
-        params: ["a"],
-        restParam: "b",
-        namedParams: ["c"],
-        namedRestParam: "d",
+        params: ["a", { rest: "b" }],
+        namedParams: ["c", { rest: "d" }],
       },
       literal(null)
     )
@@ -38,10 +34,8 @@ test("All param types can be extracted from a given", (t) => {
   const params = paramsFromGiven(f);
 
   t.deepEqual(params, {
-    params: ["a"],
-    restParam: "b",
-    namedParams: ["c"],
-    namedRestParam: "d",
+    params: ["a", { rest: "b" }],
+    namedParams: ["c", { rest: "d" }],
   });
 });
 
@@ -52,9 +46,7 @@ test("A builtin with an empty param spec has no params", (t) => {
 
   t.deepEqual(params, {
     params: [],
-    restParam: null,
     namedParams: [],
-    namedRestParam: null,
   });
 });
 
@@ -62,10 +54,8 @@ test("All param types can be extracted from a builtin", (t) => {
   const f = builtin(
     "foo",
     {
-      params: ["a"],
-      restParam: "b",
-      namedParams: ["c"],
-      namedRestParam: "d",
+      params: ["a", { rest: "b" }],
+      namedParams: ["c", { rest: "d" }],
     },
     literal(null)
   );
@@ -73,10 +63,8 @@ test("All param types can be extracted from a builtin", (t) => {
   const params = paramsFromBuiltin(f);
 
   t.deepEqual(params, {
-    params: ["a"],
-    restParam: "b",
-    namedParams: ["c"],
-    namedRestParam: "d",
+    params: ["a", { rest: "b" }],
+    namedParams: ["c", { rest: "d" }],
   });
 });
 

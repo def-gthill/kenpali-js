@@ -1,5 +1,5 @@
 import { as, bind, deepForce, default_, force, rest } from "./bind.js";
-import { isError, loadBuiltins, toString } from "./builtins.js";
+import { isError, isGiven, loadBuiltins, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
 import kperror, { catch_, errorType, withErrorType } from "./kperror.js";
@@ -274,15 +274,10 @@ const evalThis = {
     return evalWithBuiltins(expression.result, scope);
   },
   given(expression, names) {
-    const result = kpobject(
-      ["#given", paramSpecToKpValue(expression.given)],
-      ["result", expression.result],
-      ["closure", names]
-    );
-    if ("binder" in expression) {
-      result.set("binder", expression.binder);
-    }
-    return result;
+    return {
+      ...expression,
+      closure: names,
+    };
   },
   calling(expression, names) {
     const f = evalWithBuiltins(expression.calling, names);
@@ -416,7 +411,7 @@ function callOnExpressions(f, args, namedArgs, names) {
     args: evalExpressionArgs(args, names),
     namedArgs: evalExpressionNamedArgs(namedArgs, names),
   };
-  if (f instanceof Map && f.has("#given")) {
+  if (isGiven(f)) {
     return callGiven(f, allArgs, names);
   } else if (typeof f === "function") {
     return callBuiltin(f, allArgs, names);
@@ -465,7 +460,7 @@ export function callOnValues(f, args, namedArgs = kpobject()) {
     args: argExpressions,
     namedArgs: namedArgExpressions,
   };
-  if (f instanceof Map && f.has("#given")) {
+  if (isGiven(f)) {
     return callGiven(f, allArgs, kpobject());
   } else if (typeof f === "function") {
     return callBuiltin(f, allArgs, kpobject());
@@ -487,13 +482,16 @@ function callGiven(f, allArgs, names) {
     throw argumentErrorGivenParamObjects(paramObjects, bindings);
   }
   return evalWithBuiltins(
-    f.get("result"),
-    new Scope(f.get("closure") ?? kpobject(), bindings)
+    f.result,
+    new Scope(f.closure ?? kpobject(), bindings)
   );
 }
 
 export function paramsFromGiven(f) {
-  return f.get("#given");
+  return {
+    params: f.given.params ?? [],
+    namedParams: f.given.namedParams ?? [],
+  };
 }
 
 class Scope {
@@ -620,9 +618,7 @@ export function argumentError(err, argumentNames) {
 export function paramsFromBuiltin(f) {
   return {
     params: f.params ?? [],
-    restParam: f.restParam ?? null,
     namedParams: f.namedParams ?? [],
-    namedRestParam: f.namedRestParam ?? null,
   };
 }
 
