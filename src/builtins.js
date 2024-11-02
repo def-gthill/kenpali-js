@@ -280,9 +280,6 @@ const rawBuiltins = [
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
   }),
-  builtin("isRecord", { params: ["value"] }, function ([value]) {
-    return isRecord(value);
-  }),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
   }),
@@ -636,8 +633,8 @@ export function typeOf(value) {
     return "null";
   } else if (isArray(value)) {
     return "array";
-  } else if (isRecord(value)) {
-    return "record";
+  } else if (isObject(value)) {
+    return "object";
   } else if (isBuiltin(value)) {
     return "builtin";
   } else if (isGiven(value)) {
@@ -663,10 +660,6 @@ export function isString(value) {
 
 export function isArray(value) {
   return Array.isArray(value);
-}
-
-export function isRecord(value) {
-  return isObject(value) && !isGiven(value) && !isError(value);
 }
 
 export function isBuiltin(value) {
