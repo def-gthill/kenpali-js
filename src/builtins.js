@@ -14,7 +14,7 @@ import {
 import { array, given, literal, name } from "./kpast.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
 import { argumentError, callOnValues } from "./kpeval.js";
-import kpobject, { kpoEntries } from "./kpobject.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 
 const rawBuiltins = [
   builtin(
@@ -440,9 +440,17 @@ const rawBuiltins = [
   ),
   builtin(
     "toObject",
-    { params: [{ name: "properties", type: arrayOf(["string", "any"]) }] },
-    function ([properties]) {
-      return kpobject(...properties);
+    {
+      params: [
+        { name: "value", type: either(arrayOf(["string", "any"]), "error") },
+      ],
+    },
+    function ([value]) {
+      if (isArray(value)) {
+        return kpobject(...value);
+      } else {
+        return toKpobject(value);
+      }
     }
   ),
   builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
