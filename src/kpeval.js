@@ -1,4 +1,13 @@
-import { as, bind, deepForce, default_, force, rest } from "./bind.js";
+import {
+  arrayLike,
+  as,
+  bind,
+  deepForce,
+  default_,
+  force,
+  objectLike,
+  rest,
+} from "./bind.js";
 import { isError, isGiven, loadBuiltins, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { array, literal, object } from "./kpast.js";
@@ -331,10 +340,10 @@ function createPatternSchema(pattern) {
   if (typeof pattern === "string") {
     return as("any", pattern);
   } else if ("arrayPattern" in pattern) {
-    return pattern.arrayPattern.map(createPatternSchema);
+    return arrayLike(pattern.arrayPattern.map(createPatternSchema));
   } else if ("objectPattern" in pattern) {
-    return kpobject(
-      ...pattern.objectPattern.map((element) => [element, "any"])
+    return objectLike(
+      kpobject(...pattern.objectPattern.map((element) => [element, "any"]))
     );
   }
 }
@@ -349,25 +358,6 @@ function selfReferentialScope(enclosingScope, localNames) {
     value.context = scope;
   }
   return scope;
-}
-
-function paramSpecToKpValue(paramSpec) {
-  return {
-    params: (paramSpec.params ?? []).map(paramToKpValue),
-    restParam: mapNullable(paramSpec.restParam, paramToKpValue),
-    namedParams: (paramSpec.namedParams ?? []).map(paramToKpValue),
-    namedRestParam: mapNullable(paramSpec.namedRestParam, paramToKpValue),
-  };
-}
-
-function paramToKpValue(param) {
-  if (param instanceof Map) {
-    return param;
-  } else if (typeof param === "object") {
-    return toKpobject(param);
-  } else {
-    return param;
-  }
 }
 
 let tracing = false;
@@ -646,7 +636,7 @@ export function normalizeParam(param) {
 }
 
 function createParamSchema(paramObjects) {
-  const paramSchema = paramObjects.params.map((param) => {
+  const paramShape = paramObjects.params.map((param) => {
     let schema = as(param.type ?? "any", param.name);
     if ("defaultValue" in param) {
       schema = default_(schema, captureContext(param.defaultValue));
@@ -654,14 +644,15 @@ function createParamSchema(paramObjects) {
     return schema;
   });
   if (paramObjects.restParam) {
-    paramSchema.push(
+    paramShape.push(
       as(
         rest(paramObjects.restParam.type ?? "any"),
         paramObjects.restParam.name
       )
     );
   }
-  const namedParamSchema = kpobject(
+  const paramSchema = arrayLike(paramShape);
+  const namedParamShape = kpobject(
     ...paramObjects.namedParams.map((param) => {
       let valueSchema = param.type ?? "any";
       if ("defaultValue" in param) {
@@ -671,11 +662,12 @@ function createParamSchema(paramObjects) {
     })
   );
   if (paramObjects.namedRestParam) {
-    namedParamSchema.set(
+    namedParamShape.set(
       paramObjects.namedRestParam.name,
       rest(paramObjects.namedRestParam.type ?? "any")
     );
   }
+  const namedParamSchema = objectLike(namedParamShape);
   return [paramSchema, namedParamSchema];
 }
 

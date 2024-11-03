@@ -9,7 +9,9 @@ import {
   objectOf,
   oneOf,
   optional,
+  objectLike as recordLike,
   rest,
+  arrayLike as tupleLike,
 } from "./bind.js";
 import { array, given, literal, name } from "./kpast.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
@@ -442,7 +444,10 @@ const rawBuiltins = [
     "toObject",
     {
       params: [
-        { name: "value", type: either(arrayOf(["string", "any"]), "error") },
+        {
+          name: "value",
+          type: either(arrayOf(tupleLike(["string", "any"])), "error"),
+        },
       ],
     },
     function ([value]) {
@@ -465,7 +470,12 @@ const rawBuiltins = [
   ),
   builtin(
     "switch",
-    { params: ["value", { rest: { name: "cases", type: ["any", "any"] } }] },
+    {
+      params: [
+        "value",
+        { rest: { name: "cases", type: tupleLike(["any", "any"]) } },
+      ],
+    },
     function ([value, ...cases]) {
       for (const [schema, f] of cases) {
         const bindings = errorToNull(() => bind(value, schema));
@@ -511,6 +521,15 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "tupleLike",
+    {
+      params: ["shape"],
+    },
+    function ([shape]) {
+      return tupleLike(shape);
+    }
+  ),
+  builtin(
     "objectOf",
     {
       namedParams: [
@@ -525,6 +544,15 @@ const rawBuiltins = [
     },
     function ([], namedArgs) {
       return objectOf(namedArgs);
+    }
+  ),
+  builtin(
+    "recordLike",
+    {
+      params: ["shape"],
+    },
+    function ([shape]) {
+      return recordLike(shape);
     }
   ),
   builtin(

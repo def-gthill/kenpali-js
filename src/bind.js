@@ -52,28 +52,33 @@ export function deepForce(value) {
 }
 
 function namesToBind(schema) {
-  if (isArray(schema)) {
-    return mergeArrays(schema.map(namesToBind));
-  } else if (isObject(schema)) {
-    if (schema.has("#either")) {
-      return mergeArrays(schema.get("#either").map(namesToBind));
-    } else if (schema.has("#type")) {
-      if (schema.has("elements")) {
-        return namesToBind(schema.get("elements"));
-      } else if (schema.has("values")) {
-        return namesToBind(schema.get("values"));
-      } else {
-        return [];
+  if (isObject(schema)) {
+    if (schema.has("either")) {
+      return mergeArrays(schema.get("either").map(namesToBind));
+    } else if (schema.has("type")) {
+      const names = [];
+      if (schema.get("type") === "array" && schema.has("shape")) {
+        names.push(...mergeArrays(schema.get("shape").map(namesToBind)));
       }
-    } else if (schema.has("#bind")) {
-      return [schema.get("as"), ...namesToBind(schema.get("#bind"))];
-    } else if (schema.has("#default")) {
+      if (schema.get("type") === "object" && schema.has("shape")) {
+        names.push(
+          ...kpoKeys(schema.get("shape")),
+          ...mergeArrays(kpoValues(schema.get("shape")).map(namesToBind))
+        );
+      }
+      if (schema.has("elements")) {
+        names.push(...namesToBind(schema.get("elements")));
+      }
+      if (schema.has("values")) {
+        names.push(...namesToBind(schema.get("values")));
+      }
+      return names;
+    } else if (schema.has("bind")) {
+      return [schema.get("as"), ...namesToBind(schema.get("bind"))];
+    } else if (schema.has("default")) {
       return namesToBind(schema.get("for"));
     } else {
-      return [
-        ...kpoKeys(schema),
-        ...mergeArrays(kpoValues(schema).map(namesToBind)),
-      ];
+      return [];
     }
   } else {
     return [];
@@ -93,24 +98,22 @@ function mergeArrays(arrays) {
 }
 
 function bindInternal(value, schema) {
-  if (isArray(schema)) {
-    return bindArraySchema(value, schema);
-  } else if (isString(schema)) {
+  if (isString(schema)) {
     return bindTypeSchema(value, schema);
   } else if (isObject(schema)) {
-    if (schema.has("#either")) {
+    if (schema.has("either")) {
       return bindUnionSchema(value, schema);
-    } else if (schema.has("#oneOf")) {
+    } else if (schema.has("oneOf")) {
       return bindLiteralListSchema(value, schema);
-    } else if (schema.has("#type")) {
+    } else if (schema.has("type")) {
       const result = bindTypeWithConditionsSchema(value, schema);
       return result;
-    } else if (schema.has("#bind")) {
+    } else if (schema.has("bind")) {
       return explicitBind(value, schema);
-    } else if (schema.has("#default")) {
+    } else if (schema.has("default")) {
       return bindInternal(value, schema.get("for"));
     } else {
-      return bindObjectSchema(value, schema);
+      throw invalidSchema(schema);
     }
   } else {
     throw invalidSchema(schema);
@@ -133,79 +136,10 @@ function bindTypeSchema(value, schema) {
   }
 }
 
-function bindArraySchema(value, schema) {
-  const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("#rest");
-  if (hasRest) {
-    if (!isArray(value)) {
-      throw wrongType(value, "array");
-    }
-    const result = kpobject();
-    for (let i = 0; i < schema.length - 1; i++) {
-      if (i >= value.length) {
-        if (isObject(schema[i]) && schema[i].has("#default")) {
-          const forSchema = schema[i].get("for");
-          result.set(forSchema.get("as"), schema[i].get("#default"));
-        } else {
-          throw missingElement(value, i + 1, schema);
-        }
-      } else {
-        const bindings = transformError(
-          () => bindInternal(value[i], schema[i]),
-          (err) => withReason(badElement(value, i + 1), err)
-        );
-        for (const [name, binding] of bindings) {
-          result.set(name, binding);
-        }
-      }
-    }
-    const numNonRestElements = schema.length - 1;
-    const bindings = transformError(
-      () =>
-        bindInternal(
-          value.slice(numNonRestElements),
-          arrayOf(schema.at(-1).get("#rest"))
-        ),
-      (err) =>
-        withDetails(err, [
-          "index",
-          numNonRestElements + err.details.get("index"),
-        ])
-    );
-    for (const [name, binding] of bindings) {
-      result.set(name, binding);
-    }
-    return result;
-  } else {
-    if (!isArray(value)) {
-      throw wrongType(value, "array");
-    }
-    const result = kpobject();
-    for (let i = 0; i < schema.length; i++) {
-      if (i >= value.length) {
-        if (isObject(schema[i]) && schema[i].has("#default")) {
-          const forSchema = schema[i].get("for");
-          result.set(forSchema.get("as"), schema[i].get("#default"));
-        } else {
-          throw missingElement(value, i + 1, schema);
-        }
-      } else {
-        const bindings = transformError(
-          () => bindInternal(value[i], schema[i]),
-          (err) => withReason(badElement(value, i + 1), err)
-        );
-        for (const [name, binding] of bindings) {
-          result.set(name, binding);
-        }
-      }
-    }
-    return result;
-  }
-}
-
 function bindUnionSchema(value, schema) {
   let succeeded = false;
   const result = kpobject();
-  const options = schema.get("#either");
+  const options = schema.get("either");
   const bindings = options.map((option) =>
     catch_(() => bindInternal(value, option))
   );
@@ -246,17 +180,29 @@ function combineUnionErrors(value, errors) {
 }
 
 function bindLiteralListSchema(value, schema) {
-  for (const option of schema.get("#oneOf")) {
+  for (const option of schema.get("oneOf")) {
     if (equals(value, option)) {
       return kpobject();
     }
   }
-  throw badValue(value, ["options", schema.get("#oneOf")]);
+  throw badValue(value, ["options", schema.get("oneOf")]);
 }
 
 function bindTypeWithConditionsSchema(value, schema) {
-  bindTypeSchema(value, schema.get("#type"));
+  bindTypeSchema(value, schema.get("type"));
   const subschemaBindings = kpobject();
+  if (schema.get("type") === "array" && schema.has("shape")) {
+    const bindings = bindArrayShape(value, schema.get("shape"));
+    for (const [key, value] of bindings) {
+      subschemaBindings.set(key, value);
+    }
+  }
+  if (schema.get("type") === "object" && schema.has("shape")) {
+    const bindings = bindObjectShape(value, schema.get("shape"));
+    for (const [key, value] of bindings) {
+      subschemaBindings.set(key, value);
+    }
+  }
   if (schema.has("elements")) {
     const keys = namesToBind(schema);
     const bindings = value.map((element, i) =>
@@ -333,7 +279,7 @@ function bindTypeWithConditionsSchema(value, schema) {
 }
 
 function explicitBind(value, schema) {
-  const bindSchema = schema.get("#bind");
+  const bindSchema = schema.get("bind");
   const bindings = bindInternal(value, bindSchema);
   const result = kpobject();
   result.set(schema.get("as"), value);
@@ -343,7 +289,76 @@ function explicitBind(value, schema) {
   return result;
 }
 
-function bindObjectSchema(value, schema) {
+function bindArrayShape(value, schema) {
+  const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("rest");
+  if (hasRest) {
+    if (!isArray(value)) {
+      throw wrongType(value, "array");
+    }
+    const result = kpobject();
+    for (let i = 0; i < schema.length - 1; i++) {
+      if (i >= value.length) {
+        if (isObject(schema[i]) && schema[i].has("default")) {
+          const forSchema = schema[i].get("for");
+          result.set(forSchema.get("as"), schema[i].get("default"));
+        } else {
+          throw missingElement(value, i + 1, schema);
+        }
+      } else {
+        const bindings = transformError(
+          () => bindInternal(value[i], schema[i]),
+          (err) => withReason(badElement(value, i + 1), err)
+        );
+        for (const [name, binding] of bindings) {
+          result.set(name, binding);
+        }
+      }
+    }
+    const numNonRestElements = schema.length - 1;
+    const bindings = transformError(
+      () =>
+        bindInternal(
+          value.slice(numNonRestElements),
+          arrayOf(schema.at(-1).get("rest"))
+        ),
+      (err) =>
+        withDetails(err, [
+          "index",
+          numNonRestElements + err.details.get("index"),
+        ])
+    );
+    for (const [name, binding] of bindings) {
+      result.set(name, binding);
+    }
+    return result;
+  } else {
+    if (!isArray(value)) {
+      throw wrongType(value, "array");
+    }
+    const result = kpobject();
+    for (let i = 0; i < schema.length; i++) {
+      if (i >= value.length) {
+        if (isObject(schema[i]) && schema[i].has("default")) {
+          const forSchema = schema[i].get("for");
+          result.set(forSchema.get("as"), schema[i].get("default"));
+        } else {
+          throw missingElement(value, i + 1, schema);
+        }
+      } else {
+        const bindings = transformError(
+          () => bindInternal(value[i], schema[i]),
+          (err) => withReason(badElement(value, i + 1), err)
+        );
+        for (const [name, binding] of bindings) {
+          result.set(name, binding);
+        }
+      }
+    }
+    return result;
+  }
+}
+
+function bindObjectShape(value, schema) {
   if (!isObject(value)) {
     throw wrongType(value, "object");
   }
@@ -351,16 +366,16 @@ function bindObjectSchema(value, schema) {
   const ownBindings = kpobject();
   const propertyBindings = [];
   for (let [key, propertySchema] of schema) {
-    if (isObject(propertySchema) && propertySchema.has("#rest")) {
+    if (isObject(propertySchema) && propertySchema.has("rest")) {
       restName = key;
       break;
     }
-    if (isObject(propertySchema) && propertySchema.has("#optional")) {
-      propertySchema = propertySchema.get("#optional");
+    if (isObject(propertySchema) && propertySchema.has("optional")) {
+      propertySchema = propertySchema.get("optional");
     } else if (!value.has(key)) {
-      if (isObject(propertySchema) && propertySchema.has("#default")) {
-        ownBindings.set(key, [propertySchema.get("#default"), "any"]);
-        propertyBindings.push(kpobject([key, propertySchema.get("#default")]));
+      if (isObject(propertySchema) && propertySchema.has("default")) {
+        ownBindings.set(key, [propertySchema.get("default"), "any"]);
+        propertyBindings.push(kpobject([key, propertySchema.get("default")]));
       } else {
         throw missingProperty(value, key);
       }
@@ -386,7 +401,7 @@ function bindObjectSchema(value, schema) {
       objectOf(
         kpobject(
           ["keys", "string"],
-          ["values", schema.get(restName).get("#rest")]
+          ["values", schema.get(restName).get("rest")]
         )
       ),
     ]);
@@ -417,46 +432,54 @@ export function matches(value, schema) {
 }
 
 export function is(type, namedArgs = kpobject()) {
-  return kpoMerge(kpobject(["#type", type]), namedArgs);
+  return kpoMerge(kpobject(["type", type]), namedArgs);
 }
 
 export function oneOf(values) {
-  return kpobject(["#oneOf", values]);
+  return kpobject(["oneOf", values]);
 }
 
 export function arrayOf(elementSchema, namedArgs = kpobject()) {
   return kpoMerge(
-    kpobject(["#type", "array"], ["elements", elementSchema]),
+    kpobject(["type", "array"], ["elements", elementSchema]),
     namedArgs
   );
 }
 
+export function arrayLike(shape) {
+  return kpobject(["type", "array"], ["shape", shape]);
+}
+
 export function objectOf(namedArgs) {
-  return kpoMerge(kpobject(["#type", "object"]), namedArgs);
+  return kpoMerge(kpobject(["type", "object"]), namedArgs);
+}
+
+export function objectLike(shape) {
+  return kpobject(["type", "object"], ["shape", shape]);
 }
 
 export function optional(schema) {
-  return kpobject(["#optional", schema]);
+  return kpobject(["optional", schema]);
 }
 
 export function either(...schemas) {
-  return kpobject(["#either", schemas]);
+  return kpobject(["either", schemas]);
 }
 
 export function as(schema, name) {
-  if (isObject(schema) && schema.has("#rest")) {
-    return kpobject(["#rest", as(schema.get("#rest"), name)]);
+  if (isObject(schema) && schema.has("rest")) {
+    return kpobject(["rest", as(schema.get("rest"), name)]);
   } else {
-    return kpobject(["#bind", schema], ["as", name]);
+    return kpobject(["bind", schema], ["as", name]);
   }
 }
 
 export function default_(schema, defaultValue) {
-  return kpobject(["#default", defaultValue], ["for", schema]);
+  return kpobject(["default", defaultValue], ["for", schema]);
 }
 
 export function rest(schema) {
-  return kpobject(["#rest", schema]);
+  return kpobject(["rest", schema]);
 }
 
 function invalidSchema(schema) {

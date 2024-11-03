@@ -1,5 +1,5 @@
 import test from "ava";
-import { as, bind } from "../src/bind.js";
+import { arrayLike, as, bind, objectLike } from "../src/bind.js";
 import { literal } from "../src/kpast.js";
 import { catch_ } from "../src/kperror.js";
 import kpobject from "../src/kpobject.js";
@@ -16,7 +16,7 @@ test("Eager binding forces evaluation", (t) => {
 
 test("Eager binding can bind expressions inside arrays", (t) => {
   const value = [expression(literal("foo"))];
-  const schema = [as("string", "word")];
+  const schema = arrayLike([as("string", "word")]);
 
   const bindings = bind(value, schema);
   const word = bindings.get("word");
@@ -26,7 +26,7 @@ test("Eager binding can bind expressions inside arrays", (t) => {
 
 test("The reason given for a bad object property is an error object", (t) => {
   const value = kpobject(["foo", "bar"]);
-  const schema = kpobject(["foo", "number"]);
+  const schema = objectLike(kpobject(["foo", "number"]));
 
   const result = catch_(() => bind(value, schema));
 
