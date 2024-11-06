@@ -179,7 +179,7 @@ function loadCore(enclosingScope) {
     const ast = kpparse(code + "null");
     core = ast.defining;
   }
-  return selfReferentialScope(enclosingScope, core);
+  return defineNames(core, enclosingScope);
 }
 
 export function evalWithBuiltins(expression, names) {
@@ -267,14 +267,6 @@ const evalThis = {
     const binding = names.get(expression.name);
     if (binding === undefined) {
       throw kperror("nameUsedBeforeAssignment", ["name", expression.name]);
-    } else if (typeof binding === "object" && "expression" in binding) {
-      const result = evalWithBuiltins(binding.expression, binding.context);
-      names.set(expression.name, result);
-      return result;
-    } else if (typeof binding === "object" && "thunk" in binding) {
-      const result = binding.thunk();
-      names.set(expression.name, result);
-      return result;
     } else {
       return binding;
     }
@@ -363,16 +355,6 @@ function createPatternSchema(pattern) {
       kpobject(...pattern.objectPattern.map((element) => [element, "any"]))
     );
   }
-}
-
-function selfReferentialScope(enclosingScope, localNames) {
-  const declaredNames = kpobject(...localNames);
-  const evaluatedNames = kpoMap(localNames, ([name, _]) => [name, undefined]);
-  const scope = new Scope(enclosingScope, evaluatedNames);
-  for (const [key, _] of evaluatedNames) {
-    evaluatedNames.set(key, evalWithBuiltins(declaredNames.get(key), scope));
-  }
-  return scope;
 }
 
 let tracing = false;
