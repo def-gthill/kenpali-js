@@ -1,12 +1,12 @@
 import {
-  arrayLike,
   as,
   bind,
   deepForce,
   default_,
   force,
-  objectLike,
+  objectLike as recordLike,
   rest,
+  arrayLike as tupleLike,
 } from "./bind.js";
 import { isError, isGiven, loadBuiltins, toString } from "./builtins.js";
 import { core as coreCode } from "./core.js";
@@ -265,7 +265,9 @@ const evalThis = {
       throw kperror("nameNotDefined", ["name", expression.name]);
     }
     const binding = names.get(expression.name);
-    if (typeof binding === "object" && "expression" in binding) {
+    if (binding === undefined) {
+      throw kperror("nameUsedBeforeAssignment", ["name", expression.name]);
+    } else if (typeof binding === "object" && "expression" in binding) {
       const result = evalWithBuiltins(binding.expression, binding.context);
       names.set(expression.name, result);
       return result;
@@ -278,8 +280,7 @@ const evalThis = {
     }
   },
   defining(expression, names) {
-    const definedNames = defineNames(expression.defining, names);
-    const scope = selfReferentialScope(names, definedNames);
+    const scope = defineNames(expression.defining, names);
     return evalWithBuiltins(expression.result, scope);
   },
   given(expression, names) {
@@ -309,30 +310,46 @@ const evalThis = {
 };
 
 function defineNames(definitions, names) {
-  let result = kpobject();
-  for (const definition of definitions) {
-    result = kpoMerge(result, defineNamesInDefinition(definition, names));
+  let declaredNames = [];
+  for (const [pattern, _] of definitions) {
+    declaredNames.push(...declareNames(pattern));
   }
-  return result;
+  const evaluatedNames = kpoMap(declaredNames, (name) => [name, undefined]);
+  const scope = new Scope(names, evaluatedNames);
+
+  let assignedNames = kpobject();
+  for (const definition of definitions) {
+    assignedNames = kpoMerge(assignedNames, assignNames(definition, scope));
+  }
+  return scope;
 }
 
-function defineNamesInDefinition(definition, names) {
-  const [pattern, value] = definition;
-  const schema = createPatternSchema(pattern);
-  let forcedValue;
+function declareNames(pattern) {
+  const namesToDeclare = [];
   if (typeof pattern === "string") {
-    forcedValue = value;
+    namesToDeclare.push(pattern);
   } else if ("arrayPattern" in pattern) {
-    forcedValue = evalWithBuiltins(value, names).map(literal);
+    for (const element of pattern.arrayPattern) {
+      namesToDeclare.push(...declareNames(element));
+    }
   } else if ("objectPattern" in pattern) {
-    forcedValue = kpoMap(evalWithBuiltins(value, names), ([key, value]) => [
-      key,
-      literal(value),
-    ]);
+    for (const element of pattern.objectPattern) {
+      namesToDeclare.push(...declareNames(element));
+    }
   } else {
     throw kperror("invalidPattern", ["pattern", pattern]);
   }
-  const bindings = bind(forcedValue, schema);
+  return namesToDeclare;
+}
+
+function assignNames(definition, names) {
+  const [pattern, expression] = definition;
+  const schema = createPatternSchema(pattern);
+  const value = evalWithBuiltins(expression, names);
+  const bindings = bind(value, schema);
+  for (const [key, boundValue] of bindings) {
+    names.set(key, boundValue);
+  }
   return bindings;
 }
 
@@ -340,22 +357,20 @@ function createPatternSchema(pattern) {
   if (typeof pattern === "string") {
     return as("any", pattern);
   } else if ("arrayPattern" in pattern) {
-    return arrayLike(pattern.arrayPattern.map(createPatternSchema));
+    return tupleLike(pattern.arrayPattern.map(createPatternSchema));
   } else if ("objectPattern" in pattern) {
-    return objectLike(
+    return recordLike(
       kpobject(...pattern.objectPattern.map((element) => [element, "any"]))
     );
   }
 }
 
 function selfReferentialScope(enclosingScope, localNames) {
-  const localNamesWithContext = kpoMap(localNames, ([name, value]) => [
-    name,
-    { expression: value },
-  ]);
-  const scope = new Scope(enclosingScope, localNamesWithContext);
-  for (const [_, value] of localNamesWithContext) {
-    value.context = scope;
+  const declaredNames = kpobject(...localNames);
+  const evaluatedNames = kpoMap(localNames, ([name, _]) => [name, undefined]);
+  const scope = new Scope(enclosingScope, evaluatedNames);
+  for (const [key, _] of evaluatedNames) {
+    evaluatedNames.set(key, evalWithBuiltins(declaredNames.get(key), scope));
   }
   return scope;
 }
@@ -651,7 +666,7 @@ function createParamSchema(paramObjects) {
       )
     );
   }
-  const paramSchema = arrayLike(paramShape);
+  const paramSchema = tupleLike(paramShape);
   const namedParamShape = kpobject(
     ...paramObjects.namedParams.map((param) => {
       let valueSchema = param.type ?? "any";
@@ -667,7 +682,7 @@ function createParamSchema(paramObjects) {
       rest(paramObjects.namedRestParam.type ?? "any")
     );
   }
-  const namedParamSchema = objectLike(namedParamShape);
+  const namedParamSchema = recordLike(namedParamShape);
   return [paramSchema, namedParamSchema];
 }
 

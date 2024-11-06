@@ -54,3 +54,15 @@ test("Errors short-circuit through the @ operator", (t) => {
   const result = kpeval(kpparse(code));
   assertIsError(t, result, "wrongArgumentType");
 });
+
+test("Using a name before it's assigned throws an error", (t) => {
+  const code = `foo = bar; bar = 42; foo | plus(3)`;
+  const result = kpeval(kpparse(code));
+  assertIsError(t, result, "nameUsedBeforeAssignment");
+});
+
+test("Destructuring can reference other names in the same scope", (t) => {
+  const code = `foo = [42, 97]; [bar, baz] = foo; bar | plus(baz)`;
+  const result = kpeval(kpparse(code));
+  t.is(result, 139);
+});
