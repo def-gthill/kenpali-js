@@ -1,7 +1,9 @@
 import test from "ava";
 import { toJsFunction, toKpFunction } from "../src/interop.js";
 import { calling, given, literal, name } from "../src/kpast.js";
+import kperror from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
+import { assertIsError } from "./assertIsError.js";
 
 test("We can convert a Kenpali function into a JavaScript function", (t) => {
   const kpf = kpeval(given({}, literal(42)));
@@ -56,6 +58,14 @@ test("Kenpali named parameters become an extra object argument in the JavaScript
   t.is(jsf(3, { bonus: 4, multiplier: 5 }), 19);
 });
 
+test("Errors thrown in Kenpali are returned as error objects in the JavaScript version", (t) => {
+  const kpf = kpeval(given({}, name("foo")));
+
+  const jsf = toJsFunction(kpf);
+
+  assertIsError(t, jsf(), "nameNotDefined");
+});
+
 test("We can pass a JavaScript callback to a Kenpali function", (t) => {
   const kpf = kpeval(
     given({ params: ["callback"] }, calling(name("callback")))
@@ -103,4 +113,18 @@ test("A JavaScript callback converts named arguments into a final object argumen
   );
 
   t.is(jsf(callback), 19);
+});
+
+test("An error returned by a JavaScript callback throws in Kenpali", (t) => {
+  const kpf = kpeval(
+    given(
+      { params: ["callback"] },
+      calling(name("plus"), [calling(name("callback")), literal(42)])
+    )
+  );
+  const jsf = toJsFunction(kpf);
+
+  const callback = toKpFunction(() => kperror("someError"));
+
+  assertIsError(t, jsf(callback), "someError");
 });
