@@ -1,6 +1,6 @@
 import test from "ava";
 import { toJsFunction, toKpFunction } from "../src/interop.js";
-import { calling, given, literal, name } from "../src/kpast.js";
+import { calling, defining, given, literal, name } from "../src/kpast.js";
 import kperror from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import { assertIsError } from "./assertIsError.js";
@@ -56,6 +56,22 @@ test("Kenpali named parameters become an extra object argument in the JavaScript
   const jsf = toJsFunction(kpf);
 
   t.is(jsf(3, { bonus: 4, multiplier: 5 }), 19);
+});
+
+test("Kenpali parameter defaults can reference names from the context", (t) => {
+  const kpf = kpeval(
+    defining(
+      ["a", literal(5)],
+      given(
+        { params: ["x", { name: "y", defaultValue: name("a") }] },
+        calling(name("times"), [name("x"), name("y")])
+      )
+    )
+  );
+
+  const jsf = toJsFunction(kpf);
+
+  t.is(jsf(3), 15);
 });
 
 test("Errors thrown in Kenpali are returned as error objects in the JavaScript version", (t) => {

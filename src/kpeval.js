@@ -274,7 +274,8 @@ const evalThis = {
   },
   given(expression, names) {
     return {
-      ...expression,
+      given: evalDefaultValues(expression.given, names),
+      result: expression.result,
       closure: names,
     };
   },
@@ -354,12 +355,33 @@ function createPatternSchema(pattern) {
   }
 }
 
+function evalDefaultValues(allParams, names) {
+  function evalForOneParam(param) {
+    if (typeof param === "object" && "defaultValue" in param) {
+      return {
+        ...param,
+        defaultValue: evalWithBuiltins(param.defaultValue, names),
+      };
+    } else {
+      return param;
+    }
+  }
+
+  const result = {};
+  if ("params" in allParams) {
+    result.params = allParams.params.map(evalForOneParam);
+  }
+  if ("namedParams" in allParams) {
+    result.namedParams = allParams.namedParams.map(evalForOneParam);
+  }
+  return result;
+}
+
 function callOnExpressions(f, args, namedArgs, names) {
   return callOnValues(
     f,
     evalExpressionArgs(args, names),
-    evalExpressionNamedArgs(namedArgs, names),
-    names
+    evalExpressionNamedArgs(namedArgs, names)
   );
 }
 
@@ -388,20 +410,20 @@ function evalExpressionNamedArgs(namedArgs, names) {
   return kpobject(...result);
 }
 
-export function callOnValues(f, args, namedArgs, names) {
+export function callOnValues(f, args, namedArgs) {
   if (isGiven(f)) {
-    return callGiven(f, args, namedArgs, names);
+    return callGiven(f, args, namedArgs);
   } else if (isBuiltin(f)) {
-    return callBuiltin(f, args, namedArgs, names);
+    return callBuiltin(f, args, namedArgs);
   } else {
     throw kperror("notCallable", ["value", f]);
   }
 }
 
-function callGiven(f, args, namedArgs, names) {
+function callGiven(f, args, namedArgs) {
   const allParams = paramsFromGiven(f);
   const paramObjects = normalizeAllParams(allParams);
-  const schema = createParamSchema(paramObjects, names);
+  const schema = createParamSchema(paramObjects);
   const bindings = catch_(() =>
     kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]))
   );
@@ -469,10 +491,10 @@ class Scope {
   }
 }
 
-function callBuiltin(f, args, namedArgs, names) {
+function callBuiltin(f, args, namedArgs) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
-  const schema = createParamSchema(paramObjects, names);
+  const schema = createParamSchema(paramObjects);
   const bindings = catch_(() =>
     kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]))
   );
@@ -558,11 +580,11 @@ export function normalizeParam(param) {
   }
 }
 
-function createParamSchema(paramObjects, names) {
+function createParamSchema(paramObjects) {
   const paramShape = paramObjects.params.map((param) => {
     let schema = as(param.type ?? "any", param.name);
     if ("defaultValue" in param) {
-      schema = default_(schema, evalWithBuiltins(param.defaultValue, names));
+      schema = default_(schema, param.defaultValue);
     }
     return schema;
   });
@@ -579,10 +601,7 @@ function createParamSchema(paramObjects, names) {
     ...paramObjects.namedParams.map((param) => {
       let valueSchema = param.type ?? "any";
       if ("defaultValue" in param) {
-        valueSchema = default_(
-          valueSchema,
-          evalWithBuiltins(param.defaultValue, names)
-        );
+        valueSchema = default_(valueSchema, param.defaultValue);
       }
       return [param.name, valueSchema];
     })

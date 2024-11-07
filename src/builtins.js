@@ -108,7 +108,7 @@ const rawBuiltins = [
         {
           name: "with",
           type: "string",
-          defaultValue: literal(""),
+          defaultValue: "",
         },
       ],
     },
@@ -535,7 +535,7 @@ const rawBuiltins = [
     "objectOf",
     {
       namedParams: [
-        { name: "keys", defaultValue: literal("string") },
+        { name: "keys", defaultValue: "string" },
         "values",
         {
           name: "where",
