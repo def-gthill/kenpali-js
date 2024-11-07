@@ -202,7 +202,7 @@ const rawBuiltins = [
         return false;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, []);
+        const condition = callOnValues(f, [], kpobject());
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -230,7 +230,7 @@ const rawBuiltins = [
         return true;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, []);
+        const condition = callOnValues(f, [], kpobject());
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -314,9 +314,9 @@ const rawBuiltins = [
     },
     function ([condition], namedArgs) {
       if (condition) {
-        return callOnValues(namedArgs.get("then"), []);
+        return callOnValues(namedArgs.get("then"), [], kpobject());
       } else {
-        return callOnValues(namedArgs.get("else"), []);
+        return callOnValues(namedArgs.get("else"), [], kpobject());
       }
     }
   ),
@@ -427,7 +427,9 @@ const rawBuiltins = [
         namedArgs.get("next"),
         namedArgs.get("continueIf"),
         (current) => {
-          result.push(...callOnValues(namedArgs.get("out"), [current]));
+          result.push(
+            ...callOnValues(namedArgs.get("out"), [current], kpobject())
+          );
         }
       );
       return result;
@@ -755,7 +757,7 @@ function isValidName(string) {
 function loop(functionName, start, while_, next, continueIf, callback) {
   let current = start;
   for (let i = 0; i < 1000; i++) {
-    const whileCondition = callOnValues(while_, [current]);
+    const whileCondition = callOnValues(while_, [current], kpobject());
     if (!isBoolean(whileCondition)) {
       throw kperror(
         "wrongReturnType",
@@ -767,8 +769,8 @@ function loop(functionName, start, while_, next, continueIf, callback) {
       return current;
     }
     callback(current);
-    const nextResult = callOnValues(next, [current]);
-    const continueIfCondition = callOnValues(continueIf, [current]);
+    const nextResult = callOnValues(next, [current], kpobject());
+    const continueIfCondition = callOnValues(continueIf, [current], kpobject());
     if (!isBoolean(continueIfCondition)) {
       throw kperror(
         "wrongReturnType",

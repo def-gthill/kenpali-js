@@ -15,7 +15,7 @@ import kperror, {
   transformError,
   withDetails,
 } from "./kperror.js";
-import { callOnValues, evalWithBuiltins } from "./kpeval.js";
+import { callOnValues } from "./kpeval.js";
 import kpobject, {
   kpoEntries,
   kpoKeys,
@@ -25,29 +25,25 @@ import kpobject, {
 } from "./kpobject.js";
 
 export function bind(value, schema) {
-  const forcedValue = deepForce(value);
-  return bindInternal(forcedValue, schema);
-}
-
-export function force(value) {
-  if (isExpression(value)) {
-    return evalWithBuiltins(value.expression, value.context);
+  if (isString(schema)) {
+    return bindTypeSchema(value, schema);
+  } else if (isObject(schema)) {
+    if (schema.has("either")) {
+      return bindUnionSchema(value, schema);
+    } else if (schema.has("oneOf")) {
+      return bindLiteralListSchema(value, schema);
+    } else if (schema.has("type")) {
+      const result = bindTypeWithConditionsSchema(value, schema);
+      return result;
+    } else if (schema.has("bind")) {
+      return explicitBind(value, schema);
+    } else if (schema.has("default")) {
+      return bind(value, schema.get("for"));
+    } else {
+      throw invalidSchema(schema);
+    }
   } else {
-    return value;
-  }
-}
-
-export function deepForce(value) {
-  const forcedValue = force(value);
-  if (isArray(forcedValue)) {
-    return forcedValue.map(deepForce);
-  } else if (isObject(forcedValue)) {
-    return kpoMap(forcedValue, ([key, propertyValue]) => [
-      key,
-      deepForce(propertyValue),
-    ]);
-  } else {
-    return force(forcedValue);
+    throw invalidSchema(schema);
   }
 }
 
@@ -97,29 +93,6 @@ function mergeArrays(arrays) {
   return result;
 }
 
-function bindInternal(value, schema) {
-  if (isString(schema)) {
-    return bindTypeSchema(value, schema);
-  } else if (isObject(schema)) {
-    if (schema.has("either")) {
-      return bindUnionSchema(value, schema);
-    } else if (schema.has("oneOf")) {
-      return bindLiteralListSchema(value, schema);
-    } else if (schema.has("type")) {
-      const result = bindTypeWithConditionsSchema(value, schema);
-      return result;
-    } else if (schema.has("bind")) {
-      return explicitBind(value, schema);
-    } else if (schema.has("default")) {
-      return bindInternal(value, schema.get("for"));
-    } else {
-      throw invalidSchema(schema);
-    }
-  } else {
-    throw invalidSchema(schema);
-  }
-}
-
 function bindTypeSchema(value, schema) {
   if (typeOf(value) === schema) {
     return kpobject();
@@ -140,9 +113,7 @@ function bindUnionSchema(value, schema) {
   let succeeded = false;
   const result = kpobject();
   const options = schema.get("either");
-  const bindings = options.map((option) =>
-    catch_(() => bindInternal(value, option))
-  );
+  const bindings = options.map((option) => catch_(() => bind(value, option)));
   const errors = [];
   const errorsByKey = kpobject();
   for (let i = 0; i < options.length; i++) {
@@ -207,7 +178,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     const keys = namesToBind(schema);
     const bindings = value.map((element, i) =>
       transformError(
-        () => bindInternal(element, schema.get("elements")),
+        () => bind(element, schema.get("elements")),
         (err) => withReason(badElement(value, i + 1), err)
       )
     );
@@ -230,7 +201,7 @@ function bindTypeWithConditionsSchema(value, schema) {
   if (schema.has("keys")) {
     for (const key of value.keys()) {
       transformError(
-        () => bindInternal(key, schema.get("keys")),
+        () => bind(key, schema.get("keys")),
         (err) => badKey(key, err)
       );
     }
@@ -239,7 +210,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     const bindings = kpoMap(value, ([key, propertyValue]) => [
       key,
       transformError(
-        () => bindInternal(propertyValue, schema.get("values")),
+        () => bind(propertyValue, schema.get("values")),
         (err) => withReason(badProperty(propertyValue, key), err)
       ),
     ]);
@@ -272,7 +243,10 @@ function bindTypeWithConditionsSchema(value, schema) {
       }
     }
   }
-  if (schema.has("where") && !callOnValues(schema.get("where"), [value])) {
+  if (
+    schema.has("where") &&
+    !callOnValues(schema.get("where"), [value], kpobject())
+  ) {
     throw badValue(value, ["condition", schema.get("where")]);
   }
   return subschemaBindings;
@@ -280,7 +254,7 @@ function bindTypeWithConditionsSchema(value, schema) {
 
 function explicitBind(value, schema) {
   const bindSchema = schema.get("bind");
-  const bindings = bindInternal(value, bindSchema);
+  const bindings = bind(value, bindSchema);
   const result = kpobject();
   result.set(schema.get("as"), value);
   for (const [name, binding] of bindings) {
@@ -306,7 +280,7 @@ function bindArrayShape(value, schema) {
         }
       } else {
         const bindings = transformError(
-          () => bindInternal(value[i], schema[i]),
+          () => bind(value[i], schema[i]),
           (err) => withReason(badElement(value, i + 1), err)
         );
         for (const [name, binding] of bindings) {
@@ -317,7 +291,7 @@ function bindArrayShape(value, schema) {
     const numNonRestElements = schema.length - 1;
     const bindings = transformError(
       () =>
-        bindInternal(
+        bind(
           value.slice(numNonRestElements),
           arrayOf(schema.at(-1).get("rest"))
         ),
@@ -346,7 +320,7 @@ function bindArrayShape(value, schema) {
         }
       } else {
         const bindings = transformError(
-          () => bindInternal(value[i], schema[i]),
+          () => bind(value[i], schema[i]),
           (err) => withReason(badElement(value, i + 1), err)
         );
         for (const [name, binding] of bindings) {
@@ -383,7 +357,7 @@ function bindObjectShape(value, schema) {
     if (value.has(key)) {
       ownBindings.set(key, [value.get(key), propertySchema]);
       const bindings = transformError(
-        () => bindInternal(value.get(key), propertySchema),
+        () => bind(value.get(key), propertySchema),
         (err) => withReason(badProperty(value, key), err)
       );
       propertyBindings.push(bindings);
@@ -417,10 +391,6 @@ function bindObjectShape(value, schema) {
 
 function withReason(err, reason) {
   return withDetails(err, ["reason", reason]);
-}
-
-function isExpression(value) {
-  return value !== null && typeof value === "object" && "expression" in value;
 }
 
 export function matches(value, schema) {
