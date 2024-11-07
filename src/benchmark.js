@@ -31,10 +31,10 @@ rows | transform((row) => (
 const naiveFib = `
 fib = (n) => if(
   n | isAtMost(2),
-  then: 1,
-  else: plus(fib(n | minus(1)), fib(n | minus(2))),
+  then: () => 1,
+  else: () => plus(fib(n | minus(1)), fib(n | minus(2))),
 );
-fib(15)
+fib(14)
 `;
 const stringSplitting = String.raw`
 parseCsv = (text) => (
@@ -48,13 +48,13 @@ parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
 const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
-  { name: "Hello", code: hello, times: 500 },
+  { name: "Hello", code: hello, times: 20000 },
   {
     name: "Prime Pairs",
     code: primePairs,
-    times: 200,
+    times: 5000,
   },
-  { name: "Naive Fibonacci", code: naiveFib, times: 30 },
+  { name: "Naive Fibonacci", code: naiveFib, times: 70 },
   { name: "String Splitting", code: stringSplitting, times: 20 },
 ];
 

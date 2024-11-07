@@ -1,25 +1,27 @@
 import {
   arrayOf,
   as,
+  bind,
   default_,
-  eagerBind,
   either,
   is,
   matches,
   objectOf,
   oneOf,
   optional,
+  objectLike as recordLike,
   rest,
+  arrayLike as tupleLike,
 } from "./bind.js";
-import { given, literal } from "./kpast.js";
-import kpthrow from "./kperror.js";
+import { array, given, literal, name } from "./kpast.js";
+import kperror, { errorToNull, transformError } from "./kperror.js";
 import { argumentError, callOnValues } from "./kpeval.js";
-import kpobject, { kpoEntries } from "./kpobject.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 
 const rawBuiltins = [
   builtin(
     "plus",
-    { restParam: { name: "rest", type: "number" } },
+    { params: [{ rest: { name: "rest", type: "number" } }] },
     function (args) {
       return args.reduce((acc, value) => acc + value, 0);
     }
@@ -59,7 +61,7 @@ const rawBuiltins = [
   ),
   builtin(
     "times",
-    { restParam: { name: "rest", type: "number" } },
+    { params: [{ rest: { name: "rest", type: "number" } }] },
     function (args) {
       return args.reduce((acc, value) => acc * value, 1);
     }
@@ -114,6 +116,24 @@ const rawBuiltins = [
       return strings.join(namedArgs.get("with"));
     }
   ),
+  builtin(
+    "toCodePoints",
+    {
+      params: [{ name: "string", type: "string" }],
+    },
+    function ([string]) {
+      return [...string].map((char) => char.codePointAt(0));
+    }
+  ),
+  builtin(
+    "fromCodePoints",
+    {
+      params: [{ name: "codePoints", type: arrayOf("number") }],
+    },
+    function ([codePoints]) {
+      return String.fromCodePoint(...codePoints);
+    }
+  ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
@@ -126,15 +146,8 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
-      }
-      const compareResult = compare(a, b);
-      if (isThrown(compareResult)) {
-        return compareResult;
-      }
-      return compareResult < 0;
+      validateArgument(b, typeOf(a));
+      return compare(a, b) < 0;
     }
   ),
   builtin(
@@ -146,15 +159,8 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
-      }
-      const compareResult = compare(a, b);
-      if (isThrown(compareResult)) {
-        return compareResult;
-      }
-      return compareResult <= 0;
+      validateArgument(b, typeOf(a));
+      return compare(a, b) <= 0;
     }
   ),
   builtin(
@@ -166,15 +172,8 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
-      }
-      const compareResult = compare(a, b);
-      if (isThrown(compareResult)) {
-        return compareResult;
-      }
-      return compareResult > 0;
+      validateArgument(b, typeOf(a));
+      return compare(a, b) > 0;
     }
   ),
   builtin(
@@ -186,35 +185,60 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      const check = validateArgument(b, typeOf(a));
-      if (isThrown(check)) {
-        return check;
-      }
-      const compareResult = compare(a, b);
-      if (isThrown(compareResult)) {
-        return compareResult;
-      }
-      return compareResult >= 0;
+      validateArgument(b, typeOf(a));
+      return compare(a, b) >= 0;
     }
   ),
-  lazyBuiltin(
+  builtin(
     "and",
-    { restParam: { name: "rest", type: "boolean" } },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        if (!argGetter.restArg(i)) {
+    {
+      params: [
+        { name: "first", type: "boolean" },
+        { rest: { name: "rest", type: "function" } },
+      ],
+    },
+    function ([first, ...rest]) {
+      if (!first) {
+        return false;
+      }
+      for (const f of rest) {
+        const condition = callOnValues(f, [], kpobject());
+        if (!isBoolean(condition)) {
+          throw kperror(
+            "wrongReturnType",
+            ["value", condition],
+            ["expectedType", "boolean"]
+          );
+        }
+        if (!condition) {
           return false;
         }
       }
       return true;
     }
   ),
-  lazyBuiltin(
+  builtin(
     "or",
-    { restParam: { name: "rest", type: "boolean" } },
-    function (argGetter) {
-      for (let i = 0; i < argGetter.numRestArgs; i++) {
-        if (argGetter.restArg(i)) {
+    {
+      params: [
+        { name: "first", type: "boolean" },
+        { rest: { name: "rest", type: "function" } },
+      ],
+    },
+    function ([first, ...rest]) {
+      if (first) {
+        return true;
+      }
+      for (const f of rest) {
+        const condition = callOnValues(f, [], kpobject());
+        if (!isBoolean(condition)) {
+          throw kperror(
+            "wrongReturnType",
+            ["value", condition],
+            ["expectedType", "boolean"]
+          );
+        }
+        if (condition) {
           return true;
         }
       }
@@ -244,7 +268,7 @@ const rawBuiltins = [
         return value;
       }
       if (!/^-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?$/.test(value)) {
-        return kpthrow("notNumeric", ["value", value]);
+        throw kperror("notNumeric", ["value", value]);
       }
       return parseFloat(value);
     }
@@ -257,9 +281,6 @@ const rawBuiltins = [
   }),
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
-  }),
-  builtin("isRecord", { params: ["value"] }, function ([value]) {
-    return isRecord(value);
   }),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
@@ -282,25 +303,54 @@ const rawBuiltins = [
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
-  lazyBuiltin(
+  builtin(
     "if",
     {
       params: [{ name: "condition", type: "boolean" }],
-      namedParams: ["then", "else"],
+      namedParams: [
+        { name: "then", type: "function" },
+        { name: "else", type: "function" },
+      ],
     },
-    function (argGetter) {
-      if (argGetter.arg("condition")) {
-        return argGetter.arg("then");
+    function ([condition], namedArgs) {
+      if (condition) {
+        return callOnValues(namedArgs.get("then"), [], kpobject());
       } else {
-        return argGetter.arg("else");
+        return callOnValues(namedArgs.get("else"), [], kpobject());
       }
     }
   ),
   builtin(
     "repeat",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
-      return loop("repeat", start, step, () => {});
+    {
+      params: ["start"],
+      namedParams: [
+        {
+          name: "while",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+        { name: "next", type: "function" },
+        {
+          name: "continueIf",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+      ],
+    },
+    function ([start], namedArgs) {
+      let result = start;
+      loop(
+        "repeat",
+        start,
+        namedArgs.get("while"),
+        namedArgs.get("next"),
+        namedArgs.get("continueIf"),
+        (current) => {
+          result = current;
+        }
+      );
+      return result;
     }
   ),
   builtin(
@@ -313,12 +363,9 @@ const rawBuiltins = [
     },
     function ([collection, index]) {
       if (isString(collection) || isArray(collection)) {
-        const check = validateArgument(index, "number");
-        if (isThrown(check)) {
-          return check;
-        }
+        validateArgument(index, "number");
         if (index < 1 || index > collection.length) {
-          return kpthrow(
+          throw kperror(
             "indexOutOfBounds",
             ["function", "at"],
             ["value", collection],
@@ -328,14 +375,11 @@ const rawBuiltins = [
         }
         return collection[index - 1];
       } else if (isObject(collection)) {
-        const check = validateArgument(index, "string");
-        if (isThrown(check)) {
-          return check;
-        }
+        validateArgument(index, "string");
         if (collection.has(index)) {
           return collection.get(index);
         } else {
-          return kpthrow(
+          throw kperror(
             "missingProperty",
             ["value", collection],
             ["key", index]
@@ -353,19 +397,42 @@ const rawBuiltins = [
   ),
   builtin(
     "build",
-    { params: ["start", { name: "step", type: "function" }] },
-    function ([start, step]) {
+    {
+      params: ["start"],
+      namedParams: [
+        {
+          name: "while",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+        { name: "next", type: "function" },
+        {
+          name: "out",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, array(name("current"))),
+        },
+        {
+          name: "continueIf",
+          type: "function",
+          defaultValue: given({ params: ["current"] }, literal(true)),
+        },
+      ],
+    },
+    function ([start], namedArgs) {
       const result = [];
-      const loopResult = loop("build", start, step, (stepResult) => {
-        if (stepResult.get("where") ?? true) {
-          result.push(stepResult.get("out") ?? stepResult.get("next"));
+      loop(
+        "build",
+        start,
+        namedArgs.get("while"),
+        namedArgs.get("next"),
+        namedArgs.get("continueIf"),
+        (current) => {
+          result.push(
+            ...callOnValues(namedArgs.get("out"), [current], kpobject())
+          );
         }
-      });
-      if (isThrown(loopResult)) {
-        return loopResult;
-      } else {
-        return result;
-      }
+      );
+      return result;
     }
   ),
   builtin(
@@ -377,13 +444,24 @@ const rawBuiltins = [
   ),
   builtin(
     "toObject",
-    { params: [{ name: "properties", type: arrayOf(["string", "any"]) }] },
-    function ([properties]) {
-      return kpobject(...properties);
+    {
+      params: [
+        {
+          name: "value",
+          type: either(arrayOf(tupleLike(["string", "any"])), "error"),
+        },
+      ],
+    },
+    function ([value]) {
+      if (isArray(value)) {
+        return kpobject(...value);
+      } else {
+        return toKpobject(value);
+      }
     }
   ),
   builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
-    return eagerBind(value, schema);
+    return bind(value, schema);
   }),
   builtin(
     "matches",
@@ -395,13 +473,15 @@ const rawBuiltins = [
   builtin(
     "switch",
     {
-      params: ["value"],
-      restParam: { name: "cases", type: ["any", "any"] },
+      params: [
+        "value",
+        { rest: { name: "cases", type: tupleLike(["any", "any"]) } },
+      ],
     },
     function ([value, ...cases]) {
       for (const [schema, f] of cases) {
-        const bindings = eagerBind(value, schema);
-        if (!isThrown(bindings)) {
+        const bindings = errorToNull(() => bind(value, schema));
+        if (bindings) {
           return callOnValues(toFunction(f), [value], bindings);
         }
       }
@@ -423,15 +503,9 @@ const rawBuiltins = [
       return is(type, namedArgs);
     }
   ),
-  builtin(
-    "oneOf",
-    {
-      restParam: "values",
-    },
-    function (values) {
-      return oneOf(values);
-    }
-  ),
+  builtin("oneOf", { params: [{ rest: "values" }] }, function (values) {
+    return oneOf(values);
+  }),
   builtin(
     "arrayOf",
     {
@@ -446,6 +520,15 @@ const rawBuiltins = [
     },
     function ([type], namedArgs) {
       return arrayOf(type, namedArgs);
+    }
+  ),
+  builtin(
+    "tupleLike",
+    {
+      params: ["shape"],
+    },
+    function ([shape]) {
+      return tupleLike(shape);
     }
   ),
   builtin(
@@ -466,6 +549,15 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "recordLike",
+    {
+      params: ["shape"],
+    },
+    function ([shape]) {
+      return recordLike(shape);
+    }
+  ),
+  builtin(
     "optional",
     {
       params: ["schema"],
@@ -474,15 +566,9 @@ const rawBuiltins = [
       return optional(schema);
     }
   ),
-  builtin(
-    "either",
-    {
-      restParam: "schemas",
-    },
-    function (schemas) {
-      return either(...schemas);
-    }
-  ),
+  builtin("either", { params: [{ rest: "schemas" }] }, function (schemas) {
+    return either(...schemas);
+  }),
   builtin(
     "as",
     {
@@ -510,19 +596,20 @@ const rawBuiltins = [
       return rest(schema);
     }
   ),
+  builtin(
+    "error",
+    {
+      params: [{ name: "type", type: "string" }],
+      namedParams: [{ rest: "details" }],
+    },
+    function ([type], details) {
+      return kperror(type, ...kpoEntries(details));
+    }
+  ),
 ];
 
 export function builtin(name, paramSpec, f) {
   f.builtinName = name;
-  for (const property in paramSpec) {
-    f[property] = paramSpec[property];
-  }
-  return f;
-}
-
-export function lazyBuiltin(name, paramSpec, f) {
-  f.builtinName = name;
-  f.isLazy = true;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
@@ -559,24 +646,9 @@ function compare(a, b) {
       if (i >= b.length) {
         return 1;
       }
-      const checkA = validateArgument(
-        a[i],
-        either("number", "string", "boolean", "array")
-      );
-      if (isThrown(checkA)) {
-        return checkA;
-      }
-      const checkB = validateArgument(
-        b[i],
-        either("number", "string", "boolean", "array")
-      );
-      if (isThrown(checkB)) {
-        return checkB;
-      }
-      const checkSame = validateArgument(b[i], typeOf(a[i]));
-      if (isThrown(checkSame)) {
-        return checkSame;
-      }
+      validateArgument(a[i], either("number", "string", "boolean", "array"));
+      validateArgument(b[i], either("number", "string", "boolean", "array"));
+      validateArgument(b[i], typeOf(a[i]));
       const elementCompare = compare(a[i], b[i]);
       if (elementCompare !== 0) {
         return elementCompare;
@@ -599,8 +671,8 @@ export function typeOf(value) {
     return "null";
   } else if (isArray(value)) {
     return "array";
-  } else if (isRecord(value)) {
-    return "record";
+  } else if (isObject(value)) {
+    return "object";
   } else if (isBuiltin(value)) {
     return "builtin";
   } else if (isGiven(value)) {
@@ -628,24 +700,16 @@ export function isArray(value) {
   return Array.isArray(value);
 }
 
-export function isRecord(value) {
-  return isObject(value) && !isGiven(value) && !isError(value);
-}
-
 export function isBuiltin(value) {
   return typeof value === "function";
 }
 
 export function isGiven(value) {
-  return isObject(value) && value.has("#given");
+  return value !== null && typeof value === "object" && "given" in value;
 }
 
 export function isError(value) {
-  return isObject(value) && value.has("#error");
-}
-
-export function isThrown(value) {
-  return isObject(value) && value.has("#thrown");
+  return value !== null && typeof value === "object" && "error" in value;
 }
 
 export function isObject(value) {
@@ -673,6 +737,8 @@ export function toString(value) {
     );
   } else if (isBuiltin(value)) {
     return `function ${value.builtinName}`;
+  } else if (isError(value)) {
+    return `error ${value.error} ${toString(value.details)}`;
   } else {
     return JSON.stringify(value);
   }
@@ -690,22 +756,13 @@ function isValidName(string) {
   return /^[A-Za-z][A-Za-z0-9]*$/.test(string);
 }
 
-function loop(functionName, start, step, callback) {
+function loop(functionName, start, while_, next, continueIf, callback) {
   let current = start;
   for (let i = 0; i < 1000; i++) {
-    const stepResult = callOnValues(step, [current]);
-    const whileCondition = stepResult.has("while")
-      ? stepResult.get("while")
-      : true;
+    const whileCondition = callOnValues(while_, [current], kpobject());
     if (!isBoolean(whileCondition)) {
-      if (isThrown(whileCondition)) {
-        return whileCondition;
-      }
-      return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "while"],
+      throw kperror(
+        "wrongReturnType",
         ["value", whileCondition],
         ["expectedType", "boolean"]
       );
@@ -713,46 +770,22 @@ function loop(functionName, start, step, callback) {
     if (!whileCondition) {
       return current;
     }
-    const continueIf = stepResult.has("continueIf")
-      ? stepResult.get("continueIf")
-      : true;
-    if (!isBoolean(continueIf)) {
-      if (isThrown(continueIf)) {
-        return continueIf;
-      }
-      return kpthrow(
-        "wrongElementType",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "continueIf"],
-        ["value", continueIf],
+    callback(current);
+    const nextResult = callOnValues(next, [current], kpobject());
+    const continueIfCondition = callOnValues(continueIf, [current], kpobject());
+    if (!isBoolean(continueIfCondition)) {
+      throw kperror(
+        "wrongReturnType",
+        ["value", continueIfCondition],
         ["expectedType", "boolean"]
       );
     }
-    if (!stepResult.has("next")) {
-      return kpthrow(
-        "requiredKeyMissing",
-        ["function", functionName],
-        ["object", stepResult],
-        ["key", "next"]
-      );
+    current = nextResult;
+    if (!continueIfCondition) {
+      return current;
     }
-    callback(stepResult);
-    const next = stepResult.get("next");
-    if (isThrown(next)) {
-      return kpthrow(
-        "errorInIteration",
-        ["function", functionName],
-        ["currentValue", current],
-        ["error", next]
-      );
-    }
-    if (!continueIf) {
-      return next;
-    }
-    current = next;
   }
-  return kpthrow(
+  throw kperror(
     "tooManyIterations",
     ["function", functionName],
     ["currentValue", current]
@@ -760,11 +793,21 @@ function loop(functionName, start, step, callback) {
 }
 
 function validateArgument(value, schema) {
-  const check = eagerBind(value, schema);
-  if (isThrown(check)) {
-    return argumentError(check);
-  }
-  return null;
+  transformError(() => bind(value, schema), argumentError);
 }
 
-export const builtins = kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
+export function loadBuiltins(modules = kpobject()) {
+  const import_ = builtin(
+    "import",
+    {
+      params: ["module"],
+    },
+    function ([module]) {
+      if (!modules.has(module)) {
+        throw kperror("missingModule", ["name", module]);
+      }
+      return modules.get(module);
+    }
+  );
+  return kpobject(...[import_, ...rawBuiltins].map((f) => [f.builtinName, f]));
+}
