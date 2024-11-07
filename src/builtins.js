@@ -737,6 +737,8 @@ export function toString(value) {
     );
   } else if (isBuiltin(value)) {
     return `function ${value.builtinName}`;
+  } else if (isError(value)) {
+    return `error ${value.error} ${toString(value.details)}`;
   } else {
     return JSON.stringify(value);
   }
