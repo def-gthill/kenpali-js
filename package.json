@@ -1,6 +1,6 @@
 {
   "name": "kenpali",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A minimalistic programming language for scripting applications",
   "main": "index.js",
   "types": "index.d.ts",
