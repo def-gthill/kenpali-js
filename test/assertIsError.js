@@ -1,5 +1,5 @@
-import { isError } from "../src/builtins.js";
-import { deepToJsObject } from "../src/kpeval.js";
+import { deepToJsObject } from "../src/evalClean.js";
+import { isError } from "../src/values.js";
 
 export function assertIsError(
   t,

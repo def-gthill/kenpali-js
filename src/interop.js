@@ -1,7 +1,8 @@
-import { builtin, isError } from "./builtins.js";
+import { builtin } from "./builtins.js";
+import { callOnValues } from "./evalClean.js";
 import { catch_ } from "./kperror.js";
-import { callOnValues } from "./kpeval.js";
 import kpobject, { toJsObject, toKpobject } from "./kpobject.js";
+import { isError } from "./values.js";
 
 export function toJsFunction(kpf) {
   return (...args) => {

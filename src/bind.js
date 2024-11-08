@@ -1,3 +1,18 @@
+import { callOnValues } from "./evalClean.js";
+import kperror, {
+  catch_,
+  errorType,
+  foldError,
+  transformError,
+  withDetails,
+} from "./kperror.js";
+import kpobject, {
+  kpoEntries,
+  kpoKeys,
+  kpoMap,
+  kpoMerge,
+  kpoValues,
+} from "./kpobject.js";
 import {
   equals,
   isArray,
@@ -7,22 +22,7 @@ import {
   isSequence,
   isString,
   typeOf,
-} from "./builtins.js";
-import kperror, {
-  catch_,
-  errorType,
-  foldError,
-  transformError,
-  withDetails,
-} from "./kperror.js";
-import { callOnValues } from "./kpeval.js";
-import kpobject, {
-  kpoEntries,
-  kpoKeys,
-  kpoMap,
-  kpoMerge,
-  kpoValues,
-} from "./kpobject.js";
+} from "./values.js";
 
 export function bind(value, schema) {
   if (isString(schema)) {
@@ -416,7 +416,7 @@ export function arrayOf(elementSchema, namedArgs = kpobject()) {
   );
 }
 
-export function arrayLike(shape) {
+export function tupleLike(shape) {
   return kpobject(["type", "array"], ["shape", shape]);
 }
 
@@ -424,7 +424,7 @@ export function objectOf(namedArgs) {
   return kpoMerge(kpobject(["type", "object"]), namedArgs);
 }
 
-export function objectLike(shape) {
+export function recordLike(shape) {
   return kpobject(["type", "object"], ["shape", shape]);
 }
 

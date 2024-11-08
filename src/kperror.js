@@ -1,5 +1,5 @@
-import { isError } from "./builtins.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
+import { isError } from "./values.js";
 
 export default function kperror(type, ...details) {
   return { error: type, details: kpobject(...details) };

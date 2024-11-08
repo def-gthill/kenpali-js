@@ -1,12 +1,13 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import { given, literal } from "../src/kpast.js";
-import kpeval, {
+import {
   normalizeAllParams,
   normalizeParam,
   paramsFromBuiltin,
   paramsFromGiven,
-} from "../src/kpeval.js";
+} from "../src/evalClean.js";
+import { given, literal } from "../src/kpast.js";
+import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 
 test("A given with an empty param spec has no params", (t) => {

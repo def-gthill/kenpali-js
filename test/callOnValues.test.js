@@ -1,6 +1,7 @@
 import test from "ava";
+import { callOnValues } from "../src/evalClean.js";
 import { calling, given, literal, name } from "../src/kpast.js";
-import kpeval, { callOnValues } from "../src/kpeval.js";
+import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 
 test("We can call a given from JavaScript", (t) => {

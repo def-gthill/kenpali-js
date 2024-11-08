@@ -1,5 +1,5 @@
 import { oneOf } from "./bind.js";
-import { equals } from "./builtins.js";
+import { equals } from "./values.js";
 
 export function infer(node) {
   switch (node.type) {
