@@ -1,4 +1,4 @@
-import { callOnValues } from "./evalClean.js";
+import { callOnValues, Interpreter } from "./evalClean.js";
 import kperror, {
   catch_,
   errorType,
@@ -24,21 +24,21 @@ import {
   typeOf,
 } from "./values.js";
 
-export function bind(value, schema) {
+export function bind(value, schema, interpreter) {
   if (isString(schema)) {
     return bindTypeSchema(value, schema);
   } else if (isObject(schema)) {
     if (schema.has("either")) {
-      return bindUnionSchema(value, schema);
+      return bindUnionSchema(value, schema, interpreter);
     } else if (schema.has("oneOf")) {
       return bindLiteralListSchema(value, schema);
     } else if (schema.has("type")) {
-      const result = bindTypeWithConditionsSchema(value, schema);
+      const result = bindTypeWithConditionsSchema(value, schema, interpreter);
       return result;
     } else if (schema.has("bind")) {
-      return explicitBind(value, schema);
+      return explicitBind(value, schema, interpreter);
     } else if (schema.has("default")) {
-      return bind(value, schema.get("for"));
+      return bind(value, schema.get("for"), interpreter);
     } else {
       throw invalidSchema(schema);
     }
@@ -93,7 +93,7 @@ function mergeArrays(arrays) {
   return result;
 }
 
-function bindTypeSchema(value, schema) {
+function bindTypeSchema(value, schema, interpreter) {
   if (typeOf(value) === schema) {
     return kpobject();
   } else if (schema === "any") {
@@ -109,11 +109,13 @@ function bindTypeSchema(value, schema) {
   }
 }
 
-function bindUnionSchema(value, schema) {
+function bindUnionSchema(value, schema, interpreter) {
   let succeeded = false;
   const result = kpobject();
   const options = schema.get("either");
-  const bindings = options.map((option) => catch_(() => bind(value, option)));
+  const bindings = options.map((option) =>
+    catch_(() => bind(value, option, interpreter))
+  );
   const errors = [];
   const errorsByKey = kpobject();
   for (let i = 0; i < options.length; i++) {
@@ -159,17 +161,17 @@ function bindLiteralListSchema(value, schema) {
   throw badValue(value, ["options", schema.get("oneOf")]);
 }
 
-function bindTypeWithConditionsSchema(value, schema) {
+function bindTypeWithConditionsSchema(value, schema, interpreter) {
   bindTypeSchema(value, schema.get("type"));
   const subschemaBindings = kpobject();
   if (schema.get("type") === "array" && schema.has("shape")) {
-    const bindings = bindArrayShape(value, schema.get("shape"));
+    const bindings = bindArrayShape(value, schema.get("shape"), interpreter);
     for (const [key, value] of bindings) {
       subschemaBindings.set(key, value);
     }
   }
   if (schema.get("type") === "object" && schema.has("shape")) {
-    const bindings = bindObjectShape(value, schema.get("shape"));
+    const bindings = bindObjectShape(value, schema.get("shape"), interpreter);
     for (const [key, value] of bindings) {
       subschemaBindings.set(key, value);
     }
@@ -178,7 +180,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     const keys = namesToBind(schema);
     const bindings = value.map((element, i) =>
       transformError(
-        () => bind(element, schema.get("elements")),
+        () => bind(element, schema.get("elements"), interpreter),
         (err) => withReason(badElement(value, i + 1), err)
       )
     );
@@ -201,7 +203,7 @@ function bindTypeWithConditionsSchema(value, schema) {
   if (schema.has("keys")) {
     for (const key of value.keys()) {
       transformError(
-        () => bind(key, schema.get("keys")),
+        () => bind(key, schema.get("keys"), interpreter),
         (err) => badKey(key, err)
       );
     }
@@ -210,7 +212,7 @@ function bindTypeWithConditionsSchema(value, schema) {
     const bindings = kpoMap(value, ([key, propertyValue]) => [
       key,
       transformError(
-        () => bind(propertyValue, schema.get("values")),
+        () => bind(propertyValue, schema.get("values"), interpreter),
         (err) => withReason(badProperty(propertyValue, key), err)
       ),
     ]);
@@ -245,16 +247,16 @@ function bindTypeWithConditionsSchema(value, schema) {
   }
   if (
     schema.has("where") &&
-    !callOnValues(schema.get("where"), [value], kpobject())
+    !callOnValues(schema.get("where"), [value], kpobject(), interpreter)
   ) {
     throw badValue(value, ["condition", schema.get("where")]);
   }
   return subschemaBindings;
 }
 
-function explicitBind(value, schema) {
+function explicitBind(value, schema, interpreter) {
   const bindSchema = schema.get("bind");
-  const bindings = bind(value, bindSchema);
+  const bindings = bind(value, bindSchema, interpreter);
   const result = kpobject();
   result.set(schema.get("as"), value);
   for (const [name, binding] of bindings) {
@@ -263,7 +265,7 @@ function explicitBind(value, schema) {
   return result;
 }
 
-function bindArrayShape(value, schema) {
+function bindArrayShape(value, schema, interpreter) {
   const hasRest = isObject(schema.at(-1)) && schema.at(-1).has("rest");
   if (hasRest) {
     if (!isArray(value)) {
@@ -280,7 +282,7 @@ function bindArrayShape(value, schema) {
         }
       } else {
         const bindings = transformError(
-          () => bind(value[i], schema[i]),
+          () => bind(value[i], schema[i], interpreter),
           (err) => withReason(badElement(value, i + 1), err)
         );
         for (const [name, binding] of bindings) {
@@ -293,7 +295,8 @@ function bindArrayShape(value, schema) {
       () =>
         bind(
           value.slice(numNonRestElements),
-          arrayOf(schema.at(-1).get("rest"))
+          arrayOf(schema.at(-1).get("rest")),
+          interpreter
         ),
       (err) =>
         withDetails(err, [
@@ -320,7 +323,7 @@ function bindArrayShape(value, schema) {
         }
       } else {
         const bindings = transformError(
-          () => bind(value[i], schema[i]),
+          () => bind(value[i], schema[i], interpreter),
           (err) => withReason(badElement(value, i + 1), err)
         );
         for (const [name, binding] of bindings) {
@@ -332,7 +335,7 @@ function bindArrayShape(value, schema) {
   }
 }
 
-function bindObjectShape(value, schema) {
+function bindObjectShape(value, schema, interpreter) {
   if (!isObject(value)) {
     throw wrongType(value, "object");
   }
@@ -357,7 +360,7 @@ function bindObjectShape(value, schema) {
     if (value.has(key)) {
       ownBindings.set(key, [value.get(key), propertySchema]);
       const bindings = transformError(
-        () => bind(value.get(key), propertySchema),
+        () => bind(value.get(key), propertySchema, interpreter),
         (err) => withReason(badProperty(value, key), err)
       );
       propertyBindings.push(bindings);
@@ -381,7 +384,7 @@ function bindObjectShape(value, schema) {
     ]);
   }
   return kpobject(
-    ...kpoEntries(ownBindings).map(([key, [propertyValue, propertySchema]]) => [
+    ...kpoEntries(ownBindings).map(([key, [propertyValue, _]]) => [
       key,
       propertyValue,
     ]),
@@ -393,9 +396,9 @@ function withReason(err, reason) {
   return withDetails(err, ["reason", reason]);
 }
 
-export function matches(value, schema) {
+export function matches(value, schema, interpreter = new Interpreter()) {
   return foldError(
-    () => bind(value, schema),
+    () => bind(value, schema, interpreter),
     () => true,
     () => false
   );

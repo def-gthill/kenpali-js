@@ -212,12 +212,12 @@ const rawBuiltins = [
         { rest: { name: "rest", type: "function" } },
       ],
     },
-    function ([first, ...rest]) {
+    function ([first, ...rest], _, interpreter) {
       if (!first) {
         return false;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, [], kpobject());
+        const condition = callOnValues(f, [], kpobject(), interpreter);
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -240,12 +240,12 @@ const rawBuiltins = [
         { rest: { name: "rest", type: "function" } },
       ],
     },
-    function ([first, ...rest]) {
+    function ([first, ...rest], _, interpreter) {
       if (first) {
         return true;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, [], kpobject());
+        const condition = callOnValues(f, [], kpobject(), interpreter);
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -327,11 +327,11 @@ const rawBuiltins = [
         { name: "else", type: "function" },
       ],
     },
-    function ([condition], namedArgs) {
+    function ([condition], namedArgs, interpreter) {
       if (condition) {
-        return callOnValues(namedArgs.get("then"), [], kpobject());
+        return callOnValues(namedArgs.get("then"), [], kpobject(), interpreter);
       } else {
-        return callOnValues(namedArgs.get("else"), [], kpobject());
+        return callOnValues(namedArgs.get("else"), [], kpobject(), interpreter);
       }
     }
   ),
@@ -353,7 +353,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([start], namedArgs) {
+    function ([start], namedArgs, interpreter) {
       let result = start;
       loop(
         "repeat",
@@ -363,7 +363,8 @@ const rawBuiltins = [
         namedArgs.get("continueIf"),
         (current) => {
           result = current;
-        }
+        },
+        interpreter
       );
       return result;
     }
@@ -433,7 +434,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([start], namedArgs) {
+    function ([start], namedArgs, interpreter) {
       const result = [];
       loop(
         "build",
@@ -443,9 +444,15 @@ const rawBuiltins = [
         namedArgs.get("continueIf"),
         (current) => {
           result.push(
-            ...callOnValues(namedArgs.get("out"), [current], kpobject())
+            ...callOnValues(
+              namedArgs.get("out"),
+              [current],
+              kpobject(),
+              interpreter
+            )
           );
-        }
+        },
+        interpreter
       );
       return result;
     }
@@ -475,14 +482,18 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin("bind", { params: ["value", "schema"] }, function ([value, schema]) {
-    return bind(value, schema);
-  }),
+  builtin(
+    "bind",
+    { params: ["value", "schema"] },
+    function ([value, schema], _, interpreter) {
+      return bind(value, schema, interpreter);
+    }
+  ),
   builtin(
     "matches",
     { params: ["value", "schema"] },
-    function ([value, schema]) {
-      return matches(value, schema);
+    function ([value, schema], _, interpreter) {
+      return matches(value, schema, interpreter);
     }
   ),
   builtin(
@@ -493,11 +504,11 @@ const rawBuiltins = [
         { rest: { name: "cases", type: tupleLike(["any", "any"]) } },
       ],
     },
-    function ([value, ...cases]) {
+    function ([value, ...cases], _, interpreter) {
       for (const [schema, f] of cases) {
         const bindings = errorToNull(() => bind(value, schema));
         if (bindings) {
-          return callOnValues(toFunction(f), [value], bindings);
+          return callOnValues(toFunction(f), [value], bindings, interpreter);
         }
       }
     }
@@ -668,10 +679,23 @@ export function toFunction(value) {
   }
 }
 
-function loop(functionName, start, while_, next, continueIf, callback) {
+function loop(
+  functionName,
+  start,
+  while_,
+  next,
+  continueIf,
+  callback,
+  interpreter
+) {
   let current = start;
-  for (let i = 0; i < 1000; i++) {
-    const whileCondition = callOnValues(while_, [current], kpobject());
+  while (true) {
+    const whileCondition = callOnValues(
+      while_,
+      [current],
+      kpobject(),
+      interpreter
+    );
     if (!isBoolean(whileCondition)) {
       throw kperror(
         "wrongReturnType",
@@ -683,8 +707,13 @@ function loop(functionName, start, while_, next, continueIf, callback) {
       return current;
     }
     callback(current);
-    const nextResult = callOnValues(next, [current], kpobject());
-    const continueIfCondition = callOnValues(continueIf, [current], kpobject());
+    const nextResult = callOnValues(next, [current], kpobject(), interpreter);
+    const continueIfCondition = callOnValues(
+      continueIf,
+      [current],
+      kpobject(),
+      interpreter
+    );
     if (!isBoolean(continueIfCondition)) {
       throw kperror(
         "wrongReturnType",
@@ -697,11 +726,6 @@ function loop(functionName, start, while_, next, continueIf, callback) {
       return current;
     }
   }
-  throw kperror(
-    "tooManyIterations",
-    ["function", functionName],
-    ["currentValue", current]
-  );
 }
 
 function validateArgument(value, schema) {

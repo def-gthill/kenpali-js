@@ -66,3 +66,9 @@ test("Destructuring can reference other names in the same scope", (t) => {
   const result = kpeval(kpparse(code));
   t.is(result, 139);
 });
+
+test("A time limit can be set on execution", (t) => {
+  const code = `1 | repeat(while: () => true, next: (n) => n)`;
+  const result = kpeval(kpparse(code), { timeLimitSeconds: 0.1 });
+  assertIsError(t, result, "timeLimitExceeded");
+});

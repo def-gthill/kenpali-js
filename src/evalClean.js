@@ -12,33 +12,70 @@ import { isBuiltin, isError, isGiven } from "./values.js";
 
 // Evaluate an expression with *only* the specified names in scope,
 // i.e. no loading of builtins.
-export function evalClean(expression, names) {
+export function evalClean(
+  expression,
+  names,
+  // interpreter = new Interpreter()
+  interpreter
+) {
+  interpreter.checkLimit();
   if (expression === null || typeof expression !== "object") {
     throw kperror("notAnExpression", ["value", expression]);
-  } else if ("type" in expression) {
-    return evalThis[expression.type](expression, names);
   } else if ("literal" in expression) {
     return evalThis.literal(expression, names);
   } else if ("array" in expression) {
-    return evalThis.array(expression, names);
+    return evalThis.array(expression, names, interpreter);
   } else if ("object" in expression) {
-    return evalThis.object(expression, names);
+    return evalThis.object(expression, names, interpreter);
   } else if ("name" in expression) {
     return evalThis.name(expression, names);
   } else if ("defining" in expression) {
-    return evalThis.defining(expression, names);
+    return evalThis.defining(expression, names, interpreter);
   } else if ("given" in expression) {
-    return evalThis.given(expression, names);
+    return evalThis.given(expression, names, interpreter);
   } else if ("calling" in expression) {
-    return evalThis.calling(expression, names);
+    return evalThis.calling(expression, names, interpreter);
   } else if ("catching" in expression) {
-    return evalThis.catching(expression, names);
+    return evalThis.catching(expression, names, interpreter);
   } else if ("quote" in expression) {
-    return evalThis.quote(expression, names);
+    return evalThis.quote(expression, names, interpreter);
   } else if ("unquote" in expression) {
-    return evalThis.unquote(expression, names);
+    return evalThis.unquote(expression, names, interpreter);
   } else {
     throw kperror("notAnExpression", ["value", expression]);
+  }
+}
+
+let performance;
+
+if (typeof window !== "undefined" && window.performance) {
+  performance = window.performance;
+} else {
+  const { performance: nodePerformance } = await import("node:perf_hooks");
+  performance = nodePerformance;
+}
+
+export class Interpreter {
+  timeLimitSeconds;
+  startTime;
+
+  constructor({ timeLimitSeconds = 0 } = {}) {
+    this.timeLimitSeconds = timeLimitSeconds;
+    this.startTime = performance.now();
+  }
+
+  checkLimit() {
+    if (this.timeLimitSeconds > 0) {
+      const currentTime = performance.now();
+      const elapsedTime = (currentTime - this.startTime) / 1000;
+      if (elapsedTime > this.timeLimitSeconds) {
+        throw kperror(
+          "timeLimitExceeded",
+          ["elapsedSeconds", elapsedTime],
+          ["limitSeconds", this.timeLimitSeconds]
+        );
+      }
+    }
   }
 }
 
@@ -46,17 +83,17 @@ const evalThis = {
   literal(expression) {
     return expression.literal;
   },
-  array(expression, names) {
+  array(expression, names, interpreter) {
     const result = [];
     for (const element of expression.array) {
       if ("spread" in element) {
-        const values = evalClean(element.spread, names);
+        const values = evalClean(element.spread, names, interpreter);
         if (isError(values)) {
           return values;
         }
         result.push(...values);
       } else {
-        const value = evalClean(element, names);
+        const value = evalClean(element, names, interpreter);
         if (isError(value)) {
           return value;
         }
@@ -65,22 +102,23 @@ const evalThis = {
     }
     return result;
   },
-  object(expression, names) {
+  object(expression, names, interpreter) {
     const result = [];
     for (const element of expression.object) {
       if ("spread" in element) {
-        const entries = evalClean(element.spread, names);
+        const entries = evalClean(element.spread, names, interpreter);
         if (isError(entries)) {
           return entries;
         }
         result.push(...kpoEntries(entries));
       } else {
         const [key, value] = element;
-        const keyResult = typeof key === "string" ? key : evalClean(key, names);
+        const keyResult =
+          typeof key === "string" ? key : evalClean(key, names, interpreter);
         if (isError(keyResult)) {
           return keyResult;
         }
-        const valueResult = evalClean(value, names);
+        const valueResult = evalClean(value, names, interpreter);
         if (isError(valueResult)) {
           return valueResult;
         }
@@ -100,38 +138,39 @@ const evalThis = {
       return binding;
     }
   },
-  defining(expression, names) {
-    const scope = defineNames(expression.defining, names);
-    return evalClean(expression.result, scope);
+  defining(expression, names, interpreter) {
+    const scope = defineNames(expression.defining, names, interpreter);
+    return evalClean(expression.result, scope, interpreter);
   },
-  given(expression, names) {
+  given(expression, names, interpreter) {
     return {
-      given: evalDefaultValues(expression.given, names),
+      given: evalDefaultValues(expression.given, names, interpreter),
       result: expression.result,
       closure: names,
     };
   },
-  calling(expression, names) {
-    const f = evalClean(expression.calling, names);
+  calling(expression, names, interpreter) {
+    const f = evalClean(expression.calling, names, interpreter);
     const args = expression.args ?? [];
     const namedArgs = expression.namedArgs ?? kpobject();
-    return callOnExpressions(f, args, namedArgs, names);
+    return callOnExpressions(f, args, namedArgs, names, interpreter);
   },
-  catching(expression, names) {
-    return catch_(() => evalClean(expression.catching, names));
+  catching(expression, names, interpreter) {
+    return catch_(() => evalClean(expression.catching, names, interpreter));
   },
-  quote(expression, names) {
-    return quote(expression.quote, names);
+  quote(expression, names, interpreter) {
+    return quote(expression.quote, names, interpreter);
   },
-  unquote(expression, names) {
+  unquote(expression, names, interpreter) {
     return evalClean(
-      deepToJsObject(evalClean(expression.unquote, names)),
-      names
+      deepToJsObject(evalClean(expression.unquote, names, interpreter)),
+      names,
+      interpreter
     );
   },
 };
 
-export function defineNames(definitions, names) {
+export function defineNames(definitions, names, interpreter) {
   let declaredNames = [];
   for (const [pattern, _] of definitions) {
     declaredNames.push(...declareNames(pattern));
@@ -141,7 +180,10 @@ export function defineNames(definitions, names) {
 
   let assignedNames = kpobject();
   for (const definition of definitions) {
-    assignedNames = kpoMerge(assignedNames, assignNames(definition, scope));
+    assignedNames = kpoMerge(
+      assignedNames,
+      assignNames(definition, scope, interpreter)
+    );
   }
   return scope;
 }
@@ -164,11 +206,11 @@ function declareNames(pattern) {
   return namesToDeclare;
 }
 
-function assignNames(definition, names) {
+function assignNames(definition, names, interpreter) {
   const [pattern, expression] = definition;
   const schema = createPatternSchema(pattern);
-  const value = evalClean(expression, names);
-  const bindings = bind(value, schema);
+  const value = evalClean(expression, names, interpreter);
+  const bindings = bind(value, schema, interpreter);
   for (const [key, boundValue] of bindings) {
     names.set(key, boundValue);
   }
@@ -187,12 +229,12 @@ function createPatternSchema(pattern) {
   }
 }
 
-function evalDefaultValues(allParams, names) {
+function evalDefaultValues(allParams, names, interpreter) {
   function evalForOneParam(param) {
     if (typeof param === "object" && "defaultValue" in param) {
       return {
         ...param,
-        defaultValue: evalClean(param.defaultValue, names),
+        defaultValue: evalClean(param.defaultValue, names, interpreter),
       };
     } else {
       return param;
@@ -209,60 +251,68 @@ function evalDefaultValues(allParams, names) {
   return result;
 }
 
-function callOnExpressions(f, args, namedArgs, names) {
+function callOnExpressions(f, args, namedArgs, names, interpreter) {
   return callOnValues(
     f,
-    evalExpressionArgs(args, names),
-    evalExpressionNamedArgs(namedArgs, names)
+    evalExpressionArgs(args, names, interpreter),
+    evalExpressionNamedArgs(namedArgs, names, interpreter),
+    interpreter
   );
 }
 
-function evalExpressionArgs(args, names) {
+function evalExpressionArgs(args, names, interpreter) {
   const result = [];
   for (const element of args) {
     if ("spread" in element) {
-      result.push(...evalClean(element.spread, names));
+      result.push(...evalClean(element.spread, names, interpreter));
     } else {
-      result.push(evalClean(element, names));
+      result.push(evalClean(element, names, interpreter));
     }
   }
   return result;
 }
 
-function evalExpressionNamedArgs(namedArgs, names) {
+function evalExpressionNamedArgs(namedArgs, names, interpreter) {
   const result = [];
   for (const element of namedArgs) {
     if ("spread" in element) {
-      result.push(...kpoEntries(evalClean(element.spread, names)));
+      result.push(...kpoEntries(evalClean(element.spread, names, interpreter)));
     } else {
       const [name, value] = element;
-      result.push([name, evalClean(value, names)]);
+      result.push([name, evalClean(value, names, interpreter)]);
     }
   }
   return kpobject(...result);
 }
 
-export function callOnValues(f, args, namedArgs) {
+export function callOnValues(f, args, namedArgs, interpreter) {
   if (isGiven(f)) {
-    return callGiven(f, args, namedArgs);
+    return callGiven(f, args, namedArgs, interpreter);
   } else if (isBuiltin(f)) {
-    return callBuiltin(f, args, namedArgs);
+    return callBuiltin(f, args, namedArgs, interpreter);
   } else {
     throw kperror("notCallable", ["value", f]);
   }
 }
 
-function callGiven(f, args, namedArgs) {
+function callGiven(f, args, namedArgs, interpreter) {
   const allParams = paramsFromGiven(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
   const bindings = catch_(() =>
-    kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]))
+    kpoMerge(
+      bind(args, schema[0], interpreter),
+      bind(namedArgs, schema[1], interpreter)
+    )
   );
   if (isError(bindings)) {
     throw argumentErrorGivenParamObjects(paramObjects, bindings);
   }
-  return evalClean(f.result, new Scope(f.closure ?? kpobject(), bindings));
+  return evalClean(
+    f.result,
+    new Scope(f.closure ?? kpobject(), bindings),
+    interpreter
+  );
 }
 
 export function paramsFromGiven(f) {
@@ -320,12 +370,15 @@ export class Scope {
   }
 }
 
-function callBuiltin(f, args, namedArgs) {
+function callBuiltin(f, args, namedArgs, interpreter) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
   const bindings = catch_(() =>
-    kpoMerge(bind(args, schema[0]), bind(namedArgs, schema[1]))
+    kpoMerge(
+      bind(args, schema[0], interpreter),
+      bind(namedArgs, schema[1], interpreter)
+    )
   );
   if (isError(bindings)) {
     throw argumentErrorGivenParamObjects(paramObjects, bindings);
@@ -349,7 +402,7 @@ function callBuiltin(f, args, namedArgs) {
       namedArgValues.set(name, param);
     }
   }
-  return f(argValues, namedArgValues);
+  return f(argValues, namedArgValues, interpreter);
 }
 
 function argumentErrorGivenParamObjects(paramObjects, err) {
@@ -445,21 +498,23 @@ function createParamSchema(paramObjects) {
   return [paramSchema, namedParamSchema];
 }
 
-function quote(expression, names) {
+function quote(expression, names, interpreter) {
   if (typeof expression !== "object") {
     return expression;
   } else if ("unquote" in expression) {
-    return deepToKpObject(evalClean(expression.unquote, names));
+    return deepToKpObject(evalClean(expression.unquote, names, interpreter));
   } else if ("array" in expression) {
     return deepToKpObject(
-      array(...expression.array.map((element) => quote(element, names)))
+      array(
+        ...expression.array.map((element) => quote(element, names, interpreter))
+      )
     );
   } else if ("object" in expression) {
     return deepToKpObject(
       object(
         ...expression.object.map(([key, value]) => [
-          quote(key, names),
-          quote(value, names),
+          quote(key, names, interpreter),
+          quote(value, names, interpreter),
         ])
       )
     );

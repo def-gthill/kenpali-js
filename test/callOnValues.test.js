@@ -1,5 +1,5 @@
 import test from "ava";
-import { callOnValues } from "../src/evalClean.js";
+import { callOnValues, Interpreter } from "../src/evalClean.js";
 import { calling, given, literal, name } from "../src/kpast.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
@@ -9,7 +9,7 @@ test("We can call a given from JavaScript", (t) => {
     given({ params: ["x"] }, calling(name("plus"), [name("x"), literal(3)]))
   );
 
-  const result = callOnValues(f, [42], kpobject());
+  const result = callOnValues(f, [42], kpobject(), new Interpreter());
 
   t.is(result, 45);
 });
@@ -17,7 +17,7 @@ test("We can call a given from JavaScript", (t) => {
 test("We can call a builtin from JavaScript", (t) => {
   const f = kpeval(name("plus"));
 
-  const result = callOnValues(f, [42, 3], kpobject());
+  const result = callOnValues(f, [42, 3], kpobject(), new Interpreter());
 
   t.is(result, 45);
 });

@@ -1,5 +1,5 @@
 import { builtin } from "./builtins.js";
-import { callOnValues } from "./evalClean.js";
+import { callOnValues, Interpreter } from "./evalClean.js";
 import { catch_ } from "./kperror.js";
 import kpobject, { toJsObject, toKpobject } from "./kpobject.js";
 import { isError } from "./values.js";
@@ -9,7 +9,9 @@ export function toJsFunction(kpf) {
     const hasNamedParams = (kpf.given.namedParams ?? []).length > 0;
     const posArgs = hasNamedParams ? args.slice(0, -1) : args;
     const namedArgs = hasNamedParams ? toKpobject(args.at(-1)) : kpobject();
-    return catch_(() => callOnValues(kpf, posArgs, namedArgs));
+    return catch_(() =>
+      callOnValues(kpf, posArgs, namedArgs, new Interpreter())
+    );
   };
 }
 

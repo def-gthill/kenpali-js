@@ -1,6 +1,6 @@
 import { loadBuiltins } from "./builtins.js";
 import { core as coreCode } from "./core.js";
-import { Scope, defineNames, evalClean } from "./evalClean.js";
+import { Interpreter, Scope, defineNames, evalClean } from "./evalClean.js";
 import kperror, { catch_ } from "./kperror.js";
 import kpobject, { kpoMap, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -44,13 +44,14 @@ export function toAst(expressionRaw) {
 
 export default function kpeval(
   expression,
-  { names = kpobject(), modules = kpobject() } = {}
+  { names = kpobject(), modules = kpobject(), timeLimitSeconds = 0 } = {}
 ) {
   validateExpression(expression);
   const builtins = loadBuiltins(modules);
-  const withCore = loadCore(builtins);
+  const interpreter = new Interpreter({ timeLimitSeconds });
+  const withCore = loadCore(builtins, interpreter);
   const withCustomNames = new Scope(withCore, names);
-  return catch_(() => evalClean(expression, withCustomNames));
+  return catch_(() => evalClean(expression, withCustomNames, interpreter));
 }
 
 function validateExpression(expression) {
@@ -157,11 +158,11 @@ function transformTree(expression, handlers) {
 
 let core = null;
 
-function loadCore(enclosingScope) {
+function loadCore(enclosingScope, interpreter) {
   if (!core) {
     const code = coreCode;
     const ast = kpparse(code + "null");
     core = ast.defining;
   }
-  return defineNames(core, enclosingScope);
+  return defineNames(core, enclosingScope, interpreter);
 }
