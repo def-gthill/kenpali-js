@@ -44,9 +44,14 @@ export interface CallOptions {
   timeLimitSeconds?: number;
 }
 
+export interface EvalOptions extends CallOptions {
+  names?: Map<string, KpValue>;
+  modules?: Map<string, KpValue>;
+}
+
 export function kpeval(
   expression: KpAstNode,
-  options: { names?: Map<string, KpValue>; modules?: Map<string, KpValue> } = {}
+  options: EvalOptions = {}
 ): KpValue;
 export function kpobject(...entries: [string, KpValue][]): KpObject;
 export function kpparse(code: string): KpAstNode;
