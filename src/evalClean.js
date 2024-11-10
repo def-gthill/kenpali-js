@@ -46,27 +46,18 @@ export function evalClean(
   }
 }
 
-let performance;
-
-if (typeof window !== "undefined" && window.performance) {
-  performance = window.performance;
-} else {
-  const { performance: nodePerformance } = await import("node:perf_hooks");
-  performance = nodePerformance;
-}
-
 export class Interpreter {
   timeLimitSeconds;
   startTime;
 
   constructor({ timeLimitSeconds = 0 } = {}) {
     this.timeLimitSeconds = timeLimitSeconds;
-    this.startTime = performance.now();
+    this.startTime = Date.now();
   }
 
   checkLimit() {
     if (this.timeLimitSeconds > 0) {
-      const currentTime = performance.now();
+      const currentTime = Date.now();
       const elapsedTime = (currentTime - this.startTime) / 1000;
       if (elapsedTime > this.timeLimitSeconds) {
         throw kperror(
