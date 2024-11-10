@@ -1,19 +1,20 @@
 import test from "ava";
-import { toJsFunction, toKpFunction } from "../src/interop.js";
+import { kpcall, toKpFunction } from "../src/interop.js";
 import { calling, defining, given, literal, name } from "../src/kpast.js";
 import kperror from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
+import kpparse from "../src/kpparse.js";
 import { assertIsError } from "./assertIsError.js";
 
-test("We can convert a Kenpali function into a JavaScript function", (t) => {
+test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
   const kpf = kpeval(given({}, literal(42)));
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [], {});
 
-  t.is(jsf(), 42);
+  t.is(result, 42);
 });
 
-test("Kenpali positional parameters become JavaScript positional parameters", (t) => {
+test("Positional arguments are sent to the Kenpali function", (t) => {
   const kpf = kpeval(
     given(
       { params: ["x", "y"] },
@@ -24,12 +25,12 @@ test("Kenpali positional parameters become JavaScript positional parameters", (t
     )
   );
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [3, 4], {});
 
-  t.is(jsf(3, 4), 15);
+  t.is(result, 15);
 });
 
-test("Kenpali rest parameters become JavaScript rest parameters", (t) => {
+test("Positional arguments are bound to rest parameters on the Kenpali function", (t) => {
   const kpf = kpeval(
     given(
       { params: [{ rest: "rest" }] },
@@ -37,12 +38,12 @@ test("Kenpali rest parameters become JavaScript rest parameters", (t) => {
     )
   );
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [1, "a", [], null], {});
 
-  t.is(jsf(1, "a", [], null), 4);
+  t.is(result, 4);
 });
 
-test("Kenpali named parameters become an extra object argument in the JavaScript version", (t) => {
+test("Named arguments are sent to the Kenpali function", (t) => {
   const kpf = kpeval(
     given(
       { params: ["base"], namedParams: ["multiplier", "bonus"] },
@@ -53,9 +54,9 @@ test("Kenpali named parameters become an extra object argument in the JavaScript
     )
   );
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [3], { bonus: 4, multiplier: 5 });
 
-  t.is(jsf(3, { bonus: 4, multiplier: 5 }), 19);
+  t.is(result, 19);
 });
 
 test("Kenpali parameter defaults can reference names from the context", (t) => {
@@ -69,29 +70,38 @@ test("Kenpali parameter defaults can reference names from the context", (t) => {
     )
   );
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [3], {});
 
-  t.is(jsf(3), 15);
+  t.is(result, 15);
 });
 
-test("Errors thrown in Kenpali are returned as error objects in the JavaScript version", (t) => {
+test("Errors thrown in Kenpali are returned as error objects from kpcall", (t) => {
   const kpf = kpeval(given({}, name("foo")));
 
-  const jsf = toJsFunction(kpf);
+  const result = kpcall(kpf, [], {});
 
-  assertIsError(t, jsf(), "nameNotDefined");
+  assertIsError(t, result, "nameNotDefined");
 });
 
-test("We can pass a JavaScript callback to a Kenpali function", (t) => {
+test("A time limit can be set on a kpcall", (t) => {
+  const code = "() => 1 | repeat(while: () => true, next: (n) => n)";
+  const kpf = kpeval(kpparse(code));
+
+  const result = kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 });
+
+  assertIsError(t, result, "timeLimitExceeded");
+});
+
+test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t) => {
   const kpf = kpeval(
     given({ params: ["callback"] }, calling(name("callback")))
   );
-  const jsf = toJsFunction(kpf);
-
   const callback = toKpFunction(() => 42);
 
+  const result = kpcall(kpf, [callback], {});
+
   t.is(callback.builtinName, "<anonymous>");
-  t.is(jsf(callback), 42);
+  t.is(result, 42);
 });
 
 test("A JavaScript callback can accept positional arguments", (t) => {
@@ -101,14 +111,14 @@ test("A JavaScript callback can accept positional arguments", (t) => {
       calling(name("callback"), [literal(3), literal(4)])
     )
   );
-  const jsf = toJsFunction(kpf);
+  const callback = toKpFunction(([x, y]) => x * (y + 1));
 
-  const callback = toKpFunction((x, y) => x * (y + 1));
+  const result = kpcall(kpf, [callback], {});
 
-  t.is(jsf(callback), 15);
+  t.is(result, 15);
 });
 
-test("A JavaScript callback converts named arguments into a final object argument", (t) => {
+test("A JavaScript callback can accept named arguments", (t) => {
   const kpf = kpeval(
     given(
       { params: ["callback"] },
@@ -122,13 +132,13 @@ test("A JavaScript callback converts named arguments into a final object argumen
       )
     )
   );
-  const jsf = toJsFunction(kpf);
-
   const callback = toKpFunction(
-    (base, { multiplier, bonus }) => base * multiplier + bonus
+    ([base], { multiplier, bonus }) => base * multiplier + bonus
   );
 
-  t.is(jsf(callback), 19);
+  const result = kpcall(kpf, [callback], {});
+
+  t.is(result, 19);
 });
 
 test("An error returned by a JavaScript callback throws in Kenpali", (t) => {
@@ -138,9 +148,34 @@ test("An error returned by a JavaScript callback throws in Kenpali", (t) => {
       calling(name("plus"), [calling(name("callback")), literal(42)])
     )
   );
-  const jsf = toJsFunction(kpf);
-
   const callback = toKpFunction(() => kperror("someError"));
 
-  assertIsError(t, jsf(callback), "someError");
+  const result = kpcall(kpf, [callback], {});
+
+  assertIsError(t, result, "someError");
+});
+
+test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) => {
+  const code = "(callback) => callback(() => 42)";
+  const kpf = kpeval(kpparse(code));
+  const callback = toKpFunction(([callback], _, kpcallback) =>
+    kpcallback(callback, [], {})
+  );
+
+  const result = kpcall(kpf, [callback], {});
+
+  t.is(result, 42);
+});
+
+test("A time kpcall time limit is enforced through nested callbacks", (t) => {
+  const code =
+    "(callback) => callback(() => 1 | repeat(while: () => true, next: (n) => n))";
+  const kpf = kpeval(kpparse(code));
+  const callback = toKpFunction(([callback], _, kpcallback) =>
+    kpcallback(callback, [], {})
+  );
+
+  const result = kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 });
+
+  assertIsError(t, result, "timeLimitExceeded");
 });
