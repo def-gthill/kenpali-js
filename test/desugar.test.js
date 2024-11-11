@@ -13,7 +13,6 @@ import {
   name,
   object,
   pipeline,
-  quote,
   spread,
   unquote,
 } from "../src/kpast.js";
@@ -133,12 +132,6 @@ test("Desugaring propagates through pipelines", (t) => {
       pipeDesugared,
     ])
   );
-});
-
-test("Desugaring propagates through quoting", (t) => {
-  const expression = quote(pipeSugared);
-  const result = desugar(expression);
-  t.deepEqual(result, quote(pipeDesugared));
 });
 
 test("Desugaring propagates through unquoting", (t) => {

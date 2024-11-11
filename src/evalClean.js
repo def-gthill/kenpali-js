@@ -1,5 +1,4 @@
 import { as, bind, default_, recordLike, rest, tupleLike } from "./bind.js";
-import { array, object } from "./kpast.js";
 import kperror, { catch_, errorType, withErrorType } from "./kperror.js";
 import kpobject, {
   kpoEntries,
@@ -37,8 +36,6 @@ export function evalClean(
     return evalThis.calling(expression, names, interpreter);
   } else if ("catching" in expression) {
     return evalThis.catching(expression, names, interpreter);
-  } else if ("quote" in expression) {
-    return evalThis.quote(expression, names, interpreter);
   } else if ("unquote" in expression) {
     return evalThis.unquote(expression, names, interpreter);
   } else {
@@ -148,9 +145,6 @@ const evalThis = {
   },
   catching(expression, names, interpreter) {
     return catch_(() => evalClean(expression.catching, names, interpreter));
-  },
-  quote(expression, names, interpreter) {
-    return quote(expression.quote, names, interpreter);
   },
   unquote(expression, names, interpreter) {
     return evalClean(
@@ -487,31 +481,6 @@ function createParamSchema(paramObjects) {
   }
   const namedParamSchema = recordLike(namedParamShape);
   return [paramSchema, namedParamSchema];
-}
-
-function quote(expression, names, interpreter) {
-  if (typeof expression !== "object") {
-    return expression;
-  } else if ("unquote" in expression) {
-    return deepToKpObject(evalClean(expression.unquote, names, interpreter));
-  } else if ("array" in expression) {
-    return deepToKpObject(
-      array(
-        ...expression.array.map((element) => quote(element, names, interpreter))
-      )
-    );
-  } else if ("object" in expression) {
-    return deepToKpObject(
-      object(
-        ...expression.object.map(([key, value]) => [
-          quote(key, names, interpreter),
-          quote(value, names, interpreter),
-        ])
-      )
-    );
-  } else {
-    return deepToKpObject(expression);
-  }
 }
 
 export function deepToKpObject(expression) {

@@ -14,7 +14,6 @@ import {
   objectPattern,
   objectSpread,
   pipeline,
-  quote,
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
@@ -333,24 +332,12 @@ function parseNamedArgument(tokens, start) {
 
 function parseAtomic(tokens, start) {
   return parseAnyOf(
-    parseQuote,
     parseUnquote,
     parseGroup,
     parseArray,
     parseObject,
     parseLiteral,
     parseName
-  )(tokens, start);
-}
-
-function parseQuote(tokens, start) {
-  return parseAllOf(
-    [
-      consume("OPEN_QUOTE_PAREN", "expectedQuote"),
-      parse,
-      consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
-    ],
-    quote
   )(tokens, start);
 }
 

@@ -51,10 +51,6 @@ export function catching(expression) {
   return { catching: expression };
 }
 
-export function quote(expression) {
-  return { quote: expression };
-}
-
 export function unquote(expression) {
   return { unquote: expression };
 }
