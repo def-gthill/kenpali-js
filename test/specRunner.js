@@ -26,7 +26,7 @@ export function runSpecFile(
   let match;
   while ((match = regex.exec(spec)) !== null) {
     const [_, description, input, output, errorName, errorDetails] = match;
-    if (only && description !== only) {
+    if (only && !only.includes(description)) {
       continue;
     }
     const actualOutputValue = functionToTest(input);
