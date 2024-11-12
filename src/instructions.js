@@ -11,6 +11,10 @@ export const READ_OUTER_LOCAL = 4;
 export const ARRAY_PUSH = 6;
 export const ARRAY_EXTEND = 11;
 export const ARRAY_POP = 9;
+export const ARRAY_CUT = 12;
+export const OBJECT_PUSH = 13;
+export const OBJECT_MERGE = 14;
+export const OBJECT_POP = 15;
 
 export function disassemble(instructions) {
   return new Disassembler(instructions).disassemble();
@@ -33,6 +37,10 @@ class Disassembler {
     this.instructionTable[ARRAY_PUSH] = this.disassembleArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.disassembleArrayExtend;
     this.instructionTable[ARRAY_POP] = this.disassembleArrayPop;
+    this.instructionTable[ARRAY_CUT] = this.disassembleArrayCut;
+    this.instructionTable[OBJECT_PUSH] = this.disassembleObjectPush;
+    this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
+    this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -96,6 +104,22 @@ class Disassembler {
 
   disassembleArrayPop() {
     return "ARRAY_POP";
+  }
+
+  disassembleArrayCut() {
+    return `ARRAY_CUT ${this.next()}`;
+  }
+
+  disassembleObjectPush() {
+    return "OBJECT_PUSH";
+  }
+
+  disassembleObjectMerge() {
+    return "OBJECT_MERGE";
+  }
+
+  disassembleObjectPop() {
+    return "OBJECT_POP";
   }
 
   next() {

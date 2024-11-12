@@ -42,5 +42,15 @@ runSpecFile(
     "Array containing an expression to evaluate",
     "Array with spread",
     "Array destructuring",
+    "Array destructuring with rest",
+    "Empty object",
+    "Object with literal values",
+    "Object with explicit literal keys",
+    "Object with values of mixed types",
+    "Nested objects",
+    "Object with expression keys and values",
+    "Object with spread",
+    "Object destructuring",
+    "Object destructuring with rest",
   ]
 );

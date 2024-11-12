@@ -1,9 +1,13 @@
 import {
+  ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
   ARRAY_PUSH,
   DISCARD,
   LOCAL_SLOTS,
+  OBJECT_MERGE,
+  OBJECT_POP,
+  OBJECT_PUSH,
   POP,
   PUSH,
   READ_LOCAL,
@@ -60,6 +64,8 @@ class Compiler {
       this.compileLiteral(expression);
     } else if ("array" in expression) {
       this.compileArray(expression);
+    } else if ("object" in expression) {
+      this.compileObject(expression);
     } else if ("name" in expression) {
       this.compileName(expression);
     } else if ("defining" in expression) {
@@ -86,24 +92,24 @@ class Compiler {
     }
   }
 
-  // compileArrayWithSpread(expression) {
-  //   for (const element of expression.array) {
-  //     if ("spread" in element) {
-  //       this.compileExpression(element.spread);
-  //     } else {
-  //       this.compileExpression(element);
-  //       this.instructions.push(ARRAY, 1);
-  //     }
-  //   }
-  //   this.instructions.push(FLAT_ARRAY, expression.array.length);
-  // }
-
-  // compileSimpleArray(expression) {
-  //   for (const element of expression.array) {
-  //     this.compileExpression(element);
-  //   }
-  //   this.instructions.push(ARRAY, expression.array.length);
-  // }
+  compileObject(expression) {
+    this.instructions.push(VALUE, kpobject());
+    for (const entry of expression.object) {
+      if ("spread" in entry) {
+        this.compileExpression(entry.spread);
+        this.instructions.push(OBJECT_MERGE);
+      } else {
+        const [key, value] = entry;
+        if (typeof key === "string") {
+          this.instructions.push(VALUE, key);
+        } else {
+          this.compileExpression(key);
+        }
+        this.compileExpression(value);
+        this.instructions.push(OBJECT_PUSH);
+      }
+    }
+  }
 
   compileName(expression) {
     const slot = this.activeScopes.at(-1).getSlot(expression.name);
@@ -165,6 +171,8 @@ class Compiler {
       for (const element of pattern.objectPattern) {
         this.declareNames(element);
       }
+    } else if ("rest" in pattern) {
+      this.declareNames(pattern.rest);
     } else {
       throw kperror("invalidPattern", ["pattern", pattern]);
     }
@@ -177,12 +185,30 @@ class Compiler {
       this.addDiagnostic({ name: pattern });
     } else if ("arrayPattern" in pattern) {
       for (let i = pattern.arrayPattern.length - 1; i >= 0; i--) {
-        this.instructions.push(ARRAY_POP);
-        this.assignNames(pattern.arrayPattern[i]);
+        const element = pattern.arrayPattern[i];
+        if (typeof element === "object" && "rest" in element) {
+          this.instructions.push(ARRAY_CUT, i);
+          this.assignNames(element.rest);
+        } else {
+          this.instructions.push(ARRAY_POP);
+          this.assignNames(element);
+        }
       }
       this.instructions.push(DISCARD);
     } else if ("objectPattern" in pattern) {
-      throw kperror("notImplemented");
+      let rest = null;
+      for (const element of pattern.objectPattern) {
+        if (typeof element === "object" && "rest" in element) {
+          rest = element.rest;
+        } else {
+          this.instructions.push(VALUE, element);
+          this.instructions.push(OBJECT_POP);
+          this.assignNames(element);
+        }
+      }
+      if (rest) {
+        this.assignNames(rest);
+      }
     }
   }
 

@@ -1,9 +1,13 @@
 import {
+  ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
   ARRAY_PUSH,
   DISCARD,
   LOCAL_SLOTS,
+  OBJECT_MERGE,
+  OBJECT_POP,
+  OBJECT_PUSH,
   POP,
   PUSH,
   READ_LOCAL,
@@ -39,6 +43,10 @@ class Vm {
     this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
+    this.instructionTable[ARRAY_CUT] = this.runArrayCut;
+    this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
+    this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
+    this.instructionTable[OBJECT_POP] = this.runObjectPop;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -176,6 +184,45 @@ class Vm {
       console.log("ARRAY_POP");
     }
     const value = this.stack.at(-1).pop();
+    this.stack.push(value);
+  }
+
+  runArrayCut() {
+    const position = this.next();
+    if (this.trace) {
+      console.log(`ARRAY_CUT ${position}`);
+    }
+    const array = this.stack.pop();
+    this.stack.push(array.slice(0, position));
+    this.stack.push(array.slice(position));
+  }
+
+  runObjectPush() {
+    if (this.trace) {
+      console.log("OBJECT_PUSH");
+    }
+    const value = this.stack.pop();
+    const key = this.stack.pop();
+    this.stack.at(-1).set(key, value);
+  }
+
+  runObjectMerge() {
+    if (this.trace) {
+      console.log("OBJECT_MERGE");
+    }
+    const object = this.stack.pop();
+    for (const [key, value] of object) {
+      this.stack.at(-1).set(key, value);
+    }
+  }
+
+  runObjectPop() {
+    if (this.trace) {
+      console.log("OBJECT_POP");
+    }
+    const key = this.stack.pop();
+    const value = this.stack.at(-1).get(key);
+    this.stack.at(-1).delete(key);
     this.stack.push(value);
   }
 
