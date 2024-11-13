@@ -55,28 +55,40 @@ class Compiler {
   compile() {
     this.compileExpression(this.expression);
     this.finishedFunctions.push(this.currentFunction());
-    const instructions = [];
-    const marks = [];
-    const diagnostics = [];
-    const functionOffsets = [];
-    for (let i = this.finishedFunctions.length - 1; i >= 0; i--) {
-      functionOffsets[i] = instructions.length;
-      instructions.push(...this.finishedFunctions[i].instructions);
-      marks.push(...this.finishedFunctions[i].marks);
-      diagnostics.push(...this.finishedFunctions[i].diagnostics);
-      instructions.push(RETURN);
-      marks.length += 1;
-      diagnostics.length += 1;
+    const program = this.combineFunctions();
+    if (this.trace) {
+      console.log("--- Instructions ---");
+      console.log(disassemble(program));
+      console.log("--------------------");
     }
+    return program;
+  }
+
+  combineFunctions() {
+    for (const finishedFunction of this.finishedFunctions) {
+      finishedFunction.instructions.push(RETURN);
+      finishedFunction.marks.length = finishedFunction.instructions.length;
+      finishedFunction.diagnostics.length =
+        finishedFunction.instructions.length;
+    }
+    const functionOffsets = [];
+    let totalLength = 0;
+    for (let i = this.finishedFunctions.length - 1; i >= 0; i--) {
+      functionOffsets[i] = totalLength;
+      totalLength += this.finishedFunctions[i].instructions.length;
+    }
+    this.finishedFunctions.reverse();
+    const instructions = [].concat(
+      ...this.finishedFunctions.map((f) => f.instructions)
+    );
+    const marks = [].concat(...this.finishedFunctions.map((f) => f.marks));
+    const diagnostics = [].concat(
+      ...this.finishedFunctions.map((f) => f.diagnostics)
+    );
     for (let i = 0; i < instructions.length; i++) {
       if (marks[i] && "functionNumber" in marks[i]) {
         instructions[i] = functionOffsets[marks[i].functionNumber];
       }
-    }
-    if (this.trace) {
-      console.log("--- Instructions ---");
-      console.log(disassemble(instructions));
-      console.log("--------------------");
     }
     return { instructions, diagnostics };
   }
@@ -163,8 +175,10 @@ class Compiler {
 
   compileDefining(expression) {
     this.pushScope();
+    this.addInstruction(PUSH);
     this.defineNames(expression.defining);
     this.compileExpression(expression.result);
+    this.addInstruction(POP);
     this.popScope();
   }
 
@@ -234,16 +248,40 @@ class Compiler {
       }
       if (rest) {
         this.assignNames(rest);
+      } else {
+        this.addInstruction(DISCARD);
       }
     }
   }
 
   compileGiven(expression) {
     if (this.trace) {
-      console.log("New function");
+      console.log(
+        `New function of ${JSON.stringify(
+          expression.given.params ?? []
+        )} ${JSON.stringify(expression.given.namedParams ?? [])}`
+      );
     }
     this.activeFunctions.push(new CompiledFunction());
+    this.pushScope(3);
+    const paramPattern = { arrayPattern: expression.given.params ?? [] };
+    const namedParamPattern = {
+      objectPattern: expression.given.namedParams ?? [],
+    };
+    this.declareNames(paramPattern);
+    this.declareNames(namedParamPattern);
+    this.addInstruction(
+      LOCAL_SLOTS,
+      this.activeScopes.at(-1).numDeclaredNames() - 2
+    );
+    this.addInstruction(READ_LOCAL, 1);
+    this.addDiagnostic({ name: "<posArgs>" });
+    this.assignNames(paramPattern);
+    this.addInstruction(READ_LOCAL, 2);
+    this.addDiagnostic({ name: "<namedArgs>" });
+    this.assignNames(namedParamPattern);
     this.compileExpression(expression.result);
+    this.popScope();
     if (this.trace) {
       console.log("Finished function");
     }
@@ -255,24 +293,29 @@ class Compiler {
 
   compileCalling(expression) {
     this.compileExpression(expression.calling);
+    this.addInstruction(PUSH);
+    this.compileExpression({ array: expression.args ?? [] });
+    this.compileExpression({ object: expression.namedArgs ?? [] });
     this.addInstruction(CALL);
+    this.addInstruction(POP);
   }
 
   currentScope() {
     return this.activeScopes.at(-1);
   }
 
-  pushScope() {
+  pushScope(reservedSlots = 1) {
     if (this.trace) {
-      console.log("Push");
+      console.log(`Push ${reservedSlots}`);
     }
-    this.activeScopes.push(new CompiledScope());
-    this.addInstruction(PUSH);
+    this.activeScopes.push(new CompiledScope(reservedSlots));
   }
 
   popScope() {
+    if (this.trace) {
+      console.log("Pop");
+    }
     this.activeScopes.pop();
-    this.addInstruction(POP);
   }
 
   currentFunction() {
@@ -305,9 +348,9 @@ class CompiledFunction {
 }
 
 class CompiledScope {
-  constructor() {
+  constructor(firstSlot = 1) {
     this.nameSlots = new Map();
-    this.nextSlot = 1;
+    this.nextSlot = firstSlot;
   }
 
   declareName(name) {
@@ -320,6 +363,6 @@ class CompiledScope {
   }
 
   numDeclaredNames() {
-    return this.nameSlots.size;
+    return this.nextSlot - 1;
   }
 }

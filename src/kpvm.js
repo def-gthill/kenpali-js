@@ -246,7 +246,7 @@ class Vm {
       console.log("CALL");
     }
     this.callFrames.push({ returnIndex: this.cursor });
-    const target = this.stack.at(-1).target;
+    const target = this.stack.at(-3).target;
     if (this.trace) {
       console.log(`Jump to ${target}`);
     }
@@ -260,9 +260,6 @@ class Vm {
     if (this.callFrames.length === 0) {
       this.cursor = this.instructions.length;
     } else {
-      const result = this.stack.pop();
-      this.stack.pop(); // Discard function object
-      this.stack.push(result);
       const callFrame = this.callFrames.pop();
       this.cursor = callFrame.returnIndex;
     }

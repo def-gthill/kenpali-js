@@ -19,13 +19,14 @@ export const FUNCTION = 16;
 export const CALL = 17;
 export const RETURN = 18;
 
-export function disassemble(instructions) {
-  return new Disassembler(instructions).disassemble();
+export function disassemble(program) {
+  return new Disassembler(program).disassemble();
 }
 
 class Disassembler {
-  constructor(instructions) {
+  constructor({ instructions, diagnostics }) {
     this.instructions = instructions;
+    this.diagnostics = diagnostics;
     this.cursor = 0;
 
     this.instructionTable = [];
@@ -58,7 +59,14 @@ class Disassembler {
   disassemble() {
     const instructionStrings = [];
     while (this.cursor < this.instructions.length) {
-      instructionStrings.push(this.disassembleInstruction());
+      let instructionString = this.disassembleInstruction();
+      const diagnostic = this.getDiagnostic();
+      if (diagnostic) {
+        instructionString = `${instructionString} ${JSON.stringify(
+          diagnostic
+        )}`;
+      }
+      instructionStrings.push(instructionString);
     }
     return instructionStrings.join("\n");
   }
@@ -144,5 +152,9 @@ class Disassembler {
     const value = this.instructions[this.cursor];
     this.cursor += 1;
     return value;
+  }
+
+  getDiagnostic() {
+    return this.diagnostics[this.cursor - 1];
   }
 }
