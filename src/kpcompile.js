@@ -3,7 +3,9 @@ import {
   ARRAY_EXTEND,
   ARRAY_POP,
   ARRAY_PUSH,
+  CALL,
   DISCARD,
+  FUNCTION,
   LOCAL_SLOTS,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -12,6 +14,7 @@ import {
   PUSH,
   READ_LOCAL,
   READ_OUTER_LOCAL,
+  RETURN,
   VALUE,
   WRITE_LOCAL,
   disassemble,
@@ -44,19 +47,38 @@ class Compiler {
     this.modules = modules;
     this.trace = trace;
 
-    this.instructions = [];
-    this.diagnostics = [];
+    this.activeFunctions = [new CompiledFunction()];
     this.activeScopes = [];
+    this.finishedFunctions = [];
   }
 
   compile() {
     this.compileExpression(this.expression);
+    this.finishedFunctions.push(this.currentFunction());
+    const instructions = [];
+    const marks = [];
+    const diagnostics = [];
+    const functionOffsets = [];
+    for (let i = this.finishedFunctions.length - 1; i >= 0; i--) {
+      functionOffsets[i] = instructions.length;
+      instructions.push(...this.finishedFunctions[i].instructions);
+      marks.push(...this.finishedFunctions[i].marks);
+      diagnostics.push(...this.finishedFunctions[i].diagnostics);
+      instructions.push(RETURN);
+      marks.length += 1;
+      diagnostics.length += 1;
+    }
+    for (let i = 0; i < instructions.length; i++) {
+      if (marks[i] && "functionNumber" in marks[i]) {
+        instructions[i] = functionOffsets[marks[i].functionNumber];
+      }
+    }
     if (this.trace) {
       console.log("--- Instructions ---");
-      console.log(disassemble(this.instructions));
+      console.log(disassemble(instructions));
       console.log("--------------------");
     }
-    return { instructions: this.instructions, diagnostics: this.diagnostics };
+    return { instructions, diagnostics };
   }
 
   compileExpression(expression) {
@@ -70,43 +92,47 @@ class Compiler {
       this.compileName(expression);
     } else if ("defining" in expression) {
       this.compileDefining(expression);
+    } else if ("given" in expression) {
+      this.compileGiven(expression);
+    } else if ("calling" in expression) {
+      this.compileCalling(expression);
     } else {
       throw kperror("notAnExpression", ["value", expression]);
     }
   }
 
   compileLiteral(expression) {
-    this.instructions.push(VALUE, expression.literal);
+    this.addInstruction(VALUE, expression.literal);
   }
 
   compileArray(expression) {
-    this.instructions.push(VALUE, []);
+    this.addInstruction(VALUE, []);
     for (const element of expression.array) {
       if ("spread" in element) {
         this.compileExpression(element.spread);
-        this.instructions.push(ARRAY_EXTEND);
+        this.addInstruction(ARRAY_EXTEND);
       } else {
         this.compileExpression(element);
-        this.instructions.push(ARRAY_PUSH);
+        this.addInstruction(ARRAY_PUSH);
       }
     }
   }
 
   compileObject(expression) {
-    this.instructions.push(VALUE, kpobject());
+    this.addInstruction(VALUE, kpobject());
     for (const entry of expression.object) {
       if ("spread" in entry) {
         this.compileExpression(entry.spread);
-        this.instructions.push(OBJECT_MERGE);
+        this.addInstruction(OBJECT_MERGE);
       } else {
         const [key, value] = entry;
         if (typeof key === "string") {
-          this.instructions.push(VALUE, key);
+          this.addInstruction(VALUE, key);
         } else {
           this.compileExpression(key);
         }
         this.compileExpression(value);
-        this.instructions.push(OBJECT_PUSH);
+        this.addInstruction(OBJECT_PUSH);
       }
     }
   }
@@ -116,7 +142,7 @@ class Compiler {
     if (slot === undefined) {
       this.compileNameFromOuterScope(expression);
     } else {
-      this.instructions.push(READ_LOCAL, slot);
+      this.addInstruction(READ_LOCAL, slot);
       this.addDiagnostic({ name: expression.name });
     }
   }
@@ -127,7 +153,7 @@ class Compiler {
         .at(-numLayers - 1)
         .getSlot(expression.name);
       if (slot !== undefined) {
-        this.instructions.push(READ_OUTER_LOCAL, numLayers, slot);
+        this.addInstruction(READ_OUTER_LOCAL, numLayers, slot);
         this.addDiagnostic({ name: expression.name });
         return;
       }
@@ -146,7 +172,7 @@ class Compiler {
     for (const [pattern, _] of definitions) {
       this.declareNames(pattern);
     }
-    this.instructions.push(
+    this.addInstruction(
       LOCAL_SLOTS,
       this.activeScopes.at(-1).numDeclaredNames()
     );
@@ -181,28 +207,28 @@ class Compiler {
   assignNames(pattern) {
     const activeScope = this.activeScopes.at(-1);
     if (typeof pattern === "string") {
-      this.instructions.push(WRITE_LOCAL, activeScope.getSlot(pattern));
+      this.addInstruction(WRITE_LOCAL, activeScope.getSlot(pattern));
       this.addDiagnostic({ name: pattern });
     } else if ("arrayPattern" in pattern) {
       for (let i = pattern.arrayPattern.length - 1; i >= 0; i--) {
         const element = pattern.arrayPattern[i];
         if (typeof element === "object" && "rest" in element) {
-          this.instructions.push(ARRAY_CUT, i);
+          this.addInstruction(ARRAY_CUT, i);
           this.assignNames(element.rest);
         } else {
-          this.instructions.push(ARRAY_POP);
+          this.addInstruction(ARRAY_POP);
           this.assignNames(element);
         }
       }
-      this.instructions.push(DISCARD);
+      this.addInstruction(DISCARD);
     } else if ("objectPattern" in pattern) {
       let rest = null;
       for (const element of pattern.objectPattern) {
         if (typeof element === "object" && "rest" in element) {
           rest = element.rest;
         } else {
-          this.instructions.push(VALUE, element);
-          this.instructions.push(OBJECT_POP);
+          this.addInstruction(VALUE, element);
+          this.addInstruction(OBJECT_POP);
           this.assignNames(element);
         }
       }
@@ -212,21 +238,69 @@ class Compiler {
     }
   }
 
+  compileGiven(expression) {
+    if (this.trace) {
+      console.log("New function");
+    }
+    this.activeFunctions.push(new CompiledFunction());
+    this.compileExpression(expression.result);
+    if (this.trace) {
+      console.log("Finished function");
+    }
+    const finishedFunction = this.activeFunctions.pop();
+    this.addInstruction(FUNCTION, 0);
+    this.addMark({ functionNumber: this.finishedFunctions.length });
+    this.finishedFunctions.push(finishedFunction);
+  }
+
+  compileCalling(expression) {
+    this.compileExpression(expression.calling);
+    this.addInstruction(CALL);
+  }
+
+  currentScope() {
+    return this.activeScopes.at(-1);
+  }
+
   pushScope() {
     if (this.trace) {
       console.log("Push");
     }
     this.activeScopes.push(new CompiledScope());
-    this.instructions.push(PUSH);
+    this.addInstruction(PUSH);
   }
 
   popScope() {
     this.activeScopes.pop();
-    this.instructions.push(POP);
+    this.addInstruction(POP);
+  }
+
+  currentFunction() {
+    return this.activeFunctions.at(-1);
+  }
+
+  addInstruction(...instruction) {
+    this.currentFunction().instructions.push(...instruction);
+  }
+
+  addMark(mark) {
+    this.currentFunction().marks[
+      this.currentFunction().instructions.length - 1
+    ] = mark;
   }
 
   addDiagnostic(diagnostic) {
-    this.diagnostics[this.instructions.length - 1] = diagnostic;
+    this.currentFunction().diagnostics[
+      this.currentFunction().instructions.length - 1
+    ] = diagnostic;
+  }
+}
+
+class CompiledFunction {
+  constructor() {
+    this.instructions = [];
+    this.marks = [];
+    this.diagnostics = [];
   }
 }
 

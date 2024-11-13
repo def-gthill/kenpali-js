@@ -15,6 +15,9 @@ export const ARRAY_CUT = 12;
 export const OBJECT_PUSH = 13;
 export const OBJECT_MERGE = 14;
 export const OBJECT_POP = 15;
+export const FUNCTION = 16;
+export const CALL = 17;
+export const RETURN = 18;
 
 export function disassemble(instructions) {
   return new Disassembler(instructions).disassemble();
@@ -41,6 +44,9 @@ class Disassembler {
     this.instructionTable[OBJECT_PUSH] = this.disassembleObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
     this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
+    this.instructionTable[FUNCTION] = this.disassembleFunction;
+    this.instructionTable[CALL] = this.disassembleCall;
+    this.instructionTable[RETURN] = this.disassembleReturn;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -120,6 +126,18 @@ class Disassembler {
 
   disassembleObjectPop() {
     return "OBJECT_POP";
+  }
+
+  disassembleFunction() {
+    return `FUNCTION ${this.next()}`;
+  }
+
+  disassembleCall() {
+    return "CALL";
+  }
+
+  disassembleReturn() {
+    return "RETURN";
   }
 
   next() {

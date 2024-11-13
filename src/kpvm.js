@@ -3,7 +3,9 @@ import {
   ARRAY_EXTEND,
   ARRAY_POP,
   ARRAY_PUSH,
+  CALL,
   DISCARD,
+  FUNCTION,
   LOCAL_SLOTS,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -12,6 +14,7 @@ import {
   PUSH,
   READ_LOCAL,
   READ_OUTER_LOCAL,
+  RETURN,
   VALUE,
   WRITE_LOCAL,
 } from "./instructions.js";
@@ -30,6 +33,7 @@ class Vm {
     this.cursor = 0;
     this.stack = [];
     this.scopeFrames = [];
+    this.callFrames = [];
 
     this.instructionTable = [];
     this.instructionTable[VALUE] = this.runValue;
@@ -47,6 +51,9 @@ class Vm {
     this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
     this.instructionTable[OBJECT_POP] = this.runObjectPop;
+    this.instructionTable[FUNCTION] = this.runFunction;
+    this.instructionTable[CALL] = this.runCall;
+    this.instructionTable[RETURN] = this.runReturn;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -127,7 +134,7 @@ class Vm {
   runPush() {
     const stackIndex = this.stack.length - 1;
     if (this.trace) {
-      console.log(`Push frame at ${stackIndex}`);
+      console.log(`PUSH (at ${stackIndex})`);
     }
     this.scopeFrames.push({ stackIndex });
   }
@@ -136,7 +143,7 @@ class Vm {
     const value = this.stack.pop();
     const frame = this.scopeFrames.pop();
     if (this.trace) {
-      console.log(`Pop frame at ${frame.stackIndex}`);
+      console.log(`POP (at ${frame.stackIndex})`);
     }
     this.stack.length = frame.stackIndex + 1;
     this.stack.push(value);
@@ -224,6 +231,41 @@ class Vm {
     const value = this.stack.at(-1).get(key);
     this.stack.at(-1).delete(key);
     this.stack.push(value);
+  }
+
+  runFunction() {
+    const target = this.next();
+    if (this.trace) {
+      console.log(`FUNCTION ${target}`);
+    }
+    this.stack.push({ target });
+  }
+
+  runCall() {
+    if (this.trace) {
+      console.log("CALL");
+    }
+    this.callFrames.push({ returnIndex: this.cursor });
+    const target = this.stack.at(-1).target;
+    if (this.trace) {
+      console.log(`Jump to ${target}`);
+    }
+    this.cursor = target;
+  }
+
+  runReturn() {
+    if (this.trace) {
+      console.log("RETURN");
+    }
+    if (this.callFrames.length === 0) {
+      this.cursor = this.instructions.length;
+    } else {
+      const result = this.stack.pop();
+      this.stack.pop(); // Discard function object
+      this.stack.push(result);
+      const callFrame = this.callFrames.pop();
+      this.cursor = callFrame.returnIndex;
+    }
   }
 
   next() {

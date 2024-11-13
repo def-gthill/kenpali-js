@@ -52,5 +52,6 @@ runSpecFile(
     "Object with spread",
     "Object destructuring",
     "Object destructuring with rest",
+    "No parameters, no arguments",
   ]
 );
