@@ -54,6 +54,14 @@ runSpecFile(
     "Object destructuring with rest",
     "No parameters, no arguments",
     "One positional parameter, one positional argument",
-    // "One positional parameter, no arguments",
+    "One positional parameter, no arguments",
+    "One optional positional parameter, one positional argument",
+    "One optional positional parameter, no arguments",
+    "Default value referencing a name",
+    "Positional rest parameter",
+    "Spread positional argument",
+    "Spread named argument",
+    "Named rest parameter",
+    // "Calling a non-function",
   ]
 );

@@ -2,6 +2,7 @@ import {
   ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
+  ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
   CALL,
   DISCARD,
@@ -47,6 +48,7 @@ class Vm {
     this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
+    this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.runArrayCut;
     this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
@@ -191,6 +193,27 @@ class Vm {
       console.log("ARRAY_POP");
     }
     const value = this.stack.at(-1).pop();
+    if (value === undefined) {
+      const diagnostic = this.getDiagnostic();
+      if (diagnostic) {
+        if (diagnostic.isArgument) {
+          this.throw_(kperror("missingArgument", ["name", diagnostic.name]));
+        } else {
+          this.throw_(kperror("missingElement", ["name", diagnostic.name]));
+        }
+      } else {
+        this.throw_(kperror("missingElement"));
+      }
+    }
+    this.stack.push(value);
+  }
+
+  runArrayPopOrDefault() {
+    if (this.trace) {
+      console.log("ARRAY_POP_OR_DEFAULT");
+    }
+    const defaultValue = this.stack.pop();
+    const value = this.stack.at(-1).pop() ?? defaultValue;
     this.stack.push(value);
   }
 

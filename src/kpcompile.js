@@ -2,6 +2,7 @@ import {
   ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
+  ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
   CALL,
   DISCARD,
@@ -211,6 +212,8 @@ class Compiler {
       for (const element of pattern.objectPattern) {
         this.declareNames(element);
       }
+    } else if ("defaultValue" in pattern) {
+      this.declareNames(pattern.name);
     } else if ("rest" in pattern) {
       this.declareNames(pattern.rest);
     } else {
@@ -218,39 +221,53 @@ class Compiler {
     }
   }
 
-  assignNames(pattern) {
+  assignNames(pattern, { isArgument = false } = {}) {
     const activeScope = this.activeScopes.at(-1);
     if (typeof pattern === "string") {
       this.addInstruction(WRITE_LOCAL, activeScope.getSlot(pattern));
       this.addDiagnostic({ name: pattern });
     } else if ("arrayPattern" in pattern) {
-      for (let i = pattern.arrayPattern.length - 1; i >= 0; i--) {
-        const element = pattern.arrayPattern[i];
-        if (typeof element === "object" && "rest" in element) {
-          this.addInstruction(ARRAY_CUT, i);
-          this.assignNames(element.rest);
-        } else {
-          this.addInstruction(ARRAY_POP);
-          this.assignNames(element);
-        }
-      }
-      this.addInstruction(DISCARD);
+      this.assignNamesInArrayPattern(pattern, { isArgument });
     } else if ("objectPattern" in pattern) {
-      let rest = null;
-      for (const element of pattern.objectPattern) {
-        if (typeof element === "object" && "rest" in element) {
-          rest = element.rest;
-        } else {
-          this.addInstruction(VALUE, element);
-          this.addInstruction(OBJECT_POP);
-          this.assignNames(element);
-        }
-      }
-      if (rest) {
-        this.assignNames(rest);
+      this.assignNamesInObjectPattern(pattern, { isArgument });
+    }
+  }
+
+  assignNamesInArrayPattern(pattern, { isArgument }) {
+    for (let i = pattern.arrayPattern.length - 1; i >= 0; i--) {
+      const element = pattern.arrayPattern[i];
+      if (typeof element === "object" && "rest" in element) {
+        this.addInstruction(ARRAY_CUT, i);
+        this.assignNames(element.rest);
+      } else if (typeof element === "object" && "defaultValue" in element) {
+        this.compileExpression(element.defaultValue);
+        this.addInstruction(ARRAY_POP_OR_DEFAULT);
+        this.assignNames(element.name);
       } else {
-        this.addInstruction(DISCARD);
+        this.addInstruction(ARRAY_POP);
+        this.addDiagnostic({ name: element, isArgument });
+        this.assignNames(element);
       }
+    }
+    this.addInstruction(DISCARD);
+  }
+
+  assignNamesInObjectPattern(pattern, { isArgument }) {
+    let rest = null;
+    for (const element of pattern.objectPattern) {
+      if (typeof element === "object" && "rest" in element) {
+        rest = element.rest;
+      } else {
+        this.addInstruction(VALUE, element);
+        this.addInstruction(OBJECT_POP);
+        this.addDiagnostic({ name: element, isArgument });
+        this.assignNames(element);
+      }
+    }
+    if (rest) {
+      this.assignNames(rest);
+    } else {
+      this.addInstruction(DISCARD);
     }
   }
 
@@ -276,10 +293,10 @@ class Compiler {
     );
     this.addInstruction(READ_LOCAL, 1);
     this.addDiagnostic({ name: "<posArgs>" });
-    this.assignNames(paramPattern);
+    this.assignNames(paramPattern, { isArgument: true });
     this.addInstruction(READ_LOCAL, 2);
     this.addDiagnostic({ name: "<namedArgs>" });
-    this.assignNames(namedParamPattern);
+    this.assignNames(namedParamPattern, { isArgument: true });
     this.compileExpression(expression.result);
     this.popScope();
     if (this.trace) {
