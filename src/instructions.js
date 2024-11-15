@@ -22,6 +22,7 @@ export const CALL = 17;
 export const CAPTURE = 22;
 export const READ_UPVALUE = 20;
 export const RETURN = 18;
+export const CATCH = 23;
 
 export function disassemble(program) {
   return new Disassembler(program).disassemble();
@@ -57,6 +58,7 @@ class Disassembler {
     this.instructionTable[CAPTURE] = this.disassembleCapture;
     this.instructionTable[READ_UPVALUE] = this.disassembleReadUpvalue;
     this.instructionTable[RETURN] = this.disassembleReturn;
+    this.instructionTable[CATCH] = this.disassembleCatch;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -171,6 +173,10 @@ class Disassembler {
 
   disassembleReturn() {
     return "RETURN";
+  }
+
+  disassembleCatch() {
+    return `CATCH ${this.next()}`;
   }
 
   next() {

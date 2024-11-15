@@ -6,6 +6,7 @@ import {
   ARRAY_PUSH,
   CALL,
   CAPTURE,
+  CATCH,
   CLOSURE,
   DISCARD,
   FUNCTION,
@@ -63,6 +64,7 @@ class Vm {
     this.instructionTable[CAPTURE] = this.runCapture;
     this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[RETURN] = this.runReturn;
+    this.instructionTable[CATCH] = this.runCatch;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -136,6 +138,7 @@ class Vm {
       this.throw_(
         kperror("nameUsedBeforeAssignment", ["name", this.getDiagnostic().name])
       );
+      return;
     }
     this.stack.push(value);
   }
@@ -173,6 +176,7 @@ class Vm {
       this.throw_(
         kperror("nameUsedBeforeAssignment", ["name", this.getDiagnostic().name])
       );
+      return;
     }
     this.stack.push(value);
   }
@@ -203,11 +207,14 @@ class Vm {
       if (diagnostic) {
         if (diagnostic.isArgument) {
           this.throw_(kperror("missingArgument", ["name", diagnostic.name]));
+          return;
         } else {
           this.throw_(kperror("missingElement", ["name", diagnostic.name]));
+          return;
         }
       } else {
         this.throw_(kperror("missingElement"));
+        return;
       }
     }
     this.stack.push(value);
@@ -305,6 +312,7 @@ class Vm {
     const callee = this.stack.at(-3);
     if (typeof callee !== "object" || !("target" in callee)) {
       this.throw_(kperror("notCallable", ["value", callee]));
+      return;
     }
     const target = callee.target;
     if (this.trace) {
@@ -355,6 +363,14 @@ class Vm {
     }
   }
 
+  runCatch() {
+    const recoveryOffset = this.next();
+    if (this.trace) {
+      console.log(`CATCH ${recoveryOffset}`);
+    }
+    this.scopeFrames.at(-1).setRecovery(this.cursor + recoveryOffset);
+  }
+
   next() {
     const value = this.instructions[this.cursor];
     this.cursor += 1;
@@ -369,7 +385,24 @@ class Vm {
     if (this.trace) {
       console.log(toString(error));
     }
-    throw error;
+    while (
+      this.scopeFrames.length > 0 &&
+      this.scopeFrames.at(-1).recoveryIndex === undefined
+    ) {
+      const frame = this.scopeFrames.pop();
+      this.stack.length = frame.stackIndex;
+      if (
+        this.callFrames.length > 0 &&
+        this.callFrames.at(-1).stackIndex >= frame.stackIndex
+      ) {
+        this.callFrames.pop();
+      }
+    }
+    if (this.scopeFrames.length === 0) {
+      throw error;
+    }
+    this.stack.push(error);
+    this.cursor = this.scopeFrames.at(-1).recoveryIndex;
   }
 }
 
@@ -393,6 +426,10 @@ class Upvalue {
 class ScopeFrame {
   constructor(stackIndex) {
     this.stackIndex = stackIndex;
+  }
+
+  setRecovery(index) {
+    this.recoveryIndex = index;
   }
 }
 

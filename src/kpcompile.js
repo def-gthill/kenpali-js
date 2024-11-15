@@ -6,6 +6,7 @@ import {
   ARRAY_PUSH,
   CALL,
   CAPTURE,
+  CATCH,
   CLOSURE,
   DISCARD,
   FUNCTION,
@@ -112,6 +113,8 @@ class Compiler {
       this.compileGiven(expression);
     } else if ("calling" in expression) {
       this.compileCalling(expression);
+    } else if ("catching" in expression) {
+      this.compileCatching(expression);
     } else {
       throw kperror("notAnExpression", ["value", expression]);
     }
@@ -354,15 +357,6 @@ class Compiler {
     }
   }
 
-  compileCalling(expression) {
-    this.compileExpression(expression.calling);
-    this.addInstruction(PUSH);
-    this.compileExpression({ array: expression.args ?? [] });
-    this.compileExpression({ object: expression.namedArgs ?? [] });
-    this.addInstruction(CALL);
-    this.addInstruction(POP);
-  }
-
   clearLocals() {
     const scope = this.activeScopes.at(-1);
     for (let i = scope.numDeclaredNames(); i >= 1; i--) {
@@ -372,6 +366,30 @@ class Compiler {
         this.addInstruction(DISCARD);
       }
     }
+  }
+
+  compileCalling(expression) {
+    this.compileExpression(expression.calling);
+    this.addInstruction(PUSH);
+    this.compileExpression({ array: expression.args ?? [] });
+    this.compileExpression({ object: expression.namedArgs ?? [] });
+    this.addInstruction(CALL);
+    this.addInstruction(POP);
+  }
+
+  compileCatching(expression) {
+    this.addInstruction(CATCH, 0);
+    const catchIndex = this.currentFunction().instructions.length;
+    if (this.trace) {
+      console.log(`Catching at ${catchIndex}`);
+    }
+    this.compileExpression(expression.catching);
+    const jumpIndex = this.currentFunction().instructions.length;
+    if (this.trace) {
+      console.log(`Recovery point at ${jumpIndex}`);
+    }
+    this.currentFunction().instructions[catchIndex - 1] =
+      jumpIndex - catchIndex;
   }
 
   currentScope() {

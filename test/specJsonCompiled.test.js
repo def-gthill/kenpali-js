@@ -11,8 +11,13 @@ const specPath = "../kenpali/kenpali-json.md";
 runSpecFile(
   specPath,
   (json) =>
-    // catch_(() => kpvm(kpcompileJson(json, { trace: true }), { trace: true })),
-    catch_(() => kpvm(kpcompileJson(json))),
+    catch_(() => {
+      const program = kpcompileJson(json);
+      // const program = kpcompileJson(json, { trace: true });
+      const result = kpvm(program);
+      // const result = kpvm(program, { trace: true });
+      return result;
+    }),
   (t, actualOutputValue, expectedOutput) => {
     const expectedOutputValue = kpeval(kpparse(expectedOutput));
     t.deepEqual(actualOutputValue, expectedOutputValue);
@@ -67,6 +72,10 @@ runSpecFile(
     "Calling a non-function",
     "A name from an enclosing function",
     "Closure",
-    "Nasty multi-level closure",
+    "Leakage",
+    "Error short-circuiting through function calls",
+    "Error short-circuiting through arrays",
+    "Error short-circuiting through objects",
+    "Error catching",
   ]
 );
