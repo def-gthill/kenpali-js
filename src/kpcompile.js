@@ -176,10 +176,15 @@ class Compiler {
           if (this.trace) {
             console.log(`Resolved "${expression.name}" in outer function`);
           }
-          const innermostFunction = functionsTraversed[0];
-          const upvalueIndex = this.activeFunctions[
-            innermostFunction.functionStackIndex
-          ].upvalue(innermostFunction.numLayers, slot);
+          const outermostFunction = functionsTraversed.at(-1);
+          let upvalueIndex = this.activeFunctions[
+            outermostFunction.functionStackIndex
+          ].upvalue(outermostFunction.numLayers, slot);
+          for (let i = functionsTraversed.length - 2; i >= 0; i--) {
+            upvalueIndex = this.activeFunctions[
+              functionsTraversed[i].functionStackIndex
+            ].upvalue(-1, upvalueIndex);
+          }
           this.addInstruction(READ_UPVALUE, upvalueIndex);
           scope.setNeedsClosing(slot);
         } else {

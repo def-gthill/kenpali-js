@@ -67,5 +67,6 @@ runSpecFile(
     "Calling a non-function",
     "A name from an enclosing function",
     "Closure",
+    "Nasty multi-level closure",
   ]
 );

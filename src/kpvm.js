@@ -271,19 +271,26 @@ class Vm {
 
   runClosure() {
     const stepsOut = this.next();
-    const localIndex = this.next();
+    const index = this.next();
     if (this.trace) {
-      console.log(`CLOSURE ${stepsOut} ${localIndex}`);
+      console.log(`CLOSURE ${stepsOut} ${index}`);
     }
     const f = this.stack.at(-1);
-    const absoluteIndex =
-      this.scopeFrames.at(-1 - stepsOut).stackIndex + localIndex;
     let upvalue;
-    if (this.openUpvalues[absoluteIndex]) {
-      upvalue = this.openUpvalues[absoluteIndex];
+    if (stepsOut === -1) {
+      const enclosingFunction = this.stack[this.callFrames.at(-1).stackIndex];
+      const ref = enclosingFunction.closure[index];
+      upvalue = new Upvalue(ref);
     } else {
-      upvalue = new Upvalue(absoluteIndex);
-      this.openUpvalues[absoluteIndex] = upvalue;
+      const absoluteIndex =
+        this.scopeFrames.at(-1 - stepsOut).stackIndex + index;
+
+      if (this.openUpvalues[absoluteIndex]) {
+        upvalue = this.openUpvalues[absoluteIndex];
+      } else {
+        upvalue = new Upvalue(absoluteIndex);
+        this.openUpvalues[absoluteIndex] = upvalue;
+      }
     }
     f.closure.push(upvalue);
   }
@@ -292,10 +299,9 @@ class Vm {
     if (this.trace) {
       console.log("CALL");
     }
-    this.callFrames.push({
-      stackIndex: this.scopeFrames.at(-1).stackIndex,
-      returnIndex: this.cursor,
-    });
+    this.callFrames.push(
+      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
+    );
     const callee = this.stack.at(-3);
     if (typeof callee !== "object" || !("target" in callee)) {
       this.throw_(kperror("notCallable", ["value", callee]));
@@ -324,12 +330,15 @@ class Vm {
       );
     }
     const f = this.stack[this.callFrames.at(-1).stackIndex];
-    const upvalue = f.closure[upvalueIndex];
+    let upvalue = f.closure[upvalueIndex];
+    while (typeof upvalue.ref === "object") {
+      upvalue = upvalue.ref;
+    }
     let value;
     if ("value" in upvalue) {
       value = upvalue.value;
     } else {
-      value = this.stack[upvalue.absoluteIndex];
+      value = this.stack[upvalue.ref];
     }
     this.stack.push(value);
   }
@@ -372,8 +381,8 @@ class Function {
 }
 
 class Upvalue {
-  constructor(absoluteIndex) {
-    this.absoluteIndex = absoluteIndex;
+  constructor(ref) {
+    this.ref = ref;
   }
 
   close(value) {
@@ -384,5 +393,12 @@ class Upvalue {
 class ScopeFrame {
   constructor(stackIndex) {
     this.stackIndex = stackIndex;
+  }
+}
+
+class CallFrame {
+  constructor(stackIndex, returnIndex) {
+    this.stackIndex = stackIndex;
+    this.returnIndex = returnIndex;
   }
 }
