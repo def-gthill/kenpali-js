@@ -5,9 +5,10 @@ import {
   ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
   CALL,
+  CAPTURE,
+  CLOSURE,
   DISCARD,
   FUNCTION,
-  LOCAL_SLOTS,
   OBJECT_MERGE,
   OBJECT_POP,
   OBJECT_PUSH,
@@ -15,6 +16,8 @@ import {
   PUSH,
   READ_LOCAL,
   READ_OUTER_LOCAL,
+  READ_UPVALUE,
+  RESERVE,
   RETURN,
   VALUE,
   WRITE_LOCAL,
@@ -155,30 +158,62 @@ class Compiler {
     if (slot === undefined) {
       this.compileNameFromOuterScope(expression);
     } else {
+      if (this.trace) {
+        console.log(`Resolved "${expression.name}" in current scope`);
+      }
       this.addInstruction(READ_LOCAL, slot);
       this.addDiagnostic({ name: expression.name });
     }
   }
 
   compileNameFromOuterScope(expression) {
-    for (let numLayers = 1; numLayers < this.activeScopes.length; numLayers++) {
-      const slot = this.activeScopes
-        .at(-numLayers - 1)
-        .getSlot(expression.name);
+    const functionsTraversed = [];
+    for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
+      const scope = this.activeScopes.at(-numLayers - 1);
+      const slot = scope.getSlot(expression.name);
       if (slot !== undefined) {
-        this.addInstruction(READ_OUTER_LOCAL, numLayers, slot);
+        if (functionsTraversed.length > 0) {
+          if (this.trace) {
+            console.log(`Resolved "${expression.name}" in outer function`);
+          }
+          const innermostFunction = functionsTraversed[0];
+          const upvalueIndex = this.activeFunctions[
+            innermostFunction.functionStackIndex
+          ].upvalue(innermostFunction.numLayers, slot);
+          this.addInstruction(READ_UPVALUE, upvalueIndex);
+          scope.setNeedsClosing(slot);
+        } else {
+          if (this.trace) {
+            console.log(
+              `Resolved "${expression.name}" in scope ${numLayers} out`
+            );
+          }
+          this.addInstruction(READ_OUTER_LOCAL, numLayers, slot);
+        }
         this.addDiagnostic({ name: expression.name });
         return;
+      }
+      if (scope.functionStackIndex !== null) {
+        functionsTraversed.push({
+          numLayers: 0,
+          functionStackIndex: scope.functionStackIndex,
+        });
+      } else if (functionsTraversed.length > 0) {
+        functionsTraversed.at(-1).numLayers += 1;
       }
     }
     throw kperror("nameNotDefined", ["name", expression.name]);
   }
 
   compileDefining(expression) {
+    this.addInstruction(RESERVE, 1);
     this.pushScope();
     this.addInstruction(PUSH);
     this.defineNames(expression.defining);
     this.compileExpression(expression.result);
+    this.addInstruction(WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.clearLocals();
     this.addInstruction(POP);
     this.popScope();
   }
@@ -187,10 +222,7 @@ class Compiler {
     for (const [pattern, _] of definitions) {
       this.declareNames(pattern);
     }
-    this.addInstruction(
-      LOCAL_SLOTS,
-      this.activeScopes.at(-1).numDeclaredNames()
-    );
+    this.addInstruction(RESERVE, this.activeScopes.at(-1).numDeclaredNames());
     for (const [pattern, expression] of definitions) {
       this.compileExpression(expression);
       this.assignNames(pattern);
@@ -279,8 +311,11 @@ class Compiler {
         )} ${JSON.stringify(expression.given.namedParams ?? [])}`
       );
     }
+    this.pushScope({
+      reservedSlots: 3,
+      functionStackIndex: this.activeFunctions.length,
+    });
     this.activeFunctions.push(new CompiledFunction());
-    this.pushScope(3);
     const paramPattern = { arrayPattern: expression.given.params ?? [] };
     const namedParamPattern = {
       objectPattern: expression.given.namedParams ?? [],
@@ -288,7 +323,7 @@ class Compiler {
     this.declareNames(paramPattern);
     this.declareNames(namedParamPattern);
     this.addInstruction(
-      LOCAL_SLOTS,
+      RESERVE,
       this.activeScopes.at(-1).numDeclaredNames() - 2
     );
     this.addInstruction(READ_LOCAL, 1);
@@ -298,6 +333,9 @@ class Compiler {
     this.addDiagnostic({ name: "<namedArgs>" });
     this.assignNames(namedParamPattern, { isArgument: true });
     this.compileExpression(expression.result);
+    this.addInstruction(WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.clearLocals();
     this.popScope();
     if (this.trace) {
       console.log("Finished function");
@@ -306,6 +344,9 @@ class Compiler {
     this.addInstruction(FUNCTION, 0);
     this.addMark({ functionNumber: this.finishedFunctions.length });
     this.finishedFunctions.push(finishedFunction);
+    for (const upvalue of finishedFunction.upvalues) {
+      this.addInstruction(CLOSURE, upvalue.numLayers, upvalue.slot);
+    }
   }
 
   compileCalling(expression) {
@@ -317,15 +358,32 @@ class Compiler {
     this.addInstruction(POP);
   }
 
+  clearLocals() {
+    const scope = this.activeScopes.at(-1);
+    for (let i = scope.numDeclaredNames(); i >= 1; i--) {
+      if (scope.getNeedsClosing(i)) {
+        this.addInstruction(CAPTURE);
+      } else {
+        this.addInstruction(DISCARD);
+      }
+    }
+  }
+
   currentScope() {
     return this.activeScopes.at(-1);
   }
 
-  pushScope(reservedSlots = 1) {
+  pushScope({ reservedSlots = 1, functionStackIndex = null } = {}) {
     if (this.trace) {
-      console.log(`Push ${reservedSlots}`);
+      if (functionStackIndex === null) {
+        console.log(`Push ${reservedSlots}`);
+      } else {
+        console.log(`Push ${reservedSlots} (function ${functionStackIndex})`);
+      }
     }
-    this.activeScopes.push(new CompiledScope(reservedSlots));
+    this.activeScopes.push(
+      new CompiledScope({ firstSlot: reservedSlots, functionStackIndex })
+    );
   }
 
   popScope() {
@@ -361,13 +419,34 @@ class CompiledFunction {
     this.instructions = [];
     this.marks = [];
     this.diagnostics = [];
+    this.upvalues = [];
+  }
+
+  upvalue(numLayers, slot) {
+    const existing = this.upvalues.findIndex(
+      (uv) => uv.numLayers === numLayers && uv.slot === slot
+    );
+    if (existing >= 0) {
+      return existing;
+    }
+    this.upvalues.push(new CompiledUpvalue(numLayers, slot));
+    return this.upvalues.length - 1;
+  }
+}
+
+class CompiledUpvalue {
+  constructor(numLayers, slot) {
+    this.numLayers = numLayers;
+    this.slot = slot;
   }
 }
 
 class CompiledScope {
-  constructor(firstSlot = 1) {
+  constructor({ firstSlot = 1, functionStackIndex = null } = {}) {
     this.nameSlots = new Map();
     this.nextSlot = firstSlot;
+    this.functionStackIndex = functionStackIndex;
+    this.slotsNeedClosing = [];
   }
 
   declareName(name) {
@@ -381,5 +460,13 @@ class CompiledScope {
 
   numDeclaredNames() {
     return this.nextSlot - 1;
+  }
+
+  setNeedsClosing(slot) {
+    this.slotsNeedClosing[slot] = true;
+  }
+
+  getNeedsClosing(slot) {
+    return this.slotsNeedClosing[slot] ?? false;
   }
 }

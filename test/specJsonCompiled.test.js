@@ -10,7 +10,9 @@ const specPath = "../kenpali/kenpali-json.md";
 
 runSpecFile(
   specPath,
-  (json) => catch_(() => kpvm(kpcompileJson(json))),
+  (json) =>
+    // catch_(() => kpvm(kpcompileJson(json, { trace: true }), { trace: true })),
+    catch_(() => kpvm(kpcompileJson(json))),
   (t, actualOutputValue, expectedOutput) => {
     const expectedOutputValue = kpeval(kpparse(expectedOutput));
     t.deepEqual(actualOutputValue, expectedOutputValue);
@@ -62,6 +64,8 @@ runSpecFile(
     "Spread positional argument",
     "Spread named argument",
     "Named rest parameter",
-    // "Calling a non-function",
+    "Calling a non-function",
+    "A name from an enclosing function",
+    "Closure",
   ]
 );

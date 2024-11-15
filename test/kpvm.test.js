@@ -1,9 +1,9 @@
 import test from "ava";
 import {
-  LOCAL_SLOTS,
   POP,
   PUSH,
   READ_LOCAL,
+  RESERVE,
   VALUE,
   WRITE_LOCAL,
 } from "../src/instructions.js";
@@ -21,7 +21,7 @@ test("READ_LOCAL and WRITE_LOCAL interact with local name slots", (t) => {
   const program = {
     instructions: [
       PUSH,
-      ...[LOCAL_SLOTS, 1],
+      ...[RESERVE, 1],
       ...[VALUE, 42],
       ...[WRITE_LOCAL, 1],
       ...[READ_LOCAL, 1],

@@ -2,7 +2,7 @@ import { toString } from "./values.js";
 
 export const VALUE = 1;
 export const DISCARD = 10;
-export const LOCAL_SLOTS = 8;
+export const RESERVE = 8;
 export const WRITE_LOCAL = 7;
 export const READ_LOCAL = 2;
 export const PUSH = 3;
@@ -17,7 +17,10 @@ export const OBJECT_PUSH = 13;
 export const OBJECT_MERGE = 14;
 export const OBJECT_POP = 15;
 export const FUNCTION = 16;
+export const CLOSURE = 21;
 export const CALL = 17;
+export const CAPTURE = 22;
+export const READ_UPVALUE = 20;
 export const RETURN = 18;
 
 export function disassemble(program) {
@@ -33,7 +36,7 @@ class Disassembler {
     this.instructionTable = [];
     this.instructionTable[VALUE] = this.disassembleValue;
     this.instructionTable[DISCARD] = this.disassembleDiscard;
-    this.instructionTable[LOCAL_SLOTS] = this.disassembleLocalSlots;
+    this.instructionTable[RESERVE] = this.disassembleReserve;
     this.instructionTable[WRITE_LOCAL] = this.disassembleWriteLocal;
     this.instructionTable[READ_LOCAL] = this.disassembleReadLocal;
     this.instructionTable[PUSH] = this.disassemblePush;
@@ -49,7 +52,10 @@ class Disassembler {
     this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
     this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
     this.instructionTable[FUNCTION] = this.disassembleFunction;
+    this.instructionTable[CLOSURE] = this.disassembleClosure;
     this.instructionTable[CALL] = this.disassembleCall;
+    this.instructionTable[CAPTURE] = this.disassembleCapture;
+    this.instructionTable[READ_UPVALUE] = this.disassembleReadUpvalue;
     this.instructionTable[RETURN] = this.disassembleReturn;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -87,8 +93,8 @@ class Disassembler {
     return "DISCARD";
   }
 
-  disassembleLocalSlots() {
-    return `LOCAL_SLOTS ${this.next()}`;
+  disassembleReserve() {
+    return `RESERVE ${this.next()}`;
   }
 
   disassembleWriteLocal() {
@@ -147,8 +153,20 @@ class Disassembler {
     return `FUNCTION ${this.next()}`;
   }
 
+  disassembleClosure() {
+    return `CLOSURE ${this.next()} ${this.next()}`;
+  }
+
   disassembleCall() {
     return "CALL";
+  }
+
+  disassembleCapture() {
+    return "CAPTURE";
+  }
+
+  disassembleReadUpvalue() {
+    return `READ_UPVALUE ${this.next()}`;
   }
 
   disassembleReturn() {

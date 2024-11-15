@@ -5,9 +5,10 @@ import {
   ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
   CALL,
+  CAPTURE,
+  CLOSURE,
   DISCARD,
   FUNCTION,
-  LOCAL_SLOTS,
   OBJECT_MERGE,
   OBJECT_POP,
   OBJECT_PUSH,
@@ -15,6 +16,8 @@ import {
   PUSH,
   READ_LOCAL,
   READ_OUTER_LOCAL,
+  READ_UPVALUE,
+  RESERVE,
   RETURN,
   VALUE,
   WRITE_LOCAL,
@@ -35,11 +38,12 @@ class Vm {
     this.stack = [];
     this.scopeFrames = [];
     this.callFrames = [];
+    this.openUpvalues = [];
 
     this.instructionTable = [];
     this.instructionTable[VALUE] = this.runValue;
     this.instructionTable[DISCARD] = this.runDiscard;
-    this.instructionTable[LOCAL_SLOTS] = this.runLocalSlots;
+    this.instructionTable[RESERVE] = this.runReserve;
     this.instructionTable[WRITE_LOCAL] = this.runWriteLocal;
     this.instructionTable[READ_LOCAL] = this.runReadLocal;
     this.instructionTable[PUSH] = this.runPush;
@@ -54,7 +58,10 @@ class Vm {
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
     this.instructionTable[OBJECT_POP] = this.runObjectPop;
     this.instructionTable[FUNCTION] = this.runFunction;
+    this.instructionTable[CLOSURE] = this.runClosure;
     this.instructionTable[CALL] = this.runCall;
+    this.instructionTable[CAPTURE] = this.runCapture;
+    this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[RETURN] = this.runReturn;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -98,10 +105,10 @@ class Vm {
     this.stack.pop();
   }
 
-  runLocalSlots() {
+  runReserve() {
     const numSlots = this.next();
     if (this.trace) {
-      console.log(`LOCAL_SLOTS ${numSlots}`);
+      console.log(`RESERVE ${numSlots}`);
     }
     for (let i = 0; i < numSlots; i++) {
       this.stack.push(undefined);
@@ -138,17 +145,15 @@ class Vm {
     if (this.trace) {
       console.log(`PUSH (at ${stackIndex})`);
     }
-    this.scopeFrames.push({ stackIndex });
+    this.scopeFrames.push(new ScopeFrame(stackIndex));
   }
 
   runPop() {
-    const value = this.stack.pop();
     const frame = this.scopeFrames.pop();
     if (this.trace) {
       console.log(`POP (at ${frame.stackIndex})`);
     }
     this.stack.length = frame.stackIndex + 1;
-    this.stack.push(value);
   }
 
   runReadOuterLocal() {
@@ -261,19 +266,72 @@ class Vm {
     if (this.trace) {
       console.log(`FUNCTION ${target}`);
     }
-    this.stack.push({ target });
+    this.stack.push(new Function(target));
+  }
+
+  runClosure() {
+    const stepsOut = this.next();
+    const localIndex = this.next();
+    if (this.trace) {
+      console.log(`CLOSURE ${stepsOut} ${localIndex}`);
+    }
+    const f = this.stack.at(-1);
+    const absoluteIndex =
+      this.scopeFrames.at(-1 - stepsOut).stackIndex + localIndex;
+    let upvalue;
+    if (this.openUpvalues[absoluteIndex]) {
+      upvalue = this.openUpvalues[absoluteIndex];
+    } else {
+      upvalue = new Upvalue(absoluteIndex);
+      this.openUpvalues[absoluteIndex] = upvalue;
+    }
+    f.closure.push(upvalue);
   }
 
   runCall() {
     if (this.trace) {
       console.log("CALL");
     }
-    this.callFrames.push({ returnIndex: this.cursor });
-    const target = this.stack.at(-3).target;
+    this.callFrames.push({
+      stackIndex: this.scopeFrames.at(-1).stackIndex,
+      returnIndex: this.cursor,
+    });
+    const callee = this.stack.at(-3);
+    if (typeof callee !== "object" || !("target" in callee)) {
+      this.throw_(kperror("notCallable", ["value", callee]));
+    }
+    const target = callee.target;
     if (this.trace) {
       console.log(`Jump to ${target}`);
     }
     this.cursor = target;
+  }
+
+  runCapture() {
+    if (this.trace) {
+      console.log("CAPTURE");
+    }
+    const value = this.stack.pop();
+    this.openUpvalues[this.stack.length].close(value);
+    delete this.openUpvalues[this.stack.length - 1];
+  }
+
+  runReadUpvalue() {
+    const upvalueIndex = this.next();
+    if (this.trace) {
+      console.log(
+        `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const f = this.stack[this.callFrames.at(-1).stackIndex];
+    const upvalue = f.closure[upvalueIndex];
+    let value;
+    if ("value" in upvalue) {
+      value = upvalue.value;
+    } else {
+      value = this.stack[upvalue.absoluteIndex];
+    }
+    this.stack.push(value);
   }
 
   runReturn() {
@@ -303,5 +361,28 @@ class Vm {
       console.log(toString(error));
     }
     throw error;
+  }
+}
+
+class Function {
+  constructor(target) {
+    this.target = target;
+    this.closure = [];
+  }
+}
+
+class Upvalue {
+  constructor(absoluteIndex) {
+    this.absoluteIndex = absoluteIndex;
+  }
+
+  close(value) {
+    this.value = value;
+  }
+}
+
+class ScopeFrame {
+  constructor(stackIndex) {
+    this.stackIndex = stackIndex;
   }
 }
