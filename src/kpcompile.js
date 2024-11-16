@@ -1,3 +1,4 @@
+import { loadBuiltins } from "./builtins.js";
 import {
   ARRAY_CUT,
   ARRAY_EXTEND,
@@ -16,7 +17,6 @@ import {
   POP,
   PUSH,
   READ_LOCAL,
-  READ_OUTER_LOCAL,
   READ_UPVALUE,
   RESERVE,
   RETURN,
@@ -25,7 +25,7 @@ import {
   disassemble,
 } from "./instructions.js";
 import kperror from "./kperror.js";
-import kpobject from "./kpobject.js";
+import kpobject, { kpoMerge } from "./kpobject.js";
 
 export function kpcompileJson(
   json,
@@ -39,7 +39,12 @@ export default function kpcompile(
   expression,
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
-  return new Compiler(expression, { names, modules, trace }).compile();
+  const builtins = kpoMerge(loadBuiltins(modules), names);
+  return new Compiler(expression, {
+    names: builtins,
+    modules,
+    trace,
+  }).compile();
 }
 
 class Compiler {
@@ -157,19 +162,6 @@ class Compiler {
   }
 
   compileName(expression) {
-    const slot = this.activeScopes.at(-1).getSlot(expression.name);
-    if (slot === undefined) {
-      this.compileNameFromOuterScope(expression);
-    } else {
-      if (this.trace) {
-        console.log(`Resolved "${expression.name}" in current scope`);
-      }
-      this.addInstruction(READ_LOCAL, slot);
-      this.addDiagnostic({ name: expression.name });
-    }
-  }
-
-  compileNameFromOuterScope(expression) {
     const functionsTraversed = [];
     for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
       const scope = this.activeScopes.at(-numLayers - 1);
@@ -196,7 +188,7 @@ class Compiler {
               `Resolved "${expression.name}" in scope ${numLayers} out`
             );
           }
-          this.addInstruction(READ_OUTER_LOCAL, numLayers, slot);
+          this.addInstruction(READ_LOCAL, numLayers, slot);
         }
         this.addDiagnostic({ name: expression.name });
         return;
@@ -210,13 +202,18 @@ class Compiler {
         functionsTraversed.at(-1).numLayers += 1;
       }
     }
+    const global = this.names.get(expression.name);
+    if (global !== undefined) {
+      this.addInstruction(VALUE, global);
+      return;
+    }
     throw kperror("nameNotDefined", ["name", expression.name]);
   }
 
   compileDefining(expression) {
     this.addInstruction(RESERVE, 1);
     this.pushScope();
-    this.addInstruction(PUSH);
+    this.addInstruction(PUSH, 0);
     this.defineNames(expression.defining);
     this.compileExpression(expression.result);
     this.addInstruction(WRITE_LOCAL, 0);
@@ -334,10 +331,10 @@ class Compiler {
       RESERVE,
       this.activeScopes.at(-1).numDeclaredNames() - 2
     );
-    this.addInstruction(READ_LOCAL, 1);
+    this.addInstruction(READ_LOCAL, 0, 1);
     this.addDiagnostic({ name: "<posArgs>" });
     this.assignNames(paramPattern, { isArgument: true });
-    this.addInstruction(READ_LOCAL, 2);
+    this.addInstruction(READ_LOCAL, 0, 2);
     this.addDiagnostic({ name: "<namedArgs>" });
     this.assignNames(namedParamPattern, { isArgument: true });
     this.compileExpression(expression.result);
@@ -370,9 +367,9 @@ class Compiler {
 
   compileCalling(expression) {
     this.compileExpression(expression.calling);
-    this.addInstruction(PUSH);
     this.compileExpression({ array: expression.args ?? [] });
     this.compileExpression({ object: expression.namedArgs ?? [] });
+    this.addInstruction(PUSH, -2);
     this.addInstruction(CALL);
     this.addInstruction(POP);
   }

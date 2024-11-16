@@ -1,3 +1,4 @@
+import { callBuiltin } from "./evalClean.js";
 import {
   ARRAY_CUT,
   ARRAY_EXTEND,
@@ -16,7 +17,6 @@ import {
   POP,
   PUSH,
   READ_LOCAL,
-  READ_OUTER_LOCAL,
   READ_UPVALUE,
   RESERVE,
   RETURN,
@@ -24,7 +24,7 @@ import {
   WRITE_LOCAL,
 } from "./instructions.js";
 import kperror from "./kperror.js";
-import { toString } from "./values.js";
+import { isBuiltin, toString } from "./values.js";
 
 export default function kpvm(program, { trace = false } = {}) {
   return new Vm(program, { trace }).run();
@@ -37,7 +37,7 @@ class Vm {
     this.trace = trace;
     this.cursor = 0;
     this.stack = [];
-    this.scopeFrames = [];
+    this.scopeFrames = [new ScopeFrame(0)];
     this.callFrames = [];
     this.openUpvalues = [];
 
@@ -49,7 +49,6 @@ class Vm {
     this.instructionTable[READ_LOCAL] = this.runReadLocal;
     this.instructionTable[PUSH] = this.runPush;
     this.instructionTable[POP] = this.runPop;
-    this.instructionTable[READ_OUTER_LOCAL] = this.runReadOuterLocal;
     this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
@@ -128,45 +127,11 @@ class Vm {
   }
 
   runReadLocal() {
-    const localIndex = this.next();
-    if (this.trace) {
-      console.log(`READ_LOCAL ${localIndex} (${this.getDiagnostic().name})`);
-    }
-    const absoluteIndex = this.scopeFrames.at(-1).stackIndex + localIndex;
-    const value = this.stack[absoluteIndex];
-    if (value === undefined) {
-      this.throw_(
-        kperror("nameUsedBeforeAssignment", ["name", this.getDiagnostic().name])
-      );
-      return;
-    }
-    this.stack.push(value);
-  }
-
-  runPush() {
-    const stackIndex = this.stack.length - 1;
-    if (this.trace) {
-      console.log(`PUSH (at ${stackIndex})`);
-    }
-    this.scopeFrames.push(new ScopeFrame(stackIndex));
-  }
-
-  runPop() {
-    const frame = this.scopeFrames.pop();
-    if (this.trace) {
-      console.log(`POP (at ${frame.stackIndex})`);
-    }
-    this.stack.length = frame.stackIndex + 1;
-  }
-
-  runReadOuterLocal() {
     const stepsOut = this.next();
     const localIndex = this.next();
     if (this.trace) {
       console.log(
-        `READ_OUTER_LOCAL ${stepsOut} ${localIndex} (${
-          this.getDiagnostic().name
-        })`
+        `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
       );
     }
     const absoluteIndex =
@@ -179,6 +144,23 @@ class Vm {
       return;
     }
     this.stack.push(value);
+  }
+
+  runPush() {
+    const offset = this.next();
+    const stackIndex = this.stack.length - 1 + offset;
+    if (this.trace) {
+      console.log(`PUSH ${offset} (at ${stackIndex})`);
+    }
+    this.scopeFrames.push(new ScopeFrame(stackIndex));
+  }
+
+  runPop() {
+    const frame = this.scopeFrames.pop();
+    if (this.trace) {
+      console.log(`POP (at ${frame.stackIndex})`);
+    }
+    this.stack.length = frame.stackIndex + 1;
   }
 
   runArrayPush() {
@@ -306,19 +288,33 @@ class Vm {
     if (this.trace) {
       console.log("CALL");
     }
+    const callee = this.stack.at(-3);
+    if (typeof callee === "object" && "target" in callee) {
+      this.callGiven(callee);
+    } else if (isBuiltin(callee)) {
+      this.callBuiltin(callee);
+    } else {
+      this.throw_(kperror("notCallable", ["value", callee]));
+    }
+  }
+
+  callGiven(callee) {
     this.callFrames.push(
       new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
     );
-    const callee = this.stack.at(-3);
-    if (typeof callee !== "object" || !("target" in callee)) {
-      this.throw_(kperror("notCallable", ["value", callee]));
-      return;
-    }
     const target = callee.target;
     if (this.trace) {
       console.log(`Jump to ${target}`);
     }
     this.cursor = target;
+  }
+
+  callBuiltin(callee) {
+    const namedArgs = this.stack.pop();
+    const posArgs = this.stack.pop();
+    this.stack.pop();
+    const result = callBuiltin(callee, posArgs, namedArgs);
+    this.stack.push(result);
   }
 
   runCapture() {

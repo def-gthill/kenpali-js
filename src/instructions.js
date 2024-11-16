@@ -7,7 +7,6 @@ export const WRITE_LOCAL = 7;
 export const READ_LOCAL = 2;
 export const PUSH = 3;
 export const POP = 5;
-export const READ_OUTER_LOCAL = 4;
 export const ARRAY_PUSH = 6;
 export const ARRAY_EXTEND = 11;
 export const ARRAY_POP = 9;
@@ -42,7 +41,6 @@ class Disassembler {
     this.instructionTable[READ_LOCAL] = this.disassembleReadLocal;
     this.instructionTable[PUSH] = this.disassemblePush;
     this.instructionTable[POP] = this.disassemblePop;
-    this.instructionTable[READ_OUTER_LOCAL] = this.disassembleReadOuterLocal;
     this.instructionTable[ARRAY_PUSH] = this.disassembleArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.disassembleArrayExtend;
     this.instructionTable[ARRAY_POP] = this.disassembleArrayPop;
@@ -104,19 +102,15 @@ class Disassembler {
   }
 
   disassembleReadLocal() {
-    return `READ_LOCAL ${this.next()}`;
+    return `READ_LOCAL ${this.next()} ${this.next()}`;
   }
 
   disassemblePush() {
-    return "PUSH";
+    return `PUSH ${this.next()}`;
   }
 
   disassemblePop() {
     return "POP";
-  }
-
-  disassembleReadOuterLocal() {
-    return `READ_OUTER_LOCAL ${this.next()} ${this.next()}`;
   }
 
   disassembleArrayPush() {

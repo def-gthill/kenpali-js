@@ -355,7 +355,7 @@ export class Scope {
   }
 }
 
-function callBuiltin(f, args, namedArgs, interpreter) {
+export function callBuiltin(f, args, namedArgs, interpreter) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
