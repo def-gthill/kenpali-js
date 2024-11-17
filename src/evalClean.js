@@ -195,7 +195,10 @@ function assignNames(definition, names, interpreter) {
   const [pattern, expression] = definition;
   const schema = createPatternSchema(pattern);
   const value = evalClean(expression, names, interpreter);
-  const bindings = bind(value, schema, interpreter);
+  function kpcallback(callback, args, namedArgs) {
+    return callOnValues(callback, args, namedArgs, interpreter);
+  }
+  const bindings = bind(value, schema, kpcallback);
   for (const [key, boundValue] of bindings) {
     names.set(key, boundValue);
   }
@@ -274,7 +277,10 @@ export function callOnValues(f, args, namedArgs, interpreter) {
   if (isGiven(f)) {
     return callGiven(f, args, namedArgs, interpreter);
   } else if (isBuiltin(f)) {
-    return callBuiltin(f, args, namedArgs, interpreter);
+    function kpcallback(callback, args, namedArgs) {
+      return callOnValues(callback, args, namedArgs, interpreter);
+    }
+    return callBuiltin(f, args, namedArgs, kpcallback);
   } else {
     throw kperror("notCallable", ["value", f]);
   }
@@ -284,10 +290,13 @@ function callGiven(f, args, namedArgs, interpreter) {
   const allParams = paramsFromGiven(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
+  function kpcallback(callback, args, namedArgs) {
+    return callOnValues(callback, args, namedArgs, interpreter);
+  }
   const bindings = catch_(() =>
     kpoMerge(
-      bind(args, schema[0], interpreter),
-      bind(namedArgs, schema[1], interpreter)
+      bind(args, schema[0], kpcallback),
+      bind(namedArgs, schema[1], kpcallback)
     )
   );
   if (isError(bindings)) {
@@ -355,14 +364,14 @@ export class Scope {
   }
 }
 
-export function callBuiltin(f, args, namedArgs, interpreter) {
+export function callBuiltin(f, args, namedArgs, kpcallback) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
   const bindings = catch_(() =>
     kpoMerge(
-      bind(args, schema[0], interpreter),
-      bind(namedArgs, schema[1], interpreter)
+      bind(args, schema[0], kpcallback),
+      bind(namedArgs, schema[1], kpcallback)
     )
   );
   if (isError(bindings)) {
@@ -387,7 +396,7 @@ export function callBuiltin(f, args, namedArgs, interpreter) {
       namedArgValues.set(name, param);
     }
   }
-  return f(argValues, namedArgValues, interpreter);
+  return f(argValues, namedArgValues, kpcallback);
 }
 
 function argumentErrorGivenParamObjects(paramObjects, err) {

@@ -22,5 +22,4 @@ runSpecFile(
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
   (t) => t.fail("Error testing not implemented")
-  // ["Indexing strings"]
 );

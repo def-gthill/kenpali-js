@@ -7,11 +7,13 @@ export const WRITE_LOCAL = 7;
 export const READ_LOCAL = 2;
 export const PUSH = 3;
 export const POP = 5;
+export const EMPTY_ARRAY = 24;
 export const ARRAY_PUSH = 6;
 export const ARRAY_EXTEND = 11;
 export const ARRAY_POP = 9;
 export const ARRAY_POP_OR_DEFAULT = 19;
 export const ARRAY_CUT = 12;
+export const EMPTY_OBJECT = 25;
 export const OBJECT_PUSH = 13;
 export const OBJECT_MERGE = 14;
 export const OBJECT_POP = 15;
@@ -41,12 +43,14 @@ class Disassembler {
     this.instructionTable[READ_LOCAL] = this.disassembleReadLocal;
     this.instructionTable[PUSH] = this.disassemblePush;
     this.instructionTable[POP] = this.disassemblePop;
+    this.instructionTable[EMPTY_ARRAY] = this.disassembleEmptyArray;
     this.instructionTable[ARRAY_PUSH] = this.disassembleArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.disassembleArrayExtend;
     this.instructionTable[ARRAY_POP] = this.disassembleArrayPop;
     this.instructionTable[ARRAY_POP_OR_DEFAULT] =
       this.disassembleArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.disassembleArrayCut;
+    this.instructionTable[EMPTY_OBJECT] = this.disassembleEmptyObject;
     this.instructionTable[OBJECT_PUSH] = this.disassembleObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
     this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
@@ -113,6 +117,10 @@ class Disassembler {
     return "POP";
   }
 
+  disassembleEmptyArray() {
+    return "EMPTY_ARRAY";
+  }
+
   disassembleArrayPush() {
     return "ARRAY_PUSH";
   }
@@ -131,6 +139,10 @@ class Disassembler {
 
   disassembleArrayCut() {
     return `ARRAY_CUT ${this.next()}`;
+  }
+
+  disassembleEmptyObject() {
+    return "EMPTY_OBJECT";
   }
 
   disassembleObjectPush() {

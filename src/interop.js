@@ -15,14 +15,12 @@ export function toKpFunction(jsf) {
   return builtin(
     jsf.name || "<anonymous>",
     { params: [{ rest: "args" }], namedParams: [{ rest: "namedArgs" }] },
-    (args, namedArgs, interpreter) => {
+    (args, namedArgs, kpcallback) => {
       const result = jsf(
         args,
         toJsObject(namedArgs),
         (callback, args, namedArgs) =>
-          catch_(() =>
-            callOnValues(callback, args, toKpobject(namedArgs), interpreter)
-          )
+          catch_(() => kpcallback(callback, args, toKpobject(namedArgs)))
       );
       if (isError(result)) {
         throw result;

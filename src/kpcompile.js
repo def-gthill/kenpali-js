@@ -10,6 +10,8 @@ import {
   CATCH,
   CLOSURE,
   DISCARD,
+  EMPTY_ARRAY,
+  EMPTY_OBJECT,
   FUNCTION,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -130,7 +132,7 @@ class Compiler {
   }
 
   compileArray(expression) {
-    this.addInstruction(VALUE, []);
+    this.addInstruction(EMPTY_ARRAY);
     for (const element of expression.array) {
       if ("spread" in element) {
         this.compileExpression(element.spread);
@@ -143,7 +145,7 @@ class Compiler {
   }
 
   compileObject(expression) {
-    this.addInstruction(VALUE, kpobject());
+    this.addInstruction(EMPTY_OBJECT);
     for (const entry of expression.object) {
       if ("spread" in entry) {
         this.compileExpression(entry.spread);

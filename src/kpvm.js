@@ -10,6 +10,8 @@ import {
   CATCH,
   CLOSURE,
   DISCARD,
+  EMPTY_ARRAY,
+  EMPTY_OBJECT,
   FUNCTION,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -24,7 +26,8 @@ import {
   WRITE_LOCAL,
 } from "./instructions.js";
 import kperror from "./kperror.js";
-import { isBuiltin, toString } from "./values.js";
+import kpobject from "./kpobject.js";
+import { isBuiltin, isError, toString } from "./values.js";
 
 export default function kpvm(program, { trace = false } = {}) {
   return new Vm(program, { trace }).run();
@@ -49,11 +52,13 @@ class Vm {
     this.instructionTable[READ_LOCAL] = this.runReadLocal;
     this.instructionTable[PUSH] = this.runPush;
     this.instructionTable[POP] = this.runPop;
+    this.instructionTable[EMPTY_ARRAY] = this.runEmptyArray;
     this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
     this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.runArrayCut;
+    this.instructionTable[EMPTY_OBJECT] = this.runEmptyObject;
     this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
     this.instructionTable[OBJECT_POP] = this.runObjectPop;
@@ -72,6 +77,30 @@ class Vm {
     }
   }
 
+  callback(f, posArgs, namedArgs) {
+    const frameIndex = this.stack.length;
+    this.scopeFrames.push(new ScopeFrame(frameIndex));
+    this.callFrames.push(
+      new CallFrame(
+        this.stack.length,
+        this.instructions.length // Make run() return when this call finishes
+      )
+    );
+    this.stack.push(f, posArgs, namedArgs);
+    const target = f.target;
+    if (this.trace) {
+      console.log(`Callback invoked at ${target}`);
+    }
+    this.cursor = target;
+    const result = this.run();
+    if (this.trace) {
+      console.log(`Returning ${result} from callback`);
+    }
+    this.scopeFrames.pop();
+    this.stack.length = frameIndex;
+    return result;
+  }
+
   run() {
     while (this.cursor < this.instructions.length) {
       this.runInstruction();
@@ -83,7 +112,7 @@ class Vm {
         );
       }
     }
-    return this.stack[0];
+    return this.stack.at(-1);
   }
 
   runInstruction() {
@@ -163,6 +192,13 @@ class Vm {
     this.stack.length = frame.stackIndex + 1;
   }
 
+  runEmptyArray() {
+    if (this.trace) {
+      console.log("EMPTY_ARRAY");
+    }
+    this.stack.push([]);
+  }
+
   runArrayPush() {
     if (this.trace) {
       console.log("ARRAY_PUSH");
@@ -219,6 +255,13 @@ class Vm {
     const array = this.stack.pop();
     this.stack.push(array.slice(0, position));
     this.stack.push(array.slice(position));
+  }
+
+  runEmptyObject() {
+    if (this.trace) {
+      console.log("EMPTY_OBJECT");
+    }
+    this.stack.push(kpobject());
   }
 
   runObjectPush() {
@@ -310,11 +353,37 @@ class Vm {
   }
 
   callBuiltin(callee) {
+    if (this.trace) {
+      console.log(`Call builtin "${callee.builtinName}"`);
+    }
+    this.callFrames.push(
+      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
+    );
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
-    this.stack.pop();
-    const result = callBuiltin(callee, posArgs, namedArgs);
-    this.stack.push(result);
+    const kpcallback = (f, posArgs, namedArgs) => {
+      if (isBuiltin(f)) {
+        return callBuiltin(f, posArgs, namedArgs, kpcallback);
+      } else {
+        return this.callback(f, posArgs, namedArgs);
+      }
+    };
+    try {
+      const result = callBuiltin(callee, posArgs, namedArgs, kpcallback);
+      this.stack.pop(); // Discard called function
+      this.stack.push(result);
+      const callFrame = this.callFrames.pop();
+      this.cursor = callFrame.returnIndex;
+      if (this.trace) {
+        console.log(`Return to ${this.cursor}`);
+      }
+    } catch (error) {
+      if (isError(error)) {
+        this.throw_(error);
+      } else {
+        throw error;
+      }
+    }
   }
 
   runCapture() {
@@ -323,7 +392,7 @@ class Vm {
     }
     const value = this.stack.pop();
     this.openUpvalues[this.stack.length].close(value);
-    delete this.openUpvalues[this.stack.length - 1];
+    delete this.openUpvalues[this.stack.length];
   }
 
   runReadUpvalue() {
@@ -356,6 +425,9 @@ class Vm {
     } else {
       const callFrame = this.callFrames.pop();
       this.cursor = callFrame.returnIndex;
+    }
+    if (this.trace) {
+      console.log(`Return to ${this.cursor}`);
     }
   }
 

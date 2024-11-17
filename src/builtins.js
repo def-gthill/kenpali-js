@@ -13,8 +13,7 @@ import {
   rest,
   tupleLike,
 } from "./bind.js";
-import { argumentError, callOnValues } from "./evalClean.js";
-import { array, given, literal, name } from "./kpast.js";
+import { argumentError } from "./evalClean.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
 import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 import {
@@ -212,12 +211,12 @@ const rawBuiltins = [
         { rest: { name: "rest", type: "function" } },
       ],
     },
-    function ([first, ...rest], _, interpreter) {
+    function ([first, ...rest], _, kpcallback) {
       if (!first) {
         return false;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, [], kpobject(), interpreter);
+        const condition = kpcallback(f, [], kpobject());
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -240,12 +239,12 @@ const rawBuiltins = [
         { rest: { name: "rest", type: "function" } },
       ],
     },
-    function ([first, ...rest], _, interpreter) {
+    function ([first, ...rest], _, kpcallback) {
       if (first) {
         return true;
       }
       for (const f of rest) {
-        const condition = callOnValues(f, [], kpobject(), interpreter);
+        const condition = kpcallback(f, [], kpobject());
         if (!isBoolean(condition)) {
           throw kperror(
             "wrongReturnType",
@@ -327,11 +326,11 @@ const rawBuiltins = [
         { name: "else", type: "function" },
       ],
     },
-    function ([condition], namedArgs, interpreter) {
+    function ([condition], namedArgs, kpcallback) {
       if (condition) {
-        return callOnValues(namedArgs.get("then"), [], kpobject(), interpreter);
+        return kpcallback(namedArgs.get("then"), [], kpobject());
       } else {
-        return callOnValues(namedArgs.get("else"), [], kpobject(), interpreter);
+        return kpcallback(namedArgs.get("else"), [], kpobject());
       }
     }
   ),
@@ -342,18 +341,18 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "while",
-          type: "function",
-          defaultValue: given({ params: ["current"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
         { name: "next", type: "function" },
         {
           name: "continueIf",
-          type: "function",
-          defaultValue: given({ params: ["current"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
       ],
     },
-    function ([start], namedArgs, interpreter) {
+    function ([start], namedArgs, kpcallback) {
       let result = start;
       loop(
         "repeat",
@@ -364,7 +363,7 @@ const rawBuiltins = [
         (current) => {
           result = current;
         },
-        interpreter
+        kpcallback
       );
       return result;
     }
@@ -418,23 +417,23 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "while",
-          type: "function",
-          defaultValue: given({ params: ["current"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
         { name: "next", type: "function" },
         {
           name: "out",
-          type: "function",
-          defaultValue: given({ params: ["current"] }, array(name("current"))),
+          type: either("function", "null"),
+          defaultValue: null,
         },
         {
           name: "continueIf",
-          type: "function",
-          defaultValue: given({ params: ["current"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
       ],
     },
-    function ([start], namedArgs, interpreter) {
+    function ([start], namedArgs, kpcallback) {
       const result = [];
       loop(
         "build",
@@ -444,15 +443,10 @@ const rawBuiltins = [
         namedArgs.get("continueIf"),
         (current) => {
           result.push(
-            ...callOnValues(
-              namedArgs.get("out"),
-              [current],
-              kpobject(),
-              interpreter
-            )
+            ...kpcallback(namedArgs.get("out"), [current], kpobject())
           );
         },
-        interpreter
+        kpcallback
       );
       return result;
     }
@@ -485,15 +479,15 @@ const rawBuiltins = [
   builtin(
     "bind",
     { params: ["value", "schema"] },
-    function ([value, schema], _, interpreter) {
-      return bind(value, schema, interpreter);
+    function ([value, schema], _, kpcallback) {
+      return bind(value, schema, kpcallback);
     }
   ),
   builtin(
     "matches",
     { params: ["value", "schema"] },
-    function ([value, schema], _, interpreter) {
-      return matches(value, schema, interpreter);
+    function ([value, schema], _, kpcallback) {
+      return matches(value, schema, kpcallback);
     }
   ),
   builtin(
@@ -501,14 +495,14 @@ const rawBuiltins = [
     {
       params: [
         "value",
-        { rest: { name: "cases", type: tupleLike(["any", "any"]) } },
+        { rest: { name: "cases", type: tupleLike(["any", "function"]) } },
       ],
     },
-    function ([value, ...cases], _, interpreter) {
+    function ([value, ...cases], _, kpcallback) {
       for (const [schema, f] of cases) {
         const bindings = errorToNull(() => bind(value, schema));
         if (bindings) {
-          return callOnValues(toFunction(f), [value], bindings, interpreter);
+          return kpcallback(f, [value], bindings);
         }
       }
     }
@@ -520,8 +514,8 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
       ],
     },
@@ -539,8 +533,8 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
       ],
     },
@@ -565,8 +559,8 @@ const rawBuiltins = [
         "values",
         {
           name: "where",
-          type: "function",
-          defaultValue: given({ params: ["value"] }, literal(true)),
+          type: either("function", "null"),
+          defaultValue: null,
         },
       ],
     },
@@ -686,45 +680,39 @@ function loop(
   next,
   continueIf,
   callback,
-  interpreter
+  kpcallback
 ) {
   let current = start;
   while (true) {
-    const whileCondition = callOnValues(
-      while_,
-      [current],
-      kpobject(),
-      interpreter
-    );
-    if (!isBoolean(whileCondition)) {
-      throw kperror(
-        "wrongReturnType",
-        ["value", whileCondition],
-        ["expectedType", "boolean"]
-      );
-    }
-    if (!whileCondition) {
-      return current;
+    if (while_) {
+      const whileCondition = kpcallback(while_, [current], kpobject());
+      if (!isBoolean(whileCondition)) {
+        throw kperror(
+          "wrongReturnType",
+          ["value", whileCondition],
+          ["expectedType", "boolean"]
+        );
+      }
+      if (!whileCondition) {
+        return current;
+      }
     }
     callback(current);
-    const nextResult = callOnValues(next, [current], kpobject(), interpreter);
-    const continueIfCondition = callOnValues(
-      continueIf,
-      [current],
-      kpobject(),
-      interpreter
-    );
-    if (!isBoolean(continueIfCondition)) {
-      throw kperror(
-        "wrongReturnType",
-        ["value", continueIfCondition],
-        ["expectedType", "boolean"]
-      );
+    const nextResult = kpcallback(next, [current], kpobject());
+    if (continueIf) {
+      const continueIfCondition = kpcallback(continueIf, [current], kpobject());
+      if (!isBoolean(continueIfCondition)) {
+        throw kperror(
+          "wrongReturnType",
+          ["value", continueIfCondition],
+          ["expectedType", "boolean"]
+        );
+      }
+      if (!continueIfCondition) {
+        return nextResult;
+      }
     }
     current = nextResult;
-    if (!continueIfCondition) {
-      return current;
-    }
   }
 }
 

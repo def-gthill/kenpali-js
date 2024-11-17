@@ -41,7 +41,11 @@ export function isBuiltin(value) {
 }
 
 export function isGiven(value) {
-  return value !== null && typeof value === "object" && "given" in value;
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    ("given" in value || "target" in value)
+  );
 }
 
 export function isError(value) {
