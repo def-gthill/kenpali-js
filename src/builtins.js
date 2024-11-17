@@ -442,9 +442,10 @@ const rawBuiltins = [
         namedArgs.get("next"),
         namedArgs.get("continueIf"),
         (current) => {
-          result.push(
-            ...kpcallback(namedArgs.get("out"), [current], kpobject())
-          );
+          const outElements = namedArgs.get("out")
+            ? kpcallback(namedArgs.get("out"), [current], kpobject())
+            : [current];
+          result.push(...outElements);
         },
         kpcallback
       );
