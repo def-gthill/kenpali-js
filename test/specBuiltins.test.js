@@ -8,7 +8,6 @@ const specPath = "../kenpali/kenpali-builtins.md";
 
 runSpecFile(
   specPath,
-  // (input) => kpeval(kpparse(input)),
   (code) => {
     const ast = kpparse(code);
     const program = kpcompile(ast);
