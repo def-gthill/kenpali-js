@@ -1,5 +1,6 @@
 import { callBuiltin } from "./evalClean.js";
 import {
+  ARRAY_COPY,
   ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
@@ -14,6 +15,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
   OBJECT_POP_OR_DEFAULT,
@@ -28,7 +30,7 @@ import {
   WRITE_LOCAL,
 } from "./instructions.js";
 import kperror from "./kperror.js";
-import kpobject from "./kpobject.js";
+import kpobject, { kpoEntries } from "./kpobject.js";
 import { isBuiltin, isError, toString } from "./values.js";
 
 export default function kpvm(program, { trace = false } = {}) {
@@ -61,11 +63,13 @@ class Vm {
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
     this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.runArrayCut;
+    this.instructionTable[ARRAY_COPY] = this.runArrayCopy;
     this.instructionTable[EMPTY_OBJECT] = this.runEmptyObject;
     this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
     this.instructionTable[OBJECT_POP] = this.runObjectPop;
     this.instructionTable[OBJECT_POP_OR_DEFAULT] = this.runObjectPopOrDefault;
+    this.instructionTable[OBJECT_COPY] = this.runObjectCopy;
     this.instructionTable[FUNCTION] = this.runFunction;
     this.instructionTable[CLOSURE] = this.runClosure;
     this.instructionTable[CALL] = this.runCall;
@@ -98,7 +102,7 @@ class Vm {
     this.cursor = target;
     const result = this.run();
     if (this.trace) {
-      console.log(`Returning ${result} from callback`);
+      console.log(`Returning ${toString(result)} from callback`);
     }
     this.scopeFrames.pop();
     this.stack.length = frameIndex;
@@ -269,6 +273,14 @@ class Vm {
     this.stack.push(array.slice(position));
   }
 
+  runArrayCopy() {
+    if (this.trace) {
+      console.log("ARRAY_COPY");
+    }
+    const array = this.stack.pop();
+    this.stack.push([...array]);
+  }
+
   runEmptyObject() {
     if (this.trace) {
       console.log("EMPTY_OBJECT");
@@ -316,6 +328,14 @@ class Vm {
       : defaultValue;
     this.stack.at(-1).delete(key);
     this.stack.push(value);
+  }
+
+  runObjectCopy() {
+    if (this.trace) {
+      console.log("OBJECT_COPY");
+    }
+    const object = this.stack.pop();
+    this.stack.push(kpobject(...kpoEntries(object)));
   }
 
   runFunction() {

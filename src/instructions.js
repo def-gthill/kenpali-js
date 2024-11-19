@@ -14,11 +14,13 @@ export const ARRAY_REVERSE = 27;
 export const ARRAY_POP = 9;
 export const ARRAY_POP_OR_DEFAULT = 19;
 export const ARRAY_CUT = 12;
+export const ARRAY_COPY = 28;
 export const EMPTY_OBJECT = 25;
 export const OBJECT_PUSH = 13;
 export const OBJECT_MERGE = 14;
 export const OBJECT_POP = 15;
 export const OBJECT_POP_OR_DEFAULT = 26;
+export const OBJECT_COPY = 29;
 export const FUNCTION = 16;
 export const CLOSURE = 21;
 export const CALL = 17;
@@ -53,12 +55,14 @@ class Disassembler {
     this.instructionTable[ARRAY_POP_OR_DEFAULT] =
       this.disassembleArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.disassembleArrayCut;
+    this.instructionTable[ARRAY_COPY] = this.disassembleArrayCopy;
     this.instructionTable[EMPTY_OBJECT] = this.disassembleEmptyObject;
     this.instructionTable[OBJECT_PUSH] = this.disassembleObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
     this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
     this.instructionTable[OBJECT_POP_OR_DEFAULT] =
       this.disassembleObjectPopOrDefault;
+    this.instructionTable[OBJECT_COPY] = this.disassembleObjectCopy;
     this.instructionTable[FUNCTION] = this.disassembleFunction;
     this.instructionTable[CLOSURE] = this.disassembleClosure;
     this.instructionTable[CALL] = this.disassembleCall;
@@ -150,6 +154,10 @@ class Disassembler {
     return `ARRAY_CUT ${this.next()}`;
   }
 
+  disassembleArrayCopy() {
+    return "ARRAY_COPY";
+  }
+
   disassembleEmptyObject() {
     return "EMPTY_OBJECT";
   }
@@ -168,6 +176,10 @@ class Disassembler {
 
   disassembleObjectPopOrDefault() {
     return "OBJECT_POP_OR_DEFAULT";
+  }
+
+  disassembleObjectCopy() {
+    return "OBJECT_COPY";
   }
 
   disassembleFunction() {

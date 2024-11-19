@@ -1,6 +1,7 @@
 import { loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import {
+  ARRAY_COPY,
   ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
@@ -15,6 +16,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
   OBJECT_POP_OR_DEFAULT,
@@ -296,6 +298,7 @@ class Compiler {
 
   assignNamesInArrayPattern(pattern, { isArgument }) {
     this.addInstruction(ARRAY_REVERSE);
+    this.addInstruction(ARRAY_COPY);
     for (let i = 0; i < pattern.arrayPattern.length; i++) {
       const element = pattern.arrayPattern[i];
       if (typeof element === "object" && "rest" in element) {
@@ -316,6 +319,7 @@ class Compiler {
   }
 
   assignNamesInObjectPattern(pattern, { isArgument }) {
+    this.addInstruction(OBJECT_COPY);
     let rest = null;
     for (const element of pattern.objectPattern) {
       if (typeof element === "object" && "rest" in element) {
