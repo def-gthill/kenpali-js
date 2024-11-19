@@ -1,24 +1,30 @@
 import kpevalBaseline from "./baseline/kpeval.js";
 import kpparseBaseline from "./baseline/kpparse.js";
-import kpeval from "./kpeval.js";
+import kpcompile from "./kpcompile.js";
 import kpparse from "./kpparse.js";
+import kpvm from "./kpvm.js";
 import kpevalPrevious from "./previous/kpeval.js";
 import kpparsePrevious from "./previous/kpparse.js";
 
-const hello = `1 | to(100) | (n) => join(["Hello, ", n | toString, "!"])`;
+const hello = `1 | to(100)
+  | transform((n) => join(["Hello, ", n | toString, "!"]))
+  | joinLines`;
 const primePairs = `primesUpTo = (max) => (
-  [2 | to(max), 1] | repeat((args) => (
-    [numbers, i] = args;
-    next = numbers
-      | where((n) => or(
-         n | equals(numbers @ i),
-         not(n | isDivisibleBy(numbers @ i))
-      ));
-    {
-      while: not(next | equals(numbers)),
-      next: [next, increment(i)],
-    }
-  )) @ 1
+  {numbers: 2 | to(max), index: 1} | repeat(
+    while: (state) => state.index | isAtMost(length(state.numbers)),
+    next: (state) => (
+      {numbers:, index:} = state;
+      {
+        numbers: numbers | where(
+          (n) => or(
+            n | equals(numbers @ index),
+            () => not(n | isDivisibleBy(numbers @ index))
+          )
+        ),
+        index: increment(index),
+      }
+    )
+  ) @ "numbers"
 );
 rows = primesUpTo(10);
 cols = primesUpTo(10);
@@ -48,31 +54,30 @@ parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
 const benchmarks = [
   // The "times" is set so each test takes about a second on my MacBook Pro.
   // As performance improves, these numbers should keep getting bigger!
-  { name: "Hello", code: hello, times: 20000 },
+  { name: "Hello", code: hello, times: 300 },
   {
     name: "Prime Pairs",
     code: primePairs,
-    times: 5000,
+    times: 300,
   },
   { name: "Naive Fibonacci", code: naiveFib, times: 70 },
   { name: "String Splitting", code: stringSplitting, times: 20 },
 ];
 
-const trace = process.argv.includes("--trace");
-
 function formatTime(time) {
   return time.toFixed(2);
 }
 
-function runBenchmark(benchmark, kpparse, kpeval) {
+function runBenchmark(benchmark, kpparse, kpcompile, kpvm) {
   const json = kpparse(benchmark.code);
+  const program = kpcompile(json);
   // Warm up
   for (let i = 0; i < benchmark.times / 10; i++) {
-    kpeval(json, undefined, trace);
+    kpvm(program);
   }
   const start = process.hrtime();
   for (let i = 0; i < benchmark.times; i++) {
-    kpeval(json, undefined, trace);
+    kpvm(program);
   }
   const [seconds, nanoseconds] = process.hrtime(start);
   const time = seconds + nanoseconds / 1e9;
@@ -97,6 +102,7 @@ for (const benchmark of benchmarks) {
       const baselineTime = runBenchmark(
         benchmark,
         kpparseBaseline,
+        (x) => x,
         kpevalBaseline
       );
       console.log(`${formatTime(baselineTime)} (baseline)`);
@@ -104,12 +110,13 @@ for (const benchmark of benchmarks) {
       const previousTime = runBenchmark(
         benchmark,
         kpparsePrevious,
+        (x) => x,
         kpevalPrevious
       );
       console.log(`${formatTime(previousTime)} (previous)`);
       result["previousTime"] = previousTime;
     }
-    const currentTime = runBenchmark(benchmark, kpparse, kpeval);
+    const currentTime = runBenchmark(benchmark, kpparse, kpcompile, kpvm);
     console.log(`${formatTime(currentTime)} (current)`);
     result["currentTime"] = currentTime;
     results.push(result);
