@@ -1,10 +1,12 @@
 import { loadBuiltins } from "./builtins.js";
+import { core } from "./core.js";
 import {
   ARRAY_CUT,
   ARRAY_EXTEND,
   ARRAY_POP,
   ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
+  ARRAY_REVERSE,
   CALL,
   CAPTURE,
   CATCH,
@@ -15,6 +17,7 @@ import {
   FUNCTION,
   OBJECT_MERGE,
   OBJECT_POP,
+  OBJECT_POP_OR_DEFAULT,
   OBJECT_PUSH,
   POP,
   PUSH,
@@ -26,8 +29,10 @@ import {
   WRITE_LOCAL,
   disassemble,
 } from "./instructions.js";
+import { defining, transformTree } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
+import { kpparseModule } from "./kpparse.js";
 
 export function kpcompileJson(
   json,
@@ -42,19 +47,36 @@ export default function kpcompile(
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
   const builtins = kpoMerge(loadBuiltins(modules), names);
+  const coreAsts = new Map(loadCore());
   return new Compiler(expression, {
     names: builtins,
+    library: coreAsts,
     modules,
     trace,
   }).compile();
 }
 
+function loadCore() {
+  return kpparseModule(core);
+}
+
 class Compiler {
   constructor(
     expression,
-    { names = kpobject(), modules = kpobject(), trace = false }
+    {
+      names = new Map(),
+      library = new Map(),
+      modules = new Map(),
+      trace = false,
+    }
   ) {
-    this.expression = expression;
+    const filteredLibrary = new LibraryFilter(library, expression).filter();
+    if (trace) {
+      console.log(
+        `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
+      );
+    }
+    this.expression = defining(...filteredLibrary, expression);
     this.names = names;
     this.modules = modules;
     this.trace = trace;
@@ -273,10 +295,12 @@ class Compiler {
   }
 
   assignNamesInArrayPattern(pattern, { isArgument }) {
-    for (let i = pattern.arrayPattern.length - 1; i >= 0; i--) {
+    this.addInstruction(ARRAY_REVERSE);
+    for (let i = 0; i < pattern.arrayPattern.length; i++) {
       const element = pattern.arrayPattern[i];
       if (typeof element === "object" && "rest" in element) {
-        this.addInstruction(ARRAY_CUT, i);
+        this.addInstruction(ARRAY_CUT, pattern.arrayPattern.length - i - 1);
+        this.addInstruction(ARRAY_REVERSE);
         this.assignNames(element.rest);
       } else if (typeof element === "object" && "defaultValue" in element) {
         this.compileExpression(element.defaultValue);
@@ -296,6 +320,11 @@ class Compiler {
     for (const element of pattern.objectPattern) {
       if (typeof element === "object" && "rest" in element) {
         rest = element.rest;
+      } else if (typeof element === "object" && "defaultValue" in element) {
+        this.addInstruction(VALUE, element.name);
+        this.compileExpression(element.defaultValue);
+        this.addInstruction(OBJECT_POP_OR_DEFAULT);
+        this.assignNames(element.name);
       } else {
         this.addInstruction(VALUE, element);
         this.addInstruction(OBJECT_POP);
@@ -490,5 +519,65 @@ class CompiledScope {
 
   getNeedsClosing(slot) {
     return this.slotsNeedClosing[slot] ?? false;
+  }
+}
+
+class LibraryFilter {
+  constructor(library, expression) {
+    this.libraryExpressions = [...library];
+    this.allExpressions = [...library, ["<main>", expression]];
+    this.libraryByName = new Map(
+      this.libraryExpressions.map(([name, _], i) => [name, i])
+    );
+    this.activeScopes = [];
+    this.usage = this.allExpressions.map(() => new Set());
+  }
+
+  filter() {
+    for (let i = 0; i < this.allExpressions.length; i++) {
+      this.currentUsage = this.usage[i];
+      this.resolveExpression(this.allExpressions[i][1]);
+    }
+    const grey = new Set([this.allExpressions.length - 1]);
+    const black = new Set();
+    while (grey.size > 0) {
+      for (const expression of grey) {
+        for (const usage of this.usage[expression]) {
+          grey.add(usage);
+        }
+        grey.delete(expression);
+        black.add(expression);
+        break;
+      }
+    }
+    return new Map(this.libraryExpressions.filter((_, i) => black.has(i)));
+  }
+
+  resolveExpression(expression) {
+    const outerThis = this;
+    transformTree(expression, {
+      handleName(node) {
+        for (const scope of outerThis.activeScopes) {
+          if (scope.has(node.name)) {
+            return;
+          }
+        }
+        if (outerThis.libraryByName.has(node.name)) {
+          outerThis.currentUsage.add(outerThis.libraryByName.get(node.name));
+        }
+      },
+      handleDefining(node, recurse) {
+        const scope = new Set();
+        for (const [name, _] of node.defining) {
+          scope.add(name);
+        }
+        outerThis.activeScopes.push(scope);
+        for (const [_, value] of node.defining) {
+          recurse(value);
+        }
+        recurse(node.result);
+        outerThis.activeScopes.pop();
+      },
+    });
   }
 }

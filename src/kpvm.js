@@ -5,6 +5,7 @@ import {
   ARRAY_POP,
   ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
+  ARRAY_REVERSE,
   CALL,
   CAPTURE,
   CATCH,
@@ -15,6 +16,7 @@ import {
   FUNCTION,
   OBJECT_MERGE,
   OBJECT_POP,
+  OBJECT_POP_OR_DEFAULT,
   OBJECT_PUSH,
   POP,
   PUSH,
@@ -55,6 +57,7 @@ class Vm {
     this.instructionTable[EMPTY_ARRAY] = this.runEmptyArray;
     this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
+    this.instructionTable[ARRAY_REVERSE] = this.runArrayReverse;
     this.instructionTable[ARRAY_POP] = this.runArrayPop;
     this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
     this.instructionTable[ARRAY_CUT] = this.runArrayCut;
@@ -62,6 +65,7 @@ class Vm {
     this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
     this.instructionTable[OBJECT_POP] = this.runObjectPop;
+    this.instructionTable[OBJECT_POP_OR_DEFAULT] = this.runObjectPopOrDefault;
     this.instructionTable[FUNCTION] = this.runFunction;
     this.instructionTable[CLOSURE] = this.runClosure;
     this.instructionTable[CALL] = this.runCall;
@@ -215,6 +219,13 @@ class Vm {
     this.stack.at(-1).push(...value);
   }
 
+  runArrayReverse() {
+    if (this.trace) {
+      console.log("ARRAY_REVERSE");
+    }
+    this.stack.at(-1).reverse();
+  }
+
   runArrayPop() {
     if (this.trace) {
       console.log("ARRAY_POP");
@@ -243,7 +254,8 @@ class Vm {
       console.log("ARRAY_POP_OR_DEFAULT");
     }
     const defaultValue = this.stack.pop();
-    const value = this.stack.at(-1).pop() ?? defaultValue;
+    const value =
+      this.stack.at(-1).length > 0 ? this.stack.at(-1).pop() : defaultValue;
     this.stack.push(value);
   }
 
@@ -289,6 +301,19 @@ class Vm {
     }
     const key = this.stack.pop();
     const value = this.stack.at(-1).get(key);
+    this.stack.at(-1).delete(key);
+    this.stack.push(value);
+  }
+
+  runObjectPopOrDefault() {
+    if (this.trace) {
+      console.log("OBJECT_POP");
+    }
+    const defaultValue = this.stack.pop();
+    const key = this.stack.pop();
+    const value = this.stack.at(-1).has(key)
+      ? this.stack.at(-1).get(key)
+      : defaultValue;
     this.stack.at(-1).delete(key);
     this.stack.push(value);
   }

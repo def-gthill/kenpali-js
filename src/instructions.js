@@ -10,6 +10,7 @@ export const POP = 5;
 export const EMPTY_ARRAY = 24;
 export const ARRAY_PUSH = 6;
 export const ARRAY_EXTEND = 11;
+export const ARRAY_REVERSE = 27;
 export const ARRAY_POP = 9;
 export const ARRAY_POP_OR_DEFAULT = 19;
 export const ARRAY_CUT = 12;
@@ -17,6 +18,7 @@ export const EMPTY_OBJECT = 25;
 export const OBJECT_PUSH = 13;
 export const OBJECT_MERGE = 14;
 export const OBJECT_POP = 15;
+export const OBJECT_POP_OR_DEFAULT = 26;
 export const FUNCTION = 16;
 export const CLOSURE = 21;
 export const CALL = 17;
@@ -46,6 +48,7 @@ class Disassembler {
     this.instructionTable[EMPTY_ARRAY] = this.disassembleEmptyArray;
     this.instructionTable[ARRAY_PUSH] = this.disassembleArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.disassembleArrayExtend;
+    this.instructionTable[ARRAY_REVERSE] = this.dissassembleArrayReverse;
     this.instructionTable[ARRAY_POP] = this.disassembleArrayPop;
     this.instructionTable[ARRAY_POP_OR_DEFAULT] =
       this.disassembleArrayPopOrDefault;
@@ -54,6 +57,8 @@ class Disassembler {
     this.instructionTable[OBJECT_PUSH] = this.disassembleObjectPush;
     this.instructionTable[OBJECT_MERGE] = this.disassembleObjectMerge;
     this.instructionTable[OBJECT_POP] = this.disassembleObjectPop;
+    this.instructionTable[OBJECT_POP_OR_DEFAULT] =
+      this.disassembleObjectPopOrDefault;
     this.instructionTable[FUNCTION] = this.disassembleFunction;
     this.instructionTable[CLOSURE] = this.disassembleClosure;
     this.instructionTable[CALL] = this.disassembleCall;
@@ -129,6 +134,10 @@ class Disassembler {
     return "ARRAY_EXTEND";
   }
 
+  disassembleArrayReverse() {
+    return "ARRAY_REVERSE";
+  }
+
   disassembleArrayPop() {
     return "ARRAY_POP";
   }
@@ -155,6 +164,10 @@ class Disassembler {
 
   disassembleObjectPop() {
     return "OBJECT_POP";
+  }
+
+  disassembleObjectPopOrDefault() {
+    return "OBJECT_POP_OR_DEFAULT";
   }
 
   disassembleFunction() {

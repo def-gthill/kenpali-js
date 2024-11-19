@@ -14,44 +14,49 @@ import {
   objectPattern,
   objectSpread,
   pipeline,
+  quote,
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
 
 export default function kpparse(code) {
-  const sugar = kpparseSugared(code);
-  if ("error" in sugar) {
-    return sugar;
-  } else {
-    return desugar(sugar);
-  }
+  return desugar(kpparseSugared(code));
 }
 
-export function kpparseSugared(code) {
+export function kpparseModule(code) {
+  return kpparseSugared(code, parseModule).map(([name, f]) => [
+    name,
+    desugar(f),
+  ]);
+}
+
+export function kpparseSugared(code, parseRoot = parseAll) {
   const tokens = kplex(code);
-  const result = kpparseTokens(tokens);
-  if ("error" in result) {
-    return { ...result, code };
-  } else {
-    return result;
-  }
+  return kpparseTokens(tokens, parseRoot);
 }
 
-export function kpparseTokens(tokens) {
+export function kpparseTokens(tokens, parseRoot = parseAll) {
   const tokenList = [...tokens];
-  const parseResult = parseAll(tokenList);
+  const parseResult = parseRoot(tokenList);
   if ("error" in parseResult) {
-    return parseResult;
+    throw parseResult;
   } else {
     return parseResult.ast;
   }
 }
 
-function parseAll(tokens) {
+export function parseAll(tokens) {
   return parseAllOf([parse, consume("EOF", "unparsedInput")], (ast) => ast)(
     tokens,
     0
   );
+}
+
+export function parseModule(tokens) {
+  return parseZeroOrMore(parseNameDefinition, {
+    terminator: consume("SEMICOLON"),
+    errorIfTerminatorMissing: "missingDefinitionSeparator",
+  })(tokens, 0);
 }
 
 function parse(tokens, start) {
@@ -332,12 +337,24 @@ function parseNamedArgument(tokens, start) {
 
 function parseAtomic(tokens, start) {
   return parseAnyOf(
+    parseQuote,
     parseUnquote,
     parseGroup,
     parseArray,
     parseObject,
     parseLiteral,
     parseName
+  )(tokens, start);
+}
+
+function parseQuote(tokens, start) {
+  return parseAllOf(
+    [
+      consume("OPEN_QUOTE_PAREN", "expectedQuote"),
+      parse,
+      consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
+    ],
+    quote
   )(tokens, start);
 }
 
