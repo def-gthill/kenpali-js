@@ -1,10 +1,12 @@
-import kpevalBaseline from "./baseline/kpeval.js";
+import kpcompileBaseline from "./baseline/kpcompile.js";
 import kpparseBaseline from "./baseline/kpparse.js";
+import kpvmBaseline from "./baseline/kpvm.js";
 import kpcompile from "./kpcompile.js";
 import kpparse from "./kpparse.js";
 import kpvm from "./kpvm.js";
-import kpevalPrevious from "./previous/kpeval.js";
+import kpcompilePrevious from "./previous/kpcompile.js";
 import kpparsePrevious from "./previous/kpparse.js";
+import kpvmPrevious from "./previous/kpvm.js";
 
 const hello = `1 | to(100)
   | transform((n) => join(["Hello, ", n | toString, "!"]))
@@ -67,10 +69,6 @@ const benchmarks = [
 const warmUpSeconds = 0.1;
 const testSeconds = 1;
 
-function formatTime(time) {
-  return time.toFixed(2);
-}
-
 class Timer {
   constructor() {
     this.start = process.hrtime();
@@ -118,16 +116,16 @@ for (const benchmark of benchmarks) {
       const baselineCount = runBenchmark(
         benchmark,
         kpparseBaseline,
-        (x) => x,
-        kpevalBaseline
+        kpcompileBaseline,
+        kpvmBaseline
       );
       console.log(`${baselineCount} (baseline)`);
       result.baselineCount = baselineCount;
       const previousCount = runBenchmark(
         benchmark,
         kpparsePrevious,
-        (x) => x,
-        kpevalPrevious
+        kpcompilePrevious,
+        kpvmPrevious
       );
       console.log(`${previousCount} (previous)`);
       result.previousCount = previousCount;

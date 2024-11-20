@@ -1,20 +1,32 @@
 import { builtin } from "./builtins.js";
-import { callOnValues } from "./kpeval.js";
-import kpobject, { toJsObject, toKpobject } from "./kpobject.js";
+import { callOnValues, Interpreter } from "./evalClean.js";
+import { catch_ } from "./kperror.js";
+import { toJsObject, toKpobject } from "./kpobject.js";
+import { isError } from "./values.js";
 
-export function toJsFunction(kpf) {
-  return (...args) => {
-    const hasNamedParams = (kpf.given.namedParams ?? []).length > 0;
-    const posArgs = hasNamedParams ? args.slice(0, -1) : args;
-    const namedArgs = hasNamedParams ? toKpobject(args.at(-1)) : kpobject();
-    return callOnValues(kpf, posArgs, namedArgs);
-  };
+export function kpcall(kpf, args, namedArgs, { timeLimitSeconds = 0 } = {}) {
+  const interpreter = new Interpreter({ timeLimitSeconds });
+  return catch_(() =>
+    callOnValues(kpf, args, toKpobject(namedArgs), interpreter)
+  );
 }
 
 export function toKpFunction(jsf) {
   return builtin(
     jsf.name || "<anonymous>",
     { params: [{ rest: "args" }], namedParams: [{ rest: "namedArgs" }] },
-    (args, namedArgs) => jsf(...args, toJsObject(namedArgs))
+    (args, namedArgs, kpcallback) => {
+      const result = jsf(
+        args,
+        toJsObject(namedArgs),
+        (callback, args, namedArgs) =>
+          catch_(() => kpcallback(callback, args, toKpobject(namedArgs)))
+      );
+      if (isError(result)) {
+        throw result;
+      } else {
+        return result;
+      }
+    }
   );
 }

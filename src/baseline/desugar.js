@@ -7,7 +7,6 @@ import {
   literal,
   name,
   object,
-  quote,
   unquote,
 } from "./kpast.js";
 import { kpoEntries } from "./kpobject.js";
@@ -23,8 +22,6 @@ export default function desugar(expression) {
     return desugarGiven(expression);
   } else if ("calling" in expression) {
     return desugarCalling(expression);
-  } else if ("quote" in expression) {
-    return desugarQuote(expression);
   } else if ("unquote" in expression) {
     return desugarUnquote(expression);
   } else if ("group" in expression) {
@@ -112,10 +109,6 @@ function desugarNamedArgs(namedArgs) {
       return [name, desugar(value)];
     }
   });
-}
-
-function desugarQuote(expression) {
-  return quote(desugar(expression.quote));
 }
 
 function desugarUnquote(expression) {
