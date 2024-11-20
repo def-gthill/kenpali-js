@@ -112,10 +112,17 @@ function transformTree(expression, handlers) {
     return transformNode("handleDefining", (node) => ({
       ...node,
       defining: Array.isArray(node.defining)
-        ? node.defining.map(([name, value]) => [
-            typeof name === "string" ? name : recurse(name),
-            recurse(value),
-          ])
+        ? node.defining.map((statement) => {
+            if ("importing" in statement) {
+              return statement;
+            } else {
+              const [name, value] = statement;
+              return [
+                typeof name === "string" ? name : recurse(name),
+                recurse(value),
+              ];
+            }
+          })
         : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
       result: recurse(node.result),
     }));

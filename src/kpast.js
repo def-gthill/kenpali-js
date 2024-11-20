@@ -22,8 +22,12 @@ export function spread(node) {
   return { spread: node };
 }
 
-export function name(name) {
-  return { name };
+export function name(name, module = null) {
+  const result = { name };
+  if (module) {
+    result.from = module;
+  }
+  return result;
 }
 
 export function defining(...args) {
@@ -47,6 +51,10 @@ export function calling(f, args = [], namedArgs = []) {
   return result;
 }
 
+export function indexing(collection, index) {
+  return { indexing: collection, at: index };
+}
+
 export function catching(expression) {
   return { catching: expression };
 }
@@ -57,6 +65,10 @@ export function quote(expression) {
 
 export function unquote(expression) {
   return { unquote: expression };
+}
+
+export function importing(name) {
+  return { importing: name };
 }
 
 // Syntactic sugar

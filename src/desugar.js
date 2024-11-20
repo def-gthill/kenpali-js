@@ -4,6 +4,7 @@ import {
   catching,
   defining,
   given,
+  indexing,
   literal,
   name,
   object,
@@ -71,10 +72,14 @@ function desugarPropertyDefinition(expression) {
 
 function desugarDefining(expression) {
   return defining(
-    ...kpoEntries(expression.defining).map(([name, value]) => [
-      name,
-      desugar(value),
-    ]),
+    ...kpoEntries(expression.defining).map((statement) => {
+      if ("importing" in statement) {
+        return statement;
+      } else {
+        const [name, value] = statement;
+        return [name, desugar(value)];
+      }
+    }),
     desugar(expression.result)
   );
 }
@@ -144,7 +149,7 @@ function desugarPipeline(expression) {
     } else {
       const [op, call] = step;
       if (op === "AT") {
-        axis = calling(name("at"), [axis, desugar(call)]);
+        axis = indexing(axis, desugarProperty(call));
       } else {
         if ("calling" in call) {
           const args = (call.args ?? []).map(desugar);
