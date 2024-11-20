@@ -64,24 +64,40 @@ const benchmarks = [
   { name: "String Splitting", code: stringSplitting, times: 20 },
 ];
 
+const warmUpSeconds = 0.1;
+const testSeconds = 1;
+
 function formatTime(time) {
   return time.toFixed(2);
+}
+
+class Timer {
+  constructor() {
+    this.start = process.hrtime();
+  }
+
+  time() {
+    const [seconds, nanoseconds] = process.hrtime(this.start);
+    const time = seconds + nanoseconds / 1e9;
+    return time;
+  }
 }
 
 function runBenchmark(benchmark, kpparse, kpcompile, kpvm) {
   const json = kpparse(benchmark.code);
   const program = kpcompile(json);
   // Warm up
-  for (let i = 0; i < benchmark.times / 10; i++) {
+  const warmUpTimer = new Timer();
+  while (warmUpTimer.time() < warmUpSeconds) {
     kpvm(program);
   }
-  const start = process.hrtime();
-  for (let i = 0; i < benchmark.times; i++) {
+  const timer = new Timer();
+  let runCount = 0;
+  while (timer.time() < testSeconds) {
     kpvm(program);
+    runCount += 1;
   }
-  const [seconds, nanoseconds] = process.hrtime(start);
-  const time = seconds + nanoseconds / 1e9;
-  return time;
+  return runCount;
 }
 
 const namesOfBenchmarksToRun = process.argv
@@ -99,63 +115,61 @@ for (const benchmark of benchmarks) {
     const result = { name: benchmark.name };
     console.log(benchmark.name);
     if (!currentOnly) {
-      const baselineTime = runBenchmark(
+      const baselineCount = runBenchmark(
         benchmark,
         kpparseBaseline,
         (x) => x,
         kpevalBaseline
       );
-      console.log(`${formatTime(baselineTime)} (baseline)`);
-      result["baselineTime"] = baselineTime;
-      const previousTime = runBenchmark(
+      console.log(`${baselineCount} (baseline)`);
+      result.baselineCount = baselineCount;
+      const previousCount = runBenchmark(
         benchmark,
         kpparsePrevious,
         (x) => x,
         kpevalPrevious
       );
-      console.log(`${formatTime(previousTime)} (previous)`);
-      result["previousTime"] = previousTime;
+      console.log(`${previousCount} (previous)`);
+      result.previousCount = previousCount;
     }
-    const currentTime = runBenchmark(benchmark, kpparse, kpcompile, kpvm);
-    console.log(`${formatTime(currentTime)} (current)`);
-    result["currentTime"] = currentTime;
+    const currentCount = runBenchmark(benchmark, kpparse, kpcompile, kpvm);
+    console.log(`${currentCount} (current)`);
+    result.currentCount = currentCount;
     results.push(result);
   }
 }
 
-function total(runType) {
-  return results.map((result) => result[runType]).reduce((a, b) => a + b);
+function average(array) {
+  return array.reduce((a, b) => a + b) / array.length;
 }
 
-function percentChange(newTime, oldTime) {
-  const change = Math.round(((newTime - oldTime) / oldTime) * 100);
+function averageRatio(oldRunType, newRunType) {
+  return average(
+    results.map((result) => result[newRunType] / result[oldRunType])
+  );
+}
+
+function averagePercentChange(oldRunType, newRunType) {
+  return (averageRatio(oldRunType, newRunType) - 1) * 100;
+}
+
+function percentChangeForDisplay(oldRunType, newRunType) {
+  const change = Math.round(averagePercentChange(oldRunType, newRunType));
   if (change === 0) {
     return "\x1b[2m0%\x1b[0m";
-  } else if (change < 0) {
-    return `\x1b[32m${change}%\x1b[0m`;
   } else if (change > 0) {
-    return `\x1b[31m+${change}%\x1b[0m`;
+    return `\x1b[32m+${change}%\x1b[0m`;
+  } else if (change < 0) {
+    return `\x1b[31m${change}%\x1b[0m`;
   }
 }
 
-let baselineTotal;
-let previousTotal;
 if (!currentOnly) {
-  baselineTotal = total("baselineTime");
-  console.log(`Baseline total: ${formatTime(baselineTotal)}`);
-  previousTotal = total("previousTime");
-  console.log(`Previous total: ${formatTime(previousTotal)}`);
-}
-const currentTotal = total("currentTime");
-console.log(`Current total: ${formatTime(currentTotal)}`);
-if (!currentOnly) {
+  console.log("Average Change");
   console.log(
-    `(${percentChange(
-      currentTotal,
-      previousTotal
-    )} from previous, ${percentChange(
-      currentTotal,
-      baselineTotal
-    )} from baseline)`
+    `From baseline: ${percentChangeForDisplay("baselineCount", "currentCount")}`
+  );
+  console.log(
+    `From previous: ${percentChangeForDisplay("previousCount", "currentCount")}`
   );
 }
