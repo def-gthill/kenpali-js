@@ -50,6 +50,19 @@ export default function kpvm(
   return new Vm(program, { trace, timeLimitSeconds }).run();
 }
 
+export function kpvmCall(
+  kpf,
+  posArgs,
+  namedArgs,
+  { trace = false, timeLimitSeconds = 0 } = {}
+) {
+  return new Vm(kpf.program, { trace, timeLimitSeconds }).callback(
+    kpf,
+    posArgs,
+    namedArgs
+  );
+}
+
 class Vm {
   constructor(
     { instructions, diagnostics = [] },
@@ -374,7 +387,12 @@ class Vm {
     if (this.trace) {
       console.log(`FUNCTION ${target}`);
     }
-    this.stack.push(new Function(target));
+    this.stack.push(
+      new Function(
+        { instructions: this.instructions, diagnostics: this.diagnostics },
+        target
+      )
+    );
   }
 
   runClosure() {
@@ -599,7 +617,8 @@ class Vm {
 }
 
 class Function {
-  constructor(target) {
+  constructor(program, target) {
+    this.program = program;
     this.target = target;
     this.closure = [];
   }

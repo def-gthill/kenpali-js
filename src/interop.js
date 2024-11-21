@@ -2,13 +2,18 @@ import { builtin } from "./builtins.js";
 import { callOnValues, Interpreter } from "./evalClean.js";
 import { kpcatch } from "./kperror.js";
 import { toJsObject, toKpobject } from "./kpobject.js";
+import { kpvmCall } from "./kpvm.js";
 import { isError } from "./values.js";
 
 export function kpcall(kpf, args, namedArgs, { timeLimitSeconds = 0 } = {}) {
-  const interpreter = new Interpreter({ timeLimitSeconds });
-  return kpcatch(() =>
-    callOnValues(kpf, args, toKpobject(namedArgs), interpreter)
-  );
+  if ("given" in kpf) {
+    const interpreter = new Interpreter({ timeLimitSeconds });
+    return kpcatch(() =>
+      callOnValues(kpf, args, toKpobject(namedArgs), interpreter)
+    );
+  } else {
+    return kpvmCall(kpf, args, toKpobject(namedArgs), { timeLimitSeconds });
+  }
 }
 
 export function toKpFunction(jsf) {

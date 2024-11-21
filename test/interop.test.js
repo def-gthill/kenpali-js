@@ -1,13 +1,21 @@
 import test from "ava";
 import { kpcall, toKpFunction } from "../src/interop.js";
-import { calling, defining, given, literal, name } from "../src/kpast.js";
-import kperror from "../src/kperror.js";
-import kpeval from "../src/kpeval.js";
+import {
+  calling,
+  defining,
+  given,
+  indexing,
+  literal,
+  name,
+} from "../src/kpast.js";
+import kpcompile from "../src/kpcompile.js";
+import kperror, { kpcatch } from "../src/kperror.js";
 import kpparse from "../src/kpparse.js";
+import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
-  const kpf = kpeval(given({}, literal(42)));
+  const kpf = kpvm(kpcompile(given({}, literal(42))));
 
   const result = kpcall(kpf, [], {});
 
@@ -15,13 +23,15 @@ test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
 });
 
 test("Positional arguments are sent to the Kenpali function", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: ["x", "y"] },
-      calling(name("times"), [
-        name("x"),
-        calling(name("increment"), [name("y")]),
-      ])
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: ["x", "y"] },
+        calling(name("times"), [
+          name("x"),
+          calling(name("increment"), [name("y")]),
+        ])
+      )
     )
   );
 
@@ -31,10 +41,12 @@ test("Positional arguments are sent to the Kenpali function", (t) => {
 });
 
 test("Positional arguments are bound to rest parameters on the Kenpali function", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: [{ rest: "rest" }] },
-      calling(name("length"), [name("rest")])
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: [{ rest: "rest" }] },
+        calling(name("length"), [name("rest")])
+      )
     )
   );
 
@@ -44,13 +56,15 @@ test("Positional arguments are bound to rest parameters on the Kenpali function"
 });
 
 test("Named arguments are sent to the Kenpali function", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: ["base"], namedParams: ["multiplier", "bonus"] },
-      calling(name("plus"), [
-        calling(name("times"), [name("base"), name("multiplier")]),
-        name("bonus"),
-      ])
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: ["base"], namedParams: ["multiplier", "bonus"] },
+        calling(name("plus"), [
+          calling(name("times"), [name("base"), name("multiplier")]),
+          name("bonus"),
+        ])
+      )
     )
   );
 
@@ -60,12 +74,14 @@ test("Named arguments are sent to the Kenpali function", (t) => {
 });
 
 test("Kenpali parameter defaults can reference names from the context", (t) => {
-  const kpf = kpeval(
-    defining(
-      ["a", literal(5)],
-      given(
-        { params: ["x", { name: "y", defaultValue: name("a") }] },
-        calling(name("times"), [name("x"), name("y")])
+  const kpf = kpvm(
+    kpcompile(
+      defining(
+        ["a", literal(5)],
+        given(
+          { params: ["x", { name: "y", defaultValue: name("a") }] },
+          calling(name("times"), [name("x"), name("y")])
+        )
       )
     )
   );
@@ -75,26 +91,26 @@ test("Kenpali parameter defaults can reference names from the context", (t) => {
   t.is(result, 15);
 });
 
-test("Errors thrown in Kenpali are returned as error objects from kpcall", (t) => {
-  const kpf = kpeval(given({}, name("foo")));
+test("Errors thrown in Kenpali are thrown from kpcall", (t) => {
+  const kpf = kpvm(
+    kpcompile(given({ params: ["i"] }, indexing(literal("foo"), name("i"))))
+  );
 
-  const result = kpcall(kpf, [], {});
+  const result = kpcatch(() => kpcall(kpf, ["bar"], {}));
 
-  assertIsError(t, result, "nameNotDefined");
+  assertIsError(t, result, "wrongType");
 });
 
 test("A time limit can be set on a kpcall", (t) => {
   const code = "() => 1 | repeat(while: () => true, next: (n) => n)";
-  const kpf = kpeval(kpparse(code));
+  const kpf = kpvm(kpcompile(kpparse(code)));
 
-  const result = kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 });
-
-  assertIsError(t, result, "timeLimitExceeded");
+  t.throws(() => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }));
 });
 
 test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t) => {
-  const kpf = kpeval(
-    given({ params: ["callback"] }, calling(name("callback")))
+  const kpf = kpvm(
+    kpcompile(given({ params: ["callback"] }, calling(name("callback"))))
   );
   const callback = toKpFunction(() => 42);
 
@@ -105,10 +121,12 @@ test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t)
 });
 
 test("A JavaScript callback can accept positional arguments", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: ["callback"] },
-      calling(name("callback"), [literal(3), literal(4)])
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: ["callback"] },
+        calling(name("callback"), [literal(3), literal(4)])
+      )
     )
   );
   const callback = toKpFunction(([x, y]) => x * (y + 1));
@@ -119,16 +137,18 @@ test("A JavaScript callback can accept positional arguments", (t) => {
 });
 
 test("A JavaScript callback can accept named arguments", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: ["callback"] },
-      calling(
-        name("callback"),
-        [literal(3)],
-        [
-          ["bonus", literal(4)],
-          ["multiplier", literal(5)],
-        ]
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: ["callback"] },
+        calling(
+          name("callback"),
+          [literal(3)],
+          [
+            ["bonus", literal(4)],
+            ["multiplier", literal(5)],
+          ]
+        )
       )
     )
   );
@@ -141,23 +161,27 @@ test("A JavaScript callback can accept named arguments", (t) => {
   t.is(result, 19);
 });
 
-test("An error returned by a JavaScript callback throws in Kenpali", (t) => {
-  const kpf = kpeval(
-    given(
-      { params: ["callback"] },
-      calling(name("plus"), [calling(name("callback")), literal(42)])
+test("An error thrown by a JavaScript callback throws in Kenpali", (t) => {
+  const kpf = kpvm(
+    kpcompile(
+      given(
+        { params: ["callback"] },
+        calling(name("plus"), [calling(name("callback")), literal(42)])
+      )
     )
   );
-  const callback = toKpFunction(() => kperror("someError"));
+  const callback = toKpFunction(() => {
+    throw kperror("someError");
+  });
 
-  const result = kpcall(kpf, [callback], {});
+  const result = kpcatch(() => kpcall(kpf, [callback], {}));
 
   assertIsError(t, result, "someError");
 });
 
 test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) => {
   const code = "(callback) => callback(() => 42)";
-  const kpf = kpeval(kpparse(code));
+  const kpf = kpvm(kpcompile(kpparse(code)));
   const callback = toKpFunction(([callback], _, kpcallback) =>
     kpcallback(callback, [], {})
   );
@@ -170,12 +194,10 @@ test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) =
 test("A time kpcall time limit is enforced through nested callbacks", (t) => {
   const code =
     "(callback) => callback(() => 1 | repeat(while: () => true, next: (n) => n))";
-  const kpf = kpeval(kpparse(code));
+  const kpf = kpvm(kpcompile(kpparse(code)));
   const callback = toKpFunction(([callback], _, kpcallback) =>
     kpcallback(callback, [], {})
   );
 
-  const result = kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 });
-
-  assertIsError(t, result, "timeLimitExceeded");
+  t.throws(() => kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 }));
 });
