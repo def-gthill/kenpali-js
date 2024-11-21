@@ -47,14 +47,16 @@ export interface CallOptions {
 export interface EvalOptions extends CallOptions {
   names?: Map<string, KpValue>;
   modules?: Map<string, KpValue>;
+  trace?: boolean;
 }
 
+export function kpparse(code: string): KpAstNode;
 export function kpeval(
   expression: KpAstNode,
   options: EvalOptions = {}
 ): KpValue;
+
 export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function kpparse(code: string): KpAstNode;
 export function matches(value: KpValue, schema: Schema): boolean;
 export function kpcall(
   f: Given,

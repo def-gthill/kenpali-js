@@ -179,3 +179,30 @@ export function transformTree(expression, handlers) {
     return transformNode("handleOther", (node) => node);
   }
 }
+
+export function toAst(expressionRaw) {
+  return transformTree(expressionRaw, {
+    handleDefining(node, _recurse, handleDefault) {
+      return handleDefault({
+        ...node,
+        defining: Array.isArray(node.defining)
+          ? node.defining
+          : toKpobject(node.defining),
+      });
+    },
+    handleCalling(node, _recurse, handleDefault) {
+      const result = handleDefault({
+        ...node,
+        args: node.args,
+        namedArgs: node.namedArgs,
+      });
+      if (result.args.length === 0) {
+        delete result.args;
+      }
+      if (result.namedArgs.length === 0) {
+        delete result.namedArgs;
+      }
+      return result;
+    },
+  });
+}

@@ -1,4 +1,4 @@
-import { toAst } from "../src/kpeval.js";
+import { toAst } from "../src/kpast.js";
 import kpparse from "../src/kpparse.js";
 import { runSpecFile } from "./specRunner.js";
 
