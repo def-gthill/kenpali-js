@@ -1,6 +1,6 @@
+import { fromString } from "../src/builtins.js";
 import kpcompile from "../src/kpcompile.js";
-import { catch_ } from "../src/kperror.js";
-import kpeval from "../src/kpeval.js";
+import { kpcatch } from "../src/kperror.js";
 import kpparse from "../src/kpparse.js";
 import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
@@ -11,7 +11,7 @@ const specPath = "../kenpali/kenpali-builtin-errors.md";
 runSpecFile(
   specPath,
   (code) =>
-    catch_(() => {
+    kpcatch(() => {
       const ast = kpparse(code);
       const program = kpcompile(ast);
       // const program = kpcompile(ast, { trace: true });
@@ -20,7 +20,7 @@ runSpecFile(
       return result;
     }),
   (t, actualOutputValue, expectedOutput) => {
-    const expectedOutputValue = kpeval(kpparse(expectedOutput));
+    const expectedOutputValue = fromString(expectedOutput);
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
   (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {

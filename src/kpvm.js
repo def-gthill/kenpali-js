@@ -43,15 +43,24 @@ import {
   toString,
 } from "./values.js";
 
-export default function kpvm(program, { trace = false } = {}) {
-  return new Vm(program, { trace }).run();
+export default function kpvm(
+  program,
+  { trace = false, timeLimitSeconds = 0 } = {}
+) {
+  return new Vm(program, { trace, timeLimitSeconds }).run();
 }
 
 class Vm {
-  constructor({ instructions, diagnostics = [] }, { trace = false } = {}) {
+  constructor(
+    { instructions, diagnostics = [] },
+    { trace = false, timeLimitSeconds = 0 } = {}
+  ) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
     this.trace = trace;
+    this.timeLimitSeconds = timeLimitSeconds;
+    this.startTime = Date.now();
+
     this.cursor = 0;
     this.stack = [];
     this.scopeFrames = [new ScopeFrame(0)];
@@ -130,8 +139,19 @@ class Vm {
             .join(", ")}]`
         );
       }
+      if (this.timeLimitSeconds > 0) {
+        this.checkLimit();
+      }
     }
     return this.stack.at(-1);
+  }
+
+  checkLimit() {
+    const currentTime = Date.now();
+    const elapsedTime = (currentTime - this.startTime) / 1000;
+    if (elapsedTime > this.timeLimitSeconds) {
+      throw new Error(`Time limit of ${this.timeLimitSeconds} s exceeded`);
+    }
   }
 
   runInstruction() {

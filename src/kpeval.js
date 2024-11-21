@@ -2,19 +2,10 @@ import { loadBuiltins } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { Interpreter, Scope, defineNames, evalClean } from "./evalClean.js";
 import { transformTree } from "./kpast.js";
-import kperror, { catch_ } from "./kperror.js";
+import kperror, { kpcatch } from "./kperror.js";
 import kpobject, { toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
 import { isError } from "./values.js";
-
-export function kpevalJson(
-  json,
-  { names = kpobject(), modules = kpobject() } = {}
-) {
-  const expressionRaw = JSON.parse(json);
-  const expression = toAst(expressionRaw);
-  return kpeval(expression, { names, modules });
-}
 
 export function toAst(expressionRaw) {
   return transformTree(expressionRaw, {
@@ -52,7 +43,7 @@ export default function kpeval(
   const interpreter = new Interpreter({ timeLimitSeconds });
   const withCore = loadCore(builtins, interpreter);
   const withCustomNames = new Scope(withCore, names);
-  return catch_(() => evalClean(expression, withCustomNames, interpreter));
+  return kpcatch(() => evalClean(expression, withCustomNames, interpreter));
 }
 
 function validateExpression(expression) {

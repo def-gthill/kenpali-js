@@ -1,5 +1,5 @@
+import { fromString } from "../src/builtins.js";
 import kpcompile from "../src/kpcompile.js";
-import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
 import kpvm from "../src/kpvm.js";
 import { runSpecFile } from "./specRunner.js";
@@ -17,7 +17,7 @@ runSpecFile(
     return result;
   },
   (t, actualOutputValue, expectedOutput) => {
-    const expectedOutputValue = kpeval(kpparse(expectedOutput));
+    const expectedOutputValue = fromString(expectedOutput);
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
   (t) => t.fail("Error testing not implemented")

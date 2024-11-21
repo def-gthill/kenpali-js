@@ -131,7 +131,9 @@ class Compiler {
   }
 
   compileExpression(expression) {
-    if ("literal" in expression) {
+    if (expression === null || typeof expression !== "object") {
+      throw kperror("notAnExpression", ["value", expression]);
+    } else if ("literal" in expression) {
       this.compileLiteral(expression);
     } else if ("array" in expression) {
       this.compileArray(expression);

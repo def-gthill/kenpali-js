@@ -1,11 +1,10 @@
 import { as, bind, default_, recordLike, rest, tupleLike } from "./bind.js";
-import kperror, { catch_, errorType, withErrorType } from "./kperror.js";
+import kperror, { errorType, kpcatch, withErrorType } from "./kperror.js";
 import kpobject, {
   kpoEntries,
   kpoMap,
   kpoMerge,
   toJsObject,
-  toKpobject,
 } from "./kpobject.js";
 import { isBuiltin, isError, isGiven } from "./values.js";
 
@@ -144,7 +143,7 @@ const evalThis = {
     return callOnExpressions(f, args, namedArgs, names, interpreter);
   },
   catching(expression, names, interpreter) {
-    return catch_(() => evalClean(expression.catching, names, interpreter));
+    return kpcatch(() => evalClean(expression.catching, names, interpreter));
   },
   unquote(expression, names, interpreter) {
     return evalClean(
@@ -293,7 +292,7 @@ function callGiven(f, args, namedArgs, interpreter) {
   function kpcallback(callback, args, namedArgs) {
     return callOnValues(callback, args, namedArgs, interpreter);
   }
-  const bindings = catch_(() =>
+  const bindings = kpcatch(() =>
     kpoMerge(
       bind(args, schema[0], kpcallback),
       bind(namedArgs, schema[1], kpcallback)
@@ -368,7 +367,7 @@ export function callBuiltin(f, args, namedArgs, kpcallback) {
   const allParams = paramsFromBuiltin(f);
   const paramObjects = normalizeAllParams(allParams);
   const schema = createParamSchema(paramObjects);
-  const bindings = catch_(() =>
+  const bindings = kpcatch(() =>
     kpoMerge(
       bind(args, schema[0], kpcallback),
       bind(namedArgs, schema[1], kpcallback)
@@ -490,23 +489,6 @@ function createParamSchema(paramObjects) {
   }
   const namedParamSchema = recordLike(namedParamShape);
   return [paramSchema, namedParamSchema];
-}
-
-export function deepToKpObject(expression) {
-  if (expression === null) {
-    return expression;
-  } else if (Array.isArray(expression)) {
-    return expression.map(deepToKpObject);
-  } else if (expression instanceof Map) {
-    return expression;
-  } else if (typeof expression === "object") {
-    return kpoMap(toKpobject(expression), ([key, value]) => [
-      key,
-      deepToKpObject(value),
-    ]);
-  } else {
-    return expression;
-  }
 }
 
 export function deepToJsObject(expression) {
