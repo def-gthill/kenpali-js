@@ -16,11 +16,7 @@ export interface ParamSpec {
 
 export type Builtin = function & { builtinName: string } & ParamSpec;
 
-export interface Given {
-  given: ParamSpec;
-  result: any;
-  closure: Map<string, any>;
-}
+export type Given = object;
 
 export interface KpError {
   error: string;
@@ -40,21 +36,37 @@ export type KpValue =
 
 export type Schema = KpValue;
 
+export interface KpProgram {
+  instructions: any[];
+  diagnostics: any[];
+}
+
 export interface CallOptions {
   timeLimitSeconds?: number;
 }
 
-export interface EvalOptions extends CallOptions {
+export interface CompileOptions {
   names?: Map<string, KpValue>;
   modules?: Map<string, KpValue>;
   trace?: boolean;
 }
+
+export interface VmOptions extends CallOptions {
+  trace?: boolean;
+}
+
+export type EvalOptions = CompileOptions & VmOptions;
 
 export function kpparse(code: string): KpAstNode;
 export function kpeval(
   expression: KpAstNode,
   options: EvalOptions = {}
 ): KpValue;
+export function kpcompile(
+  expression: KpAstNode,
+  options: CompileOptions
+): KpProgram;
+export function kpvm(program: KpProgram, options: VmOptions): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
 export function matches(value: KpValue, schema: Schema): boolean;
