@@ -13,7 +13,7 @@ const hello = `1 | to(100)
   | joinLines`;
 const primePairs = `primesUpTo = (max) => (
   {numbers: 2 | to(max), index: 1} | repeat(
-    while: (state) => state.index | isAtMost(length(state.numbers)),
+    while: (state) => state @ "index" | isAtMost(length(state @ "numbers")),
     next: (state) => (
       {numbers:, index:} = state;
       {
