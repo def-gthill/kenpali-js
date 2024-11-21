@@ -1,5 +1,5 @@
 import kpcompile from "./kpcompile.js";
-import { kpobject } from "./kpobject.js";
+import kpobject from "./kpobject.js";
 import kpvm from "./kpvm.js";
 
 export default function kpeval(
