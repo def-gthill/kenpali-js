@@ -231,10 +231,26 @@ class Compiler {
         functionsTraversed.at(-1).numLayers += 1;
       }
     }
-    const global = this.names.get(expression.name);
-    if (global !== undefined) {
-      this.addInstruction(VALUE, global);
-      return;
+    this.resolveGlobal(expression);
+  }
+
+  resolveGlobal(expression) {
+    if ("from" in expression) {
+      const module = this.modules.get(expression.from);
+      if (!module) {
+        throw kperror("unknownModule", ["name", expression.from]);
+      }
+      const global = module.get(expression.name);
+      if (global !== undefined) {
+        this.addInstruction(VALUE, global);
+        return;
+      }
+    } else {
+      const global = this.names.get(expression.name);
+      if (global !== undefined) {
+        this.addInstruction(VALUE, global);
+        return;
+      }
     }
     throw kperror("nameNotDefined", ["name", expression.name]);
   }
@@ -252,14 +268,20 @@ class Compiler {
     this.popScope();
   }
 
-  defineNames(definitions) {
-    for (const [pattern, _] of definitions) {
-      this.declareNames(pattern);
+  defineNames(statements) {
+    for (const statement of statements) {
+      if (Array.isArray(statement)) {
+        const [pattern, _] = statement;
+        this.declareNames(pattern);
+      }
     }
     this.addInstruction(RESERVE, this.activeScopes.at(-1).numDeclaredNames());
-    for (const [pattern, expression] of definitions) {
-      this.compileExpression(expression);
-      this.assignNames(pattern);
+    for (const statement of statements) {
+      if (Array.isArray(statement)) {
+        const [pattern, expression] = statement;
+        this.compileExpression(expression);
+        this.assignNames(pattern);
+      }
     }
   }
 
@@ -581,12 +603,18 @@ class LibraryFilter {
       },
       handleDefining(node, recurse) {
         const scope = new Set();
-        for (const [name, _] of node.defining) {
-          scope.add(name);
+        for (const statement of node.defining) {
+          if (Array.isArray(statement)) {
+            const [name, _] = statement;
+            scope.add(name);
+          }
         }
         outerThis.activeScopes.push(scope);
-        for (const [_, value] of node.defining) {
-          recurse(value);
+        for (const statement of node.defining) {
+          if (Array.isArray(statement)) {
+            const [_, value] = statement;
+            recurse(value);
+          }
         }
         recurse(node.result);
         outerThis.activeScopes.pop();

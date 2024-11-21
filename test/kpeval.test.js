@@ -1,8 +1,17 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import { calling, defining, given, literal, name } from "../src/kpast.js";
+import {
+  calling,
+  defining,
+  given,
+  importing,
+  literal,
+  name,
+} from "../src/kpast.js";
+import kpcompile from "../src/kpcompile.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
+import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("Evaluating null returns an error", (t) => {
@@ -57,9 +66,8 @@ test("Function arguments can reference names", (t) => {
 
 test("Modules can be imported", (t) => {
   const ast = defining(
-    ["foo", calling(name("import"), [literal("foo")])],
-    ["bar", calling(name("at"), [name("foo"), literal("bar")])],
-    calling(name("bar"), [literal("world")])
+    importing("foo"),
+    calling(name("bar", "foo"), [literal("world")])
   );
   const fooModule = kpobject([
     "bar",
@@ -69,6 +77,8 @@ test("Modules can be imported", (t) => {
       (name) => `Hello, ${name}!`
     ),
   ]);
-  const result = kpeval(ast, { modules: kpobject(["foo", fooModule]) });
+  const result = kpvm(
+    kpcompile(ast, { modules: kpobject(["foo", fooModule]) })
+  );
   t.is(result, "Hello, world!");
 });
