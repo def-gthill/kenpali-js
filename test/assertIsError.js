@@ -1,4 +1,4 @@
-import { deepToJsObject } from "../src/evalClean.js";
+import { deepToJsObject } from "../src/kpobject.js";
 import { isError } from "../src/values.js";
 
 export function assertIsError(

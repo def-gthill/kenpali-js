@@ -1,5 +1,5 @@
 import { either } from "./bind.js";
-import { callBuiltin } from "./evalClean.js";
+import callBuiltin from "./callBuiltin.js";
 import {
   ARRAY_COPY,
   ARRAY_CUT,

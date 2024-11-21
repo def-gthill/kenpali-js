@@ -4,9 +4,8 @@ import {
   normalizeAllParams,
   normalizeParam,
   paramsFromBuiltin,
-} from "../src/evalClean.js";
+} from "../src/callBuiltin.js";
 import { literal } from "../src/kpast.js";
-import kpobject from "../src/kpobject.js";
 
 test("A builtin with an empty param spec has no params", (t) => {
   const f = builtin("foo", {}, () => null);
@@ -49,16 +48,10 @@ test("Normalizing a JS object param yields the same object", (t) => {
   t.deepEqual(normalized, param);
 });
 
-test("Normalizing a Kenpali object param yields an equivalent JS object", (t) => {
-  const param = kpobject(["name", "foo"], ["type", "string"]);
-  const normalized = normalizeParam(param);
-  t.deepEqual(normalized, { name: "foo", type: "string" });
-});
-
 test("We can normalize all params", (t) => {
   const params = {
     params: ["a", { rest: { name: "b", type: "string" } }],
-    namedParams: [kpobject(["name", "c"], ["type", "string"]), { rest: "d" }],
+    namedParams: [{ name: "c", type: "string" }, { rest: "d" }],
   };
 
   const normalized = normalizeAllParams(params);

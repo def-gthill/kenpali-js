@@ -13,7 +13,7 @@ import {
   rest,
   tupleLike,
 } from "./bind.js";
-import { argumentError } from "./evalClean.js";
+import { argumentError } from "./callBuiltin.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
 import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";

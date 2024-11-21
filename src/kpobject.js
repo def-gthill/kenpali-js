@@ -10,6 +10,20 @@ export function toJsObject(kpo) {
   return Object.fromEntries([...kpo]);
 }
 
+export function deepToJsObject(expression) {
+  if (expression === null) {
+    return expression;
+  } else if (Array.isArray(expression)) {
+    return expression.map(deepToJsObject);
+  } else if (expression instanceof Map) {
+    return toJsObject(
+      kpoMap(expression, ([key, value]) => [key, deepToJsObject(value)])
+    );
+  } else {
+    return expression;
+  }
+}
+
 export function kpoEntries(kpo) {
   return [...kpo];
 }
