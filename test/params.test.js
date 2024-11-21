@@ -4,41 +4,9 @@ import {
   normalizeAllParams,
   normalizeParam,
   paramsFromBuiltin,
-  paramsFromGiven,
 } from "../src/evalClean.js";
-import { given, literal } from "../src/kpast.js";
-import kpeval from "../src/kpeval.js";
+import { literal } from "../src/kpast.js";
 import kpobject from "../src/kpobject.js";
-
-test("A given with an empty param spec has no params", (t) => {
-  const f = kpeval(given({}, literal(null)));
-
-  const params = paramsFromGiven(f);
-
-  t.deepEqual(params, {
-    params: [],
-    namedParams: [],
-  });
-});
-
-test("All param types can be extracted from a given", (t) => {
-  const f = kpeval(
-    given(
-      {
-        params: ["a", { rest: "b" }],
-        namedParams: ["c", { rest: "d" }],
-      },
-      literal(null)
-    )
-  );
-
-  const params = paramsFromGiven(f);
-
-  t.deepEqual(params, {
-    params: ["a", { rest: "b" }],
-    namedParams: ["c", { rest: "d" }],
-  });
-});
 
 test("A builtin with an empty param spec has no params", (t) => {
   const f = builtin("foo", {}, () => null);
