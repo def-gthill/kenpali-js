@@ -16,6 +16,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  INDEX,
   OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -144,6 +145,8 @@ class Compiler {
       this.compileGiven(expression);
     } else if ("calling" in expression) {
       this.compileCalling(expression);
+    } else if ("indexing" in expression) {
+      this.compileIndexing(expression);
     } else if ("catching" in expression) {
       this.compileCatching(expression);
     } else {
@@ -407,6 +410,12 @@ class Compiler {
     this.addInstruction(PUSH, -2);
     this.addInstruction(CALL);
     this.addInstruction(POP);
+  }
+
+  compileIndexing(expression) {
+    this.compileExpression(expression.indexing);
+    this.compileExpression(expression.at);
+    this.addInstruction(INDEX);
   }
 
   compileCatching(expression) {

@@ -1,8 +1,10 @@
 import test from "ava";
-
+import kpcompile from "../src/kpcompile.js";
+import { catch_ } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import kpparse from "../src/kpparse.js";
+import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("A function can be called with spread positional arguments", (t) => {
@@ -37,8 +39,8 @@ test("A function can be called with spread named arguments", (t) => {
 });
 
 test("A function can be defined with a named rest parameter", (t) => {
-  const code = "foo = (**namedArgs) => namedArgs.bar; foo(bar: 42)";
-  const result = kpeval(kpparse(code));
+  const code = "foo = (**namedArgs) => namedArgs @ bar:; foo(bar: 42)";
+  const result = kpvm(kpcompile(kpparse(code)));
   t.is(result, 42);
 });
 
@@ -51,7 +53,7 @@ test("A wrong argument type error doesn't have a rest detail", (t) => {
 
 test("Errors short-circuit through the @ operator", (t) => {
   const code = `1 | plus("two") @ "three"`;
-  const result = kpeval(kpparse(code));
+  const result = catch_(() => kpvm(kpcompile(kpparse(code))));
   assertIsError(t, result, "wrongArgumentType");
 });
 

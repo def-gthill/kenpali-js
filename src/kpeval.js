@@ -1,8 +1,9 @@
 import { loadBuiltins } from "./builtins.js";
 import { core as coreCode } from "./core.js";
 import { Interpreter, Scope, defineNames, evalClean } from "./evalClean.js";
+import { transformTree } from "./kpast.js";
 import kperror, { catch_ } from "./kperror.js";
-import kpobject, { kpoMap, toKpobject } from "./kpobject.js";
+import kpobject, { toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
 import { isError } from "./values.js";
 
@@ -69,97 +70,6 @@ function validateExpression(expression) {
     } else {
       throw error;
     }
-  }
-}
-
-function transformTree(expression, handlers) {
-  function recurse(node) {
-    return transformTree(node, handlers);
-  }
-
-  function transformNode(handlerName, defaultHandler) {
-    if (handlerName in handlers) {
-      return handlers[handlerName](expression, recurse, defaultHandler);
-    } else {
-      return defaultHandler(expression);
-    }
-  }
-
-  if (expression === null || typeof expression !== "object") {
-    return transformNode("handleOther", (node) => node);
-  } else if ("literal" in expression) {
-    return transformNode("handleLiteral", (node) => node);
-  } else if ("array" in expression) {
-    return transformNode("handleArray", (node) => ({
-      ...node,
-      array: node.array.map(recurse),
-    }));
-  } else if ("object" in expression) {
-    return transformNode("handleObject", (node) => ({
-      ...node,
-      object: node.object.map((element) => {
-        if ("spread" in element) {
-          return recurse(element);
-        } else {
-          const [key, value] = element;
-          return [typeof key === "string" ? key : recurse(key), recurse(value)];
-        }
-      }),
-    }));
-  } else if ("name" in expression) {
-    return transformNode("handleName", (node) => node);
-  } else if ("defining" in expression) {
-    return transformNode("handleDefining", (node) => ({
-      ...node,
-      defining: Array.isArray(node.defining)
-        ? node.defining.map((statement) => {
-            if ("importing" in statement) {
-              return statement;
-            } else {
-              const [name, value] = statement;
-              return [
-                typeof name === "string" ? name : recurse(name),
-                recurse(value),
-              ];
-            }
-          })
-        : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
-      result: recurse(node.result),
-    }));
-  } else if ("given" in expression) {
-    return transformNode("handleGiven", (node) => ({
-      ...node,
-      result: recurse(node.result),
-    }));
-  } else if ("calling" in expression) {
-    return transformNode("handleCalling", (node) => {
-      return {
-        ...node,
-        calling: recurse(node.calling),
-        args: (node.args ?? []).map(recurse),
-        namedArgs: (node.namedArgs ?? []).map((element) => {
-          if ("spread" in element) {
-            return { spread: recurse(element.spread) };
-          } else {
-            const [name, value] = element;
-            return [name, recurse(value)];
-          }
-        }),
-      };
-    });
-  } else if ("catching" in expression) {
-    return transformNode("handleCatching", (node) => ({
-      ...node,
-      catching: recurse(node.catching),
-    }));
-  } else if ("expression" in expression) {
-    // Special node type that shows up when loading core
-    return transformNode("handleExpression", (node) => ({
-      ...node,
-      expression: recurse(node.expression),
-    }));
-  } else {
-    return transformNode("handleOther", (node) => node);
   }
 }
 

@@ -1,6 +1,5 @@
 import test from "ava";
 import {
-  access,
   array,
   arraySpread,
   calling,
@@ -39,10 +38,10 @@ test("An expression in parentheses parses to a group node", (t) => {
   t.deepEqual(result, group(literal(42)));
 });
 
-test("Property access parses to an access node", (t) => {
+test("Module access parses to a module-scoped name node", (t) => {
   const code = "a.b";
   const result = kpparseSugared(code);
-  t.deepEqual(result, access(name("a"), name("b")));
+  t.deepEqual(result, name("b", "a"));
 });
 
 test("A pipeline parses to a pipeline node", (t) => {

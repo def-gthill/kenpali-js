@@ -149,7 +149,7 @@ function desugarPipeline(expression) {
     } else {
       const [op, call] = step;
       if (op === "AT") {
-        axis = indexing(axis, desugarProperty(call));
+        axis = indexing(axis, desugar(call));
       } else {
         if ("calling" in call) {
           const args = (call.args ?? []).map(desugar);

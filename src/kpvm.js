@@ -1,3 +1,4 @@
+import { either } from "./bind.js";
 import { callBuiltin } from "./evalClean.js";
 import {
   ARRAY_COPY,
@@ -15,6 +16,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  INDEX,
   OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -31,7 +33,15 @@ import {
 } from "./instructions.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
-import { isBuiltin, isError, toString } from "./values.js";
+import {
+  isArray,
+  isBuiltin,
+  isError,
+  isNumber,
+  isObject,
+  isString,
+  toString,
+} from "./values.js";
 
 export default function kpvm(program, { trace = false } = {}) {
   return new Vm(program, { trace }).run();
@@ -76,6 +86,7 @@ class Vm {
     this.instructionTable[CAPTURE] = this.runCapture;
     this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[RETURN] = this.runReturn;
+    this.instructionTable[INDEX] = this.runIndex;
     this.instructionTable[CATCH] = this.runCatch;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -473,6 +484,54 @@ class Vm {
     }
     if (this.trace) {
       console.log(`Return to ${this.cursor}`);
+    }
+  }
+
+  runIndex() {
+    if (this.trace) {
+      console.log("INDEX");
+    }
+    const index = this.stack.pop();
+    const collection = this.stack.pop();
+    if (isString(collection) || isArray(collection)) {
+      if (!isNumber(index)) {
+        this.throw_(
+          kperror("wrongType", ["value", index], ["expectedType", "number"])
+        );
+      }
+      if (index < 1 || index > collection.length) {
+        this.throw_(
+          kperror(
+            "indexOutOfBounds",
+            ["function", "at"],
+            ["value", collection],
+            ["length", collection.length],
+            ["index", index]
+          )
+        );
+      }
+      this.stack.push(collection[index - 1]);
+    } else if (isObject(collection)) {
+      if (!isString(index)) {
+        this.throw_(
+          kperror("wrongType", ["value", index], ["expectedType", "string"])
+        );
+      }
+      if (collection.has(index)) {
+        this.stack.push(collection.get(index));
+      } else {
+        this.throw_(
+          kperror("missingProperty", ["value", collection], ["key", index])
+        );
+      }
+    } else {
+      this.throw_(
+        kperror(
+          "wrongType",
+          ["value", collection],
+          ["expectedType", either("string", "array", "object")]
+        )
+      );
     }
   }
 

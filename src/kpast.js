@@ -59,10 +59,6 @@ export function catching(expression) {
   return { catching: expression };
 }
 
-export function quote(expression) {
-  return { quote: expression };
-}
-
 export function unquote(expression) {
   return { unquote: expression };
 }
@@ -71,14 +67,10 @@ export function importing(name) {
   return { importing: name };
 }
 
-// Syntactic sugar
+//#region Syntactic sugar
 
 export function group(expression) {
   return { group: expression };
-}
-
-export function access(object, key) {
-  return { on: object, access: key };
 }
 
 export function pipeline(start, ...expressions) {
@@ -92,6 +84,8 @@ export function arraySpread(expression) {
 export function objectSpread(expression) {
   return { objectSpread: expression };
 }
+
+//#endregion
 
 export function transformTree(expression, handlers) {
   function recurse(node) {
@@ -133,10 +127,17 @@ export function transformTree(expression, handlers) {
     return transformNode("handleDefining", (node) => ({
       ...node,
       defining: Array.isArray(node.defining)
-        ? node.defining.map(([name, value]) => [
-            typeof name === "string" ? name : recurse(name),
-            recurse(value),
-          ])
+        ? node.defining.map((statement) => {
+            if ("importing" in statement) {
+              return statement;
+            } else {
+              const [name, value] = statement;
+              return [
+                typeof name === "string" ? name : recurse(name),
+                recurse(value),
+              ];
+            }
+          })
         : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
       result: recurse(node.result),
     }));
@@ -159,6 +160,14 @@ export function transformTree(expression, handlers) {
             return [name, recurse(value)];
           }
         }),
+      };
+    });
+  } else if ("indexing" in expression) {
+    return transformNode("handleIndexing", (node) => {
+      return {
+        ...node,
+        indexing: recurse(node.indexing),
+        at: recurse(node.at),
       };
     });
   } else if ("catching" in expression) {

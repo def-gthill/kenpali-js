@@ -14,7 +14,6 @@ import {
   objectPattern,
   objectSpread,
   pipeline,
-  quote,
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
@@ -173,7 +172,10 @@ function parsePipeline(tokens, start) {
       parseZeroOrMore(
         parseAnyOf(
           parseAllOf([parseSingle("PIPE", () => "PIPE"), parseTightPipeline]),
-          parseAllOf([parseSingle("AT", () => "AT"), parseTightPipeline]),
+          parseAllOf([
+            parseSingle("AT", () => "AT"),
+            parseAnyOf(parsePropertyIndex, parseTightPipeline),
+          ]),
           parseSingle("BANG", () => "BANG")
         )
       ),
@@ -185,6 +187,13 @@ function parsePipeline(tokens, start) {
         return expression;
       }
     }
+  )(tokens, start);
+}
+
+function parsePropertyIndex(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("COLON", "expectedPropertyIndex")],
+    (name) => literal(name.name)
   )(tokens, start);
 }
 
@@ -326,7 +335,6 @@ function parseNamedArgument(tokens, start) {
 
 function parseAtomic(tokens, start) {
   return parseAnyOf(
-    parseQuote,
     parseUnquote,
     parseGroup,
     parseArray,
@@ -334,17 +342,6 @@ function parseAtomic(tokens, start) {
     parseLiteral,
     parseNameFromModule,
     parseName
-  )(tokens, start);
-}
-
-function parseQuote(tokens, start) {
-  return parseAllOf(
-    [
-      consume("OPEN_QUOTE_PAREN", "expectedQuote"),
-      parse,
-      consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
-    ],
-    quote
   )(tokens, start);
 }
 
