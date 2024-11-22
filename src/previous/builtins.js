@@ -13,9 +13,10 @@ import {
   rest,
   tupleLike,
 } from "./bind.js";
-import { argumentError } from "./evalClean.js";
+import { argumentError } from "./callBuiltin.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
 import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
+import kpparse from "./kpparse.js";
 import {
   equals,
   isArray,
@@ -714,6 +715,24 @@ function loop(
       }
     }
     current = nextResult;
+  }
+}
+
+export function fromString(string) {
+  return toValue(kpparse(string));
+}
+
+function toValue(expression) {
+  if ("literal" in expression) {
+    return expression.literal;
+  } else if ("array" in expression) {
+    return expression.array.map(toValue);
+  } else if ("object" in expression) {
+    return kpobject(
+      ...expression.object.map(([key, value]) => [key, toValue(value)])
+    );
+  } else {
+    throw kperror("");
   }
 }
 

@@ -1,7 +1,7 @@
 import kperror, {
-  catch_,
   errorType,
   foldError,
+  kpcatch,
   transformError,
   withDetails,
 } from "./kperror.js";
@@ -113,7 +113,7 @@ function bindUnionSchema(value, schema, kpcallback) {
   const result = kpobject();
   const options = schema.get("either");
   const bindings = options.map((option) =>
-    catch_(() => bind(value, option, kpcallback))
+    kpcatch(() => bind(value, option, kpcallback))
   );
   const errors = [];
   const errorsByKey = kpobject();

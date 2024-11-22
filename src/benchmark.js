@@ -13,28 +13,28 @@ const hello = `1 | to(100)
   | joinLines`;
 const primePairs = `primesUpTo = (max) => (
   {numbers: 2 | to(max), index: 1} | repeat(
-    while: (state) => state @ "index" | isAtMost(length(state @ "numbers")),
+    while: (state) => state @ index: | isAtMost(state @ numbers: | length),
     next: (state) => (
       {numbers:, index:} = state;
       {
         numbers: numbers | where(
           (n) => or(
             n | equals(numbers @ index),
-            () => not(n | isDivisibleBy(numbers @ index))
+            () => n | isDivisibleBy(numbers @ index) | not
           )
         ),
         index: increment(index),
       }
     )
-  ) @ "numbers"
+  ) @ numbers:
 );
 rows = primesUpTo(10);
 cols = primesUpTo(10);
-rows | transform((row) => (
+rows | rebuild((row) => (
   cols | transform((col) => (
     [row, col]
   ))
-)) | flatten
+))
 `;
 const naiveFib = `
 fib = (n) => if(

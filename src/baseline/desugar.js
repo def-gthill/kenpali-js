@@ -4,6 +4,7 @@ import {
   catching,
   defining,
   given,
+  indexing,
   literal,
   name,
   object,
@@ -20,8 +21,6 @@ export default function desugar(expression) {
     return desugarDefining(expression);
   } else if ("given" in expression) {
     return desugarGiven(expression);
-  } else if ("calling" in expression) {
-    return desugarCalling(expression);
   } else if ("unquote" in expression) {
     return desugarUnquote(expression);
   } else if ("group" in expression) {
@@ -71,44 +70,20 @@ function desugarPropertyDefinition(expression) {
 
 function desugarDefining(expression) {
   return defining(
-    ...kpoEntries(expression.defining).map(([name, value]) => [
-      name,
-      desugar(value),
-    ]),
+    ...kpoEntries(expression.defining).map((statement) => {
+      if ("importing" in statement) {
+        return statement;
+      } else {
+        const [name, value] = statement;
+        return [name, desugar(value)];
+      }
+    }),
     desugar(expression.result)
   );
 }
 
 function desugarGiven(expression) {
   return given(expression.given, desugar(expression.result));
-}
-
-function desugarCalling(expression) {
-  return calling(
-    desugar(expression.calling),
-    desugarArgs(expression.args ?? []),
-    desugarNamedArgs(expression.namedArgs ?? [])
-  );
-}
-
-function desugarArgs(args) {
-  const desugaredArgs = desugarArray({ array: args });
-  if ("array" in desugaredArgs) {
-    return desugaredArgs.array;
-  } else {
-    return desugaredArgs;
-  }
-}
-
-function desugarNamedArgs(namedArgs) {
-  return namedArgs.map((arg) => {
-    if ("objectSpread" in arg) {
-      return { spread: desugar(arg.objectSpread) };
-    } else {
-      const [name, value] = arg;
-      return [name, desugar(value)];
-    }
-  });
 }
 
 function desugarUnquote(expression) {
@@ -138,30 +113,50 @@ function desugarProperty(expression) {
 
 function desugarPipeline(expression) {
   let axis = desugar(expression.start);
-  for (const step of expression.calls) {
-    if (step === "BANG") {
+  for (const [op, ...target] of expression.calls) {
+    if (op === "CALL") {
+      const [allArgs] = target;
+      const { args, namedArgs } = allArgs;
+      axis = calling(axis, desugarPosArgs(args), desugarNamedArgs(namedArgs));
+    } else if (op === "PIPECALL") {
+      const [callee, allArgs] = target;
+      const { args, namedArgs } = allArgs;
+      axis = calling(
+        desugar(callee),
+        [axis, ...desugarPosArgs(args)],
+        desugarNamedArgs(namedArgs)
+      );
+    } else if (op === "PIPE") {
+      const [callee] = target;
+      axis = calling(desugar(callee), [axis]);
+    } else if (op === "AT") {
+      const [index] = target;
+      axis = indexing(axis, desugar(index));
+    } else if (op === "BANG") {
       axis = catching(axis);
     } else {
-      const [op, call] = step;
-      if (op === "AT") {
-        axis = calling(name("at"), [axis, desugar(call)]);
-      } else {
-        if ("calling" in call) {
-          const args = (call.args ?? []).map(desugar);
-          const namedArgs = (call.namedArgs ?? []).map((element) => {
-            if ("objectSpread" in element) {
-              return { spread: desugar(element.objectSpread) };
-            } else {
-              const [name, value] = element;
-              return [name, desugar(value)];
-            }
-          });
-          axis = calling(desugar(call.calling), [axis, ...args], namedArgs);
-        } else {
-          axis = calling(desugar(call), [axis]);
-        }
-      }
+      throw new Error(`Invalid pipeline op ${op}`);
     }
   }
   return axis;
+}
+
+function desugarPosArgs(posArgs) {
+  const desugaredArgs = desugarArray({ array: posArgs });
+  if ("array" in desugaredArgs) {
+    return desugaredArgs.array;
+  } else {
+    return desugaredArgs;
+  }
+}
+
+function desugarNamedArgs(namedArgs) {
+  return namedArgs.map((element) => {
+    if ("objectSpread" in element) {
+      return { spread: desugar(element.objectSpread) };
+    } else {
+      const [name, value] = element;
+      return [name, desugar(value)];
+    }
+  });
 }

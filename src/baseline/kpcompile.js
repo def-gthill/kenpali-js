@@ -16,6 +16,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  INDEX,
   OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -130,7 +131,9 @@ class Compiler {
   }
 
   compileExpression(expression) {
-    if ("literal" in expression) {
+    if (expression === null || typeof expression !== "object") {
+      throw kperror("notAnExpression", ["value", expression]);
+    } else if ("literal" in expression) {
       this.compileLiteral(expression);
     } else if ("array" in expression) {
       this.compileArray(expression);
@@ -144,6 +147,8 @@ class Compiler {
       this.compileGiven(expression);
     } else if ("calling" in expression) {
       this.compileCalling(expression);
+    } else if ("indexing" in expression) {
+      this.compileIndexing(expression);
     } else if ("catching" in expression) {
       this.compileCatching(expression);
     } else {
@@ -228,10 +233,26 @@ class Compiler {
         functionsTraversed.at(-1).numLayers += 1;
       }
     }
-    const global = this.names.get(expression.name);
-    if (global !== undefined) {
-      this.addInstruction(VALUE, global);
-      return;
+    this.resolveGlobal(expression);
+  }
+
+  resolveGlobal(expression) {
+    if ("from" in expression) {
+      const module = this.modules.get(expression.from);
+      if (!module) {
+        throw kperror("unknownModule", ["name", expression.from]);
+      }
+      const global = module.get(expression.name);
+      if (global !== undefined) {
+        this.addInstruction(VALUE, global);
+        return;
+      }
+    } else {
+      const global = this.names.get(expression.name);
+      if (global !== undefined) {
+        this.addInstruction(VALUE, global);
+        return;
+      }
     }
     throw kperror("nameNotDefined", ["name", expression.name]);
   }
@@ -249,14 +270,20 @@ class Compiler {
     this.popScope();
   }
 
-  defineNames(definitions) {
-    for (const [pattern, _] of definitions) {
-      this.declareNames(pattern);
+  defineNames(statements) {
+    for (const statement of statements) {
+      if (Array.isArray(statement)) {
+        const [pattern, _] = statement;
+        this.declareNames(pattern);
+      }
     }
     this.addInstruction(RESERVE, this.activeScopes.at(-1).numDeclaredNames());
-    for (const [pattern, expression] of definitions) {
-      this.compileExpression(expression);
-      this.assignNames(pattern);
+    for (const statement of statements) {
+      if (Array.isArray(statement)) {
+        const [pattern, expression] = statement;
+        this.compileExpression(expression);
+        this.assignNames(pattern);
+      }
     }
   }
 
@@ -407,6 +434,12 @@ class Compiler {
     this.addInstruction(PUSH, -2);
     this.addInstruction(CALL);
     this.addInstruction(POP);
+  }
+
+  compileIndexing(expression) {
+    this.compileExpression(expression.indexing);
+    this.compileExpression(expression.at);
+    this.addInstruction(INDEX);
   }
 
   compileCatching(expression) {
@@ -572,12 +605,18 @@ class LibraryFilter {
       },
       handleDefining(node, recurse) {
         const scope = new Set();
-        for (const [name, _] of node.defining) {
-          scope.add(name);
+        for (const statement of node.defining) {
+          if (Array.isArray(statement)) {
+            const [name, _] = statement;
+            scope.add(name);
+          }
         }
         outerThis.activeScopes.push(scope);
-        for (const [_, value] of node.defining) {
-          recurse(value);
+        for (const statement of node.defining) {
+          if (Array.isArray(statement)) {
+            const [_, value] = statement;
+            recurse(value);
+          }
         }
         recurse(node.result);
         outerThis.activeScopes.pop();

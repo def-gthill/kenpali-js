@@ -23,7 +23,7 @@ export function withDetails(err, ...newDetails) {
   };
 }
 
-export function catch_(f) {
+export function kpcatch(f) {
   try {
     return f();
   } catch (error) {

@@ -1,4 +1,5 @@
-import { callBuiltin } from "./evalClean.js";
+import { either } from "./bind.js";
+import callBuiltin from "./callBuiltin.js";
 import {
   ARRAY_COPY,
   ARRAY_CUT,
@@ -15,6 +16,7 @@ import {
   EMPTY_ARRAY,
   EMPTY_OBJECT,
   FUNCTION,
+  INDEX,
   OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -31,17 +33,47 @@ import {
 } from "./instructions.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
-import { isBuiltin, isError, toString } from "./values.js";
+import {
+  isArray,
+  isBuiltin,
+  isError,
+  isNumber,
+  isObject,
+  isString,
+  toString,
+} from "./values.js";
 
-export default function kpvm(program, { trace = false } = {}) {
-  return new Vm(program, { trace }).run();
+export default function kpvm(
+  program,
+  { trace = false, timeLimitSeconds = 0 } = {}
+) {
+  return new Vm(program, { trace, timeLimitSeconds }).run();
+}
+
+export function kpvmCall(
+  kpf,
+  posArgs,
+  namedArgs,
+  { trace = false, timeLimitSeconds = 0 } = {}
+) {
+  return new Vm(kpf.program, { trace, timeLimitSeconds }).callback(
+    kpf,
+    posArgs,
+    namedArgs
+  );
 }
 
 class Vm {
-  constructor({ instructions, diagnostics = [] }, { trace = false } = {}) {
+  constructor(
+    { instructions, diagnostics = [] },
+    { trace = false, timeLimitSeconds = 0 } = {}
+  ) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
     this.trace = trace;
+    this.timeLimitSeconds = timeLimitSeconds;
+    this.startTime = Date.now();
+
     this.cursor = 0;
     this.stack = [];
     this.scopeFrames = [new ScopeFrame(0)];
@@ -76,6 +108,7 @@ class Vm {
     this.instructionTable[CAPTURE] = this.runCapture;
     this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[RETURN] = this.runReturn;
+    this.instructionTable[INDEX] = this.runIndex;
     this.instructionTable[CATCH] = this.runCatch;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -119,8 +152,19 @@ class Vm {
             .join(", ")}]`
         );
       }
+      if (this.timeLimitSeconds > 0) {
+        this.checkLimit();
+      }
     }
     return this.stack.at(-1);
+  }
+
+  checkLimit() {
+    const currentTime = Date.now();
+    const elapsedTime = (currentTime - this.startTime) / 1000;
+    if (elapsedTime > this.timeLimitSeconds) {
+      throw new Error(`Time limit of ${this.timeLimitSeconds} s exceeded`);
+    }
   }
 
   runInstruction() {
@@ -343,7 +387,12 @@ class Vm {
     if (this.trace) {
       console.log(`FUNCTION ${target}`);
     }
-    this.stack.push(new Function(target));
+    this.stack.push(
+      new Function(
+        { instructions: this.instructions, diagnostics: this.diagnostics },
+        target
+      )
+    );
   }
 
   runClosure() {
@@ -476,6 +525,54 @@ class Vm {
     }
   }
 
+  runIndex() {
+    if (this.trace) {
+      console.log("INDEX");
+    }
+    const index = this.stack.pop();
+    const collection = this.stack.pop();
+    if (isString(collection) || isArray(collection)) {
+      if (!isNumber(index)) {
+        this.throw_(
+          kperror("wrongType", ["value", index], ["expectedType", "number"])
+        );
+      }
+      if (index < 1 || index > collection.length) {
+        this.throw_(
+          kperror(
+            "indexOutOfBounds",
+            ["function", "at"],
+            ["value", collection],
+            ["length", collection.length],
+            ["index", index]
+          )
+        );
+      }
+      this.stack.push(collection[index - 1]);
+    } else if (isObject(collection)) {
+      if (!isString(index)) {
+        this.throw_(
+          kperror("wrongType", ["value", index], ["expectedType", "string"])
+        );
+      }
+      if (collection.has(index)) {
+        this.stack.push(collection.get(index));
+      } else {
+        this.throw_(
+          kperror("missingProperty", ["value", collection], ["key", index])
+        );
+      }
+    } else {
+      this.throw_(
+        kperror(
+          "wrongType",
+          ["value", collection],
+          ["expectedType", either("string", "array", "object")]
+        )
+      );
+    }
+  }
+
   runCatch() {
     const recoveryOffset = this.next();
     if (this.trace) {
@@ -520,7 +617,8 @@ class Vm {
 }
 
 class Function {
-  constructor(target) {
+  constructor(program, target) {
+    this.program = program;
     this.target = target;
     this.closure = [];
   }

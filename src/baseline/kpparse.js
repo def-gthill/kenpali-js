@@ -1,20 +1,18 @@
 import desugar from "./desugar.js";
 import {
-  access,
   array,
   arrayPattern,
   arraySpread,
-  calling,
   defining,
   given,
   group,
+  importing,
   literal,
   name,
   object,
   objectPattern,
   objectSpread,
   pipeline,
-  quote,
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
@@ -66,7 +64,7 @@ function parse(tokens, start) {
 function parseScope(tokens, start) {
   return parseAllOf(
     [
-      parseZeroOrMore(parseNameDefinition, {
+      parseZeroOrMore(parseAnyOf(parseNameDefinition, parseImport), {
         terminator: consume("SEMICOLON"),
         errorIfTerminatorMissing: "missingDefinitionSeparator",
       }),
@@ -155,6 +153,13 @@ function parseObjectPatternPropertyName(tokens, start) {
   )(tokens, start);
 }
 
+function parseImport(tokens, start) {
+  return parseAllOf(
+    [consume("PLUS_PLUS", "expectedImport"), parseName],
+    (name) => importing(name.name)
+  )(tokens, start);
+}
+
 function parseAssignable(tokens, start) {
   return parseAnyOf(parseArrowFunction, parsePipeline)(tokens, start);
 }
@@ -162,13 +167,9 @@ function parseAssignable(tokens, start) {
 function parsePipeline(tokens, start) {
   return parseAllOf(
     [
-      parseTightPipeline,
+      parseAtomic,
       parseZeroOrMore(
-        parseAnyOf(
-          parseAllOf([parseSingle("PIPE", () => "PIPE"), parseTightPipeline]),
-          parseAllOf([parseSingle("AT", () => "AT"), parseTightPipeline]),
-          parseSingle("BANG", () => "BANG")
-        )
+        parseAnyOf(parseCall, parsePipeCall, parsePipe, parseAt, parseBang)
       ),
     ],
     (expression, calls) => {
@@ -179,6 +180,43 @@ function parsePipeline(tokens, start) {
       }
     }
   )(tokens, start);
+}
+
+function parseCall(tokens, start) {
+  return convert(parseArgumentList, (list) => ["CALL", list])(tokens, start);
+}
+
+function parsePipeCall(tokens, start) {
+  return parseAllOf([
+    parseSingle("PIPE", () => "PIPECALL"),
+    parseAtomic,
+    parseArgumentList,
+  ])(tokens, start);
+}
+
+function parsePipe(tokens, start) {
+  return parseAllOf([parseSingle("PIPE", () => "PIPE"), parseAtomic])(
+    tokens,
+    start
+  );
+}
+
+function parseAt(tokens, start) {
+  return parseAllOf([
+    parseSingle("AT", () => "AT"),
+    parseAnyOf(parsePropertyIndex, parseAtomic),
+  ])(tokens, start);
+}
+
+function parsePropertyIndex(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("COLON", "expectedPropertyIndex")],
+    (name) => literal(name.name)
+  )(tokens, start);
+}
+
+function parseBang(tokens, start) {
+  return parseSingle("BANG", () => ["BANG"])(tokens, start);
 }
 
 function parseArrowFunction(tokens, start) {
@@ -259,38 +297,6 @@ function parseParameterName(tokens, start) {
   )(tokens, start);
 }
 
-function parseTightPipeline(tokens, start) {
-  return parseAllOf(
-    [
-      parseAtomic,
-      parseZeroOrMore(parseAnyOf(parsePropertyAccess, parseArgumentList)),
-    ],
-    (expression, calls) => {
-      let axis = expression;
-      for (const call of calls) {
-        if ("access" in call) {
-          axis = access(axis, call.access);
-        } else {
-          const [args, namedArgs] = call.arguments;
-          axis = calling(axis, args, namedArgs);
-        }
-      }
-      return axis;
-    }
-  )(tokens, start);
-}
-
-function parsePropertyAccess(tokens, start) {
-  return parseAllOf(
-    [consume("DOT", "expectedPropertyAccess"), parsePropertyName],
-    (property) => ({ access: property })
-  )(tokens, start);
-}
-
-function parsePropertyName(tokens, start) {
-  return parseAnyOf(parseName, parseUnquote, parseLiteral)(tokens, start);
-}
-
 function parseArgumentList(tokens, start) {
   return parseAllOf(
     [
@@ -308,9 +314,7 @@ function parseArgumentList(tokens, start) {
       const namedArgs = args.filter(
         (argument) => Array.isArray(argument) || "objectSpread" in argument
       );
-      return {
-        arguments: [posArgs, namedArgs],
-      };
+      return { args: posArgs, namedArgs };
     }
   )(tokens, start);
 }
@@ -337,24 +341,13 @@ function parseNamedArgument(tokens, start) {
 
 function parseAtomic(tokens, start) {
   return parseAnyOf(
-    parseQuote,
     parseUnquote,
     parseGroup,
     parseArray,
     parseObject,
     parseLiteral,
+    parseNameFromModule,
     parseName
-  )(tokens, start);
-}
-
-function parseQuote(tokens, start) {
-  return parseAllOf(
-    [
-      consume("OPEN_QUOTE_PAREN", "expectedQuote"),
-      parse,
-      consume("CLOSE_QUOTE_PAREN", "unclosedQuote"),
-    ],
-    quote
   )(tokens, start);
 }
 
@@ -443,6 +436,13 @@ function parseLiteral(tokens, start) {
 
 function parseName(tokens, start) {
   return parseSingle("NAME", (token) => name(token.text))(tokens, start);
+}
+
+function parseNameFromModule(tokens, start) {
+  return parseAllOf(
+    [parseName, consume("DOT"), parseName],
+    (module, unqualifiedName) => name(unqualifiedName.name, module.name)
+  )(tokens, start);
 }
 
 function parseSingle(tokenType, converter) {

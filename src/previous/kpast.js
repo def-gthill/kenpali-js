@@ -22,8 +22,12 @@ export function spread(node) {
   return { spread: node };
 }
 
-export function name(name) {
-  return { name };
+export function name(name, module = null) {
+  const result = { name };
+  if (module) {
+    result.from = module;
+  }
+  return result;
 }
 
 export function defining(...args) {
@@ -47,26 +51,26 @@ export function calling(f, args = [], namedArgs = []) {
   return result;
 }
 
-export function catching(expression) {
-  return { catching: expression };
+export function indexing(collection, index) {
+  return { indexing: collection, at: index };
 }
 
-export function quote(expression) {
-  return { quote: expression };
+export function catching(expression) {
+  return { catching: expression };
 }
 
 export function unquote(expression) {
   return { unquote: expression };
 }
 
-// Syntactic sugar
+export function importing(name) {
+  return { importing: name };
+}
+
+//#region Syntactic sugar
 
 export function group(expression) {
   return { group: expression };
-}
-
-export function access(object, key) {
-  return { on: object, access: key };
 }
 
 export function pipeline(start, ...expressions) {
@@ -80,6 +84,8 @@ export function arraySpread(expression) {
 export function objectSpread(expression) {
   return { objectSpread: expression };
 }
+
+//#endregion
 
 export function transformTree(expression, handlers) {
   function recurse(node) {
@@ -121,10 +127,17 @@ export function transformTree(expression, handlers) {
     return transformNode("handleDefining", (node) => ({
       ...node,
       defining: Array.isArray(node.defining)
-        ? node.defining.map(([name, value]) => [
-            typeof name === "string" ? name : recurse(name),
-            recurse(value),
-          ])
+        ? node.defining.map((statement) => {
+            if ("importing" in statement) {
+              return statement;
+            } else {
+              const [name, value] = statement;
+              return [
+                typeof name === "string" ? name : recurse(name),
+                recurse(value),
+              ];
+            }
+          })
         : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
       result: recurse(node.result),
     }));
@@ -149,6 +162,14 @@ export function transformTree(expression, handlers) {
         }),
       };
     });
+  } else if ("indexing" in expression) {
+    return transformNode("handleIndexing", (node) => {
+      return {
+        ...node,
+        indexing: recurse(node.indexing),
+        at: recurse(node.at),
+      };
+    });
   } else if ("catching" in expression) {
     return transformNode("handleCatching", (node) => ({
       ...node,
@@ -157,4 +178,31 @@ export function transformTree(expression, handlers) {
   } else {
     return transformNode("handleOther", (node) => node);
   }
+}
+
+export function toAst(expressionRaw) {
+  return transformTree(expressionRaw, {
+    handleDefining(node, _recurse, handleDefault) {
+      return handleDefault({
+        ...node,
+        defining: Array.isArray(node.defining)
+          ? node.defining
+          : toKpobject(node.defining),
+      });
+    },
+    handleCalling(node, _recurse, handleDefault) {
+      const result = handleDefault({
+        ...node,
+        args: node.args,
+        namedArgs: node.namedArgs,
+      });
+      if (result.args.length === 0) {
+        delete result.args;
+      }
+      if (result.namedArgs.length === 0) {
+        delete result.namedArgs;
+      }
+      return result;
+    },
+  });
 }
