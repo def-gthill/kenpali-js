@@ -370,41 +370,6 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "at",
-    {
-      params: [
-        { name: "collection", type: either("sequence", "object") },
-        "index",
-      ],
-    },
-    function ([collection, index]) {
-      if (isString(collection) || isArray(collection)) {
-        validateArgument(index, "number");
-        if (index < 1 || index > collection.length) {
-          throw kperror(
-            "indexOutOfBounds",
-            ["function", "at"],
-            ["value", collection],
-            ["length", collection.length],
-            ["index", index]
-          );
-        }
-        return collection[index - 1];
-      } else if (isObject(collection)) {
-        validateArgument(index, "string");
-        if (collection.has(index)) {
-          return collection.get(index);
-        } else {
-          throw kperror(
-            "missingProperty",
-            ["value", collection],
-            ["key", index]
-          );
-        }
-      }
-    }
-  ),
-  builtin(
     "length",
     { params: [{ name: "sequence", type: "sequence" }] },
     function ([sequence]) {
