@@ -193,6 +193,26 @@ class Compiler {
   }
 
   compileName(expression) {
+    if ("from" in expression) {
+      this.resolveNameInModule(expression);
+    } else {
+      this.resolvePlainName(expression);
+    }
+  }
+
+  resolveNameInModule(expression) {
+    const module = this.modules.get(expression.from);
+    if (!module) {
+      throw kperror("unknownModule", ["name", expression.from]);
+    }
+    const global = module.get(expression.name);
+    if (global !== undefined) {
+      this.addInstruction(VALUE, global);
+      return;
+    }
+  }
+
+  resolvePlainName(expression) {
     const functionsTraversed = [];
     for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
       const scope = this.activeScopes.at(-numLayers - 1);
@@ -237,24 +257,11 @@ class Compiler {
   }
 
   resolveGlobal(expression) {
-    if ("from" in expression) {
-      const module = this.modules.get(expression.from);
-      if (!module) {
-        throw kperror("unknownModule", ["name", expression.from]);
-      }
-      const global = module.get(expression.name);
-      if (global !== undefined) {
-        this.addInstruction(VALUE, global);
-        return;
-      }
-    } else {
-      const global = this.names.get(expression.name);
-      if (global !== undefined) {
-        this.addInstruction(VALUE, global);
-        return;
-      }
+    const global = this.names.get(expression.name);
+    if (global === undefined) {
+      throw kperror("nameNotDefined", ["name", expression.name]);
     }
-    throw kperror("nameNotDefined", ["name", expression.name]);
+    this.addInstruction(VALUE, global);
   }
 
   compileDefining(expression) {
