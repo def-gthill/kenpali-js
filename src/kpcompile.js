@@ -387,18 +387,26 @@ class Compiler {
     const namedParamPattern = {
       objectPattern: expression.given.namedParams ?? [],
     };
-    this.declareNames(paramPattern);
-    this.declareNames(namedParamPattern);
+    if (paramPattern.arrayPattern.length > 0) {
+      this.declareNames(paramPattern);
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.declareNames(namedParamPattern);
+    }
     this.addInstruction(
       RESERVE,
       this.activeScopes.at(-1).numDeclaredNames() - 2
     );
-    this.addInstruction(READ_LOCAL, 0, 1);
-    this.addDiagnostic({ name: "<posArgs>" });
-    this.assignNames(paramPattern, { isArgument: true });
-    this.addInstruction(READ_LOCAL, 0, 2);
-    this.addDiagnostic({ name: "<namedArgs>" });
-    this.assignNames(namedParamPattern, { isArgument: true });
+    if (paramPattern.arrayPattern.length > 0) {
+      this.addInstruction(READ_LOCAL, 0, 1);
+      this.addDiagnostic({ name: "<posArgs>" });
+      this.assignNames(paramPattern, { isArgument: true });
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.addInstruction(READ_LOCAL, 0, 2);
+      this.addDiagnostic({ name: "<namedArgs>" });
+      this.assignNames(namedParamPattern, { isArgument: true });
+    }
     this.compileExpression(expression.result);
     this.addInstruction(WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
