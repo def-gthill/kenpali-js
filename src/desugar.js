@@ -70,14 +70,10 @@ function desugarPropertyDefinition(expression) {
 
 function desugarDefining(expression) {
   return defining(
-    ...kpoEntries(expression.defining).map((statement) => {
-      if ("importing" in statement) {
-        return statement;
-      } else {
-        const [name, value] = statement;
-        return [name, desugar(value)];
-      }
-    }),
+    ...kpoEntries(expression.defining).map(([name, value]) => [
+      name,
+      desugar(value),
+    ]),
     desugar(expression.result)
   );
 }

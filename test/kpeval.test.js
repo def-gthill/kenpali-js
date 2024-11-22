@@ -1,13 +1,6 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import {
-  calling,
-  defining,
-  given,
-  importing,
-  literal,
-  name,
-} from "../src/kpast.js";
+import { calling, defining, given, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
@@ -64,10 +57,24 @@ test("Function arguments can reference names", (t) => {
   );
 });
 
-test("Modules can be imported", (t) => {
+test("Names in modules can be accessed", (t) => {
+  const ast = calling(name("bar", "foo"), [literal("world")]);
+  const fooModule = kpobject([
+    "bar",
+    builtin(
+      "bar",
+      { params: [{ name: "name", type: "string" }] },
+      (name) => `Hello, ${name}!`
+    ),
+  ]);
+  const result = kpeval(ast, { modules: kpobject(["foo", fooModule]) });
+  t.is(result, "Hello, world!");
+});
+
+test("Names in modules don't shadow local names", (t) => {
   const ast = defining(
-    importing("foo"),
-    calling(name("bar", "foo"), [literal("world")])
+    ["bar", name("bar", "foo")],
+    calling(name("bar"), [literal("world")])
   );
   const fooModule = kpobject([
     "bar",

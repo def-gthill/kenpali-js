@@ -63,10 +63,6 @@ export function unquote(expression) {
   return { unquote: expression };
 }
 
-export function importing(name) {
-  return { importing: name };
-}
-
 //#region Syntactic sugar
 
 export function group(expression) {
@@ -127,17 +123,10 @@ export function transformTree(expression, handlers) {
     return transformNode("handleDefining", (node) => ({
       ...node,
       defining: Array.isArray(node.defining)
-        ? node.defining.map((statement) => {
-            if ("importing" in statement) {
-              return statement;
-            } else {
-              const [name, value] = statement;
-              return [
-                typeof name === "string" ? name : recurse(name),
-                recurse(value),
-              ];
-            }
-          })
+        ? node.defining.map(([name, value]) => [
+            typeof name === "string" ? name : recurse(name),
+            recurse(value),
+          ])
         : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
       result: recurse(node.result),
     }));
