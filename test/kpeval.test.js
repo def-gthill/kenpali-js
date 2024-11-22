@@ -71,7 +71,7 @@ test("Names in modules can be accessed", (t) => {
   t.is(result, "Hello, world!");
 });
 
-test("Names in modules don't shadow local names", (t) => {
+test("Local names don't shadow names in modules", (t) => {
   const ast = defining(
     ["bar", name("bar", "foo")],
     calling(name("bar"), [literal("world")])
