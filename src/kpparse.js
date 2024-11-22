@@ -169,19 +169,7 @@ function parsePipeline(tokens, start) {
     [
       parseAtomic,
       parseZeroOrMore(
-        parseAnyOf(
-          convert(parseArgumentList, (list) => ["CALL", list]),
-          parseAllOf(
-            [parseSingle("PIPE", () => "PIPECALL"), parseSingleCall],
-            (op, [callee, args]) => [op, callee, args]
-          ),
-          parseAllOf([parseSingle("PIPE", () => "PIPE"), parseAtomic]),
-          parseAllOf([
-            parseSingle("AT", () => "AT"),
-            parseAnyOf(parsePropertyIndex, parseAtomic),
-          ]),
-          parseSingle("BANG", () => ["BANG"])
-        )
+        parseAnyOf(parseCall, parsePipeCall, parsePipe, parseAt, parseBang)
       ),
     ],
     (expression, calls) => {
@@ -194,8 +182,30 @@ function parsePipeline(tokens, start) {
   )(tokens, start);
 }
 
-function parseSingleCall(tokens, start) {
-  return parseAllOf([parseAtomic, parseArgumentList])(tokens, start);
+function parseCall(tokens, start) {
+  return convert(parseArgumentList, (list) => ["CALL", list])(tokens, start);
+}
+
+function parsePipeCall(tokens, start) {
+  return parseAllOf([
+    parseSingle("PIPE", () => "PIPECALL"),
+    parseAtomic,
+    parseArgumentList,
+  ])(tokens, start);
+}
+
+function parsePipe(tokens, start) {
+  return parseAllOf([parseSingle("PIPE", () => "PIPE"), parseAtomic])(
+    tokens,
+    start
+  );
+}
+
+function parseAt(tokens, start) {
+  return parseAllOf([
+    parseSingle("AT", () => "AT"),
+    parseAnyOf(parsePropertyIndex, parseAtomic),
+  ])(tokens, start);
 }
 
 function parsePropertyIndex(tokens, start) {
@@ -203,6 +213,10 @@ function parsePropertyIndex(tokens, start) {
     [parseName, consume("COLON", "expectedPropertyIndex")],
     (name) => literal(name.name)
   )(tokens, start);
+}
+
+function parseBang(tokens, start) {
+  return parseSingle("BANG", () => ["BANG"])(tokens, start);
 }
 
 function parseArrowFunction(tokens, start) {
