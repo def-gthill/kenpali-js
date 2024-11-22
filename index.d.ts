@@ -78,5 +78,9 @@ export function toKpFunction(f: function): Builtin;
 export function kpcatch(f: function): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function matches(value: KpValue, schema: Schema): boolean;
+export function matches(
+  value: KpValue,
+  schema: Schema,
+  options: CallOptions = {}
+): boolean;
 export function toString(value: KpValue): string;

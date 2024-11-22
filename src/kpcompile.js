@@ -49,7 +49,7 @@ export default function kpcompile(
   expression,
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
-  const builtins = kpoMerge(loadBuiltins(modules), names);
+  const builtins = kpoMerge(loadBuiltins(), names);
   const coreAsts = new Map(loadCore());
   return new Compiler(expression, {
     names: builtins,
