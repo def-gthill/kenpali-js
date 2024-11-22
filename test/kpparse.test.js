@@ -2,7 +2,6 @@ import test from "ava";
 import {
   array,
   arraySpread,
-  calling,
   group,
   literal,
   name,
@@ -49,7 +48,13 @@ test("A pipeline parses to a pipeline node", (t) => {
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(name("a"), ["PIPE", name("b")], "BANG", ["AT", name("c")], "BANG")
+    pipeline(
+      name("a"),
+      ["PIPE", name("b")],
+      ["BANG"],
+      ["AT", name("c")],
+      ["BANG"]
+    )
   );
 });
 
@@ -64,7 +69,13 @@ test("An array spread operator in an argument list parses to an arraySpread node
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    calling(name("foo"), [literal(1), arraySpread(name("bar")), literal(3)])
+    pipeline(name("foo"), [
+      "CALL",
+      {
+        args: [literal(1), arraySpread(name("bar")), literal(3)],
+        namedArgs: [],
+      },
+    ])
   );
 });
 
@@ -82,10 +93,12 @@ test("An object spread operator in an argument list parses to an objectSpread no
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    calling(
-      name("foo"),
-      [],
-      [["question", literal(42)], objectSpread(name("foo"))]
-    )
+    pipeline(name("foo"), [
+      "CALL",
+      {
+        args: [],
+        namedArgs: [["question", literal(42)], objectSpread(name("foo"))],
+      },
+    ])
   );
 });

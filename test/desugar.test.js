@@ -49,7 +49,7 @@ test("A forward pipe desugars to a function call", (t) => {
 });
 
 test("A bang operator desugars to a catching node", (t) => {
-  const expression = pipeline(name("x"), "BANG");
+  const expression = pipeline(name("x"), ["BANG"]);
   const result = desugar(expression);
   t.deepEqual(result, catching(name("x")));
 });
@@ -85,19 +85,6 @@ test("Desugaring propagates through function definitions", (t) => {
   const expression = given({}, pipeSugared);
   const result = desugar(expression);
   t.deepEqual(result, given({}, pipeDesugared));
-});
-
-test("Desugaring propagates through function calls", (t) => {
-  const expression = calling(
-    pipeSugared,
-    [pipeSugared],
-    [["foo", pipeSugared]]
-  );
-  const result = desugar(expression);
-  t.deepEqual(
-    result,
-    calling(pipeDesugared, [pipeDesugared], [["foo", pipeDesugared]])
-  );
 });
 
 test("Desugaring propagates through pipelines", (t) => {

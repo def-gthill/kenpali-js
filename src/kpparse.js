@@ -3,7 +3,6 @@ import {
   array,
   arrayPattern,
   arraySpread,
-  calling,
   defining,
   given,
   group,
@@ -168,15 +167,20 @@ function parseAssignable(tokens, start) {
 function parsePipeline(tokens, start) {
   return parseAllOf(
     [
-      parseTightPipeline,
+      parseAtomic,
       parseZeroOrMore(
         parseAnyOf(
-          parseAllOf([parseSingle("PIPE", () => "PIPE"), parseTightPipeline]),
+          convert(parseArgumentList, (list) => ["CALL", list]),
+          parseAllOf(
+            [parseSingle("PIPE", () => "PIPECALL"), parseSingleCall],
+            (op, [callee, args]) => [op, callee, args]
+          ),
+          parseAllOf([parseSingle("PIPE", () => "PIPE"), parseAtomic]),
           parseAllOf([
             parseSingle("AT", () => "AT"),
-            parseAnyOf(parsePropertyIndex, parseTightPipeline),
+            parseAnyOf(parsePropertyIndex, parseAtomic),
           ]),
-          parseSingle("BANG", () => "BANG")
+          parseSingle("BANG", () => ["BANG"])
         )
       ),
     ],
@@ -188,6 +192,10 @@ function parsePipeline(tokens, start) {
       }
     }
   )(tokens, start);
+}
+
+function parseSingleCall(tokens, start) {
+  return parseAllOf([parseAtomic, parseArgumentList])(tokens, start);
 }
 
 function parsePropertyIndex(tokens, start) {
@@ -275,20 +283,6 @@ function parseParameterName(tokens, start) {
   )(tokens, start);
 }
 
-function parseTightPipeline(tokens, start) {
-  return parseAllOf(
-    [parseAtomic, parseZeroOrMore(parseArgumentList)],
-    (expression, calls) => {
-      let axis = expression;
-      for (const call of calls) {
-        const [args, namedArgs] = call.arguments;
-        axis = calling(axis, args, namedArgs);
-      }
-      return axis;
-    }
-  )(tokens, start);
-}
-
 function parseArgumentList(tokens, start) {
   return parseAllOf(
     [
@@ -306,9 +300,7 @@ function parseArgumentList(tokens, start) {
       const namedArgs = args.filter(
         (argument) => Array.isArray(argument) || "objectSpread" in argument
       );
-      return {
-        arguments: [posArgs, namedArgs],
-      };
+      return { args: posArgs, namedArgs };
     }
   )(tokens, start);
 }
