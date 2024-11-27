@@ -1,8 +1,10 @@
-import {
+import { literal } from "./kpast.js";
+import kperror, { transformError } from "./kperror.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
+import kpparse from "./kpparse.js";
+import validate, {
+  argumentError,
   arrayOf,
-  as,
-  bind,
-  default_,
   either,
   is,
   matches,
@@ -10,14 +12,8 @@ import {
   oneOf,
   optional,
   recordLike,
-  rest,
   tupleLike,
-} from "./bind.js";
-import { argumentError } from "./callBuiltin.js";
-import { literal } from "./kpast.js";
-import kperror, { errorToNull, transformError } from "./kperror.js";
-import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
-import kpparse from "./kpparse.js";
+} from "./validate.js";
 import {
   equals,
   isArray,
@@ -445,10 +441,11 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "bind",
+    "validate",
     { params: ["value", "schema"] },
     function ([value, schema], kpcallback) {
-      return bind(value, schema, kpcallback);
+      validate(value, schema, kpcallback);
+      return true;
     }
   ),
   builtin(
@@ -456,28 +453,6 @@ const rawBuiltins = [
     { params: ["value", "schema"] },
     function ([value, schema], kpcallback) {
       return matches(value, schema, kpcallback);
-    }
-  ),
-  builtin(
-    "switch",
-    {
-      params: [
-        "value",
-        {
-          rest: {
-            name: "cases",
-            type: arrayOf(tupleLike(["any", "function"])),
-          },
-        },
-      ],
-    },
-    function ([value, cases], kpcallback) {
-      for (const [schema, f] of cases) {
-        const bindings = errorToNull(() => bind(value, schema));
-        if (bindings) {
-          return kpcallback(f, [value], bindings);
-        }
-      }
     }
   ),
   builtin(
@@ -562,33 +537,6 @@ const rawBuiltins = [
   builtin("either", { params: [{ rest: "schemas" }] }, function ([schemas]) {
     return either(...schemas);
   }),
-  builtin(
-    "as",
-    {
-      params: ["schema", { name: "name", type: "string" }],
-    },
-    function ([schema, name]) {
-      return as(schema, name);
-    }
-  ),
-  builtin(
-    "default",
-    {
-      params: ["schema", "defaultValue"],
-    },
-    function ([schema, defaultValue]) {
-      return default_(schema, defaultValue);
-    }
-  ),
-  builtin(
-    "rest",
-    {
-      params: ["schema"],
-    },
-    function ([schema]) {
-      return rest(schema);
-    }
-  ),
   builtin(
     "error",
     {
@@ -708,7 +656,7 @@ function toValue(expression) {
 }
 
 function validateArgument(value, schema) {
-  transformError(() => bind(value, schema), argumentError);
+  transformError(() => validate(value, schema), argumentError);
 }
 
 export function loadBuiltins() {

@@ -1,12 +1,20 @@
-import { either } from "./bind.js";
 import kperror, {
   errorType,
+  foldError,
   kpcatch,
   transformError,
   withDetails,
+  withErrorType,
 } from "./kperror.js";
 import kpobject from "./kpobject.js";
-import { isFunction, isObject, isString, typeOf } from "./values.js";
+import {
+  equals,
+  isFunction,
+  isObject,
+  isSequence,
+  isString,
+  typeOf,
+} from "./values.js";
 
 export default function validate(value, schema, kpcallback) {
   if (isString(schema)) {
@@ -111,16 +119,19 @@ function validateTypeWithConditionsSchema(value, schema, kpcallback) {
 
 function validateArrayShape(value, shape, kpcallback) {
   for (let i = 0; i < shape.length; i++) {
-    if (
-      i >= value.length &&
-      !(isObject(shape[i]) && shape[i].has("optional"))
-    ) {
-      throw missingElement(value, i + 1, shape);
-    } else {
+    const isOptional = isObject(shape[i]) && shape[i].has("optional");
+    if (i < value.length) {
       transformError(
-        () => validate(value[i], shape[i], kpcallback),
+        () =>
+          validate(
+            value[i],
+            isOptional ? shape[i].get("optional") : shape[i],
+            kpcallback
+          ),
         (err) => withReason(badElement(value, i + 1), err)
       );
+    } else if (!isOptional) {
+      throw missingElement(value, i + 1, shape);
     }
   }
 }
@@ -134,11 +145,103 @@ function validateArrayElements(value, schema, kpcallback) {
   }
 }
 
-function validateObjectShape(value, shape, kpcallback) {}
+function validateObjectShape(value, shape, kpcallback) {
+  for (const [key, propertySchema] of shape) {
+    const isOptional =
+      isObject(propertySchema) && propertySchema.has("optional");
+    if (value.has(key)) {
+      transformError(
+        () =>
+          validate(
+            value.get(key),
+            isOptional ? propertySchema.get("optional") : propertySchema,
+            kpcallback
+          ),
+        (err) => withReason(badProperty(value, key), err)
+      );
+    } else if (!isOptional) {
+      throw missingProperty(value, key);
+    }
+  }
+}
 
-function validateObjectKeys(value, shape, kpcallback) {}
+function validateObjectKeys(value, schema, kpcallback) {
+  for (const [key, _] of value) {
+    transformError(
+      () => validate(key, schema, kpcallback),
+      (err) => withReason(badKey(value, key), err)
+    );
+  }
+}
 
-function validateObjectValues(value, shape, kpcallback) {}
+function validateObjectValues(value, schema, kpcallback) {
+  for (const [key, propertyValue] of value) {
+    transformError(
+      () => validate(propertyValue, schema, kpcallback),
+      (err) => withReason(badProperty(value, key), err)
+    );
+  }
+}
+
+export function matches(value, schema, kpcallback) {
+  return foldError(
+    () => validate(value, schema, kpcallback),
+    () => true,
+    () => false
+  );
+}
+
+export function is(type, where) {
+  const result = kpobject(["type", type]);
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
+}
+
+export function oneOf(values) {
+  return kpobject(["oneOf", values]);
+}
+
+export function arrayOf(elementSchema, where) {
+  const result = kpobject(["type", "array"], ["elements", elementSchema]);
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
+}
+
+export function tupleLike(shape) {
+  return kpobject(["type", "array"], ["shape", shape]);
+}
+
+export function objectOf(keys, values, where) {
+  const result = kpobject(
+    ["type", "object"],
+    ["keys", keys],
+    ["values", values]
+  );
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
+}
+
+export function recordLike(shape) {
+  return kpobject(["type", "object"], ["shape", shape]);
+}
+
+export function optional(schema) {
+  return kpobject(["optional", schema]);
+}
+
+export function either(...schemas) {
+  return kpobject(["either", schemas]);
+}
+
+function invalidSchema(schema) {
+  return kperror("invalidSchema", ["schema", schema]);
+}
 
 function wrongType(value, schema) {
   return kperror("wrongType", ["value", value], ["expectedType", schema]);
@@ -161,6 +264,38 @@ function badElement(value, index) {
   return kperror("badElement", ["value", value], ["index", index]);
 }
 
+function badKey(value, key) {
+  return kperror("badKey", ["value", value], ["key", key]);
+}
+
+function missingProperty(value, key) {
+  return kperror("missingProperty", ["value", value], ["key", key]);
+}
+
+function badProperty(value, key) {
+  return kperror("badProperty", ["value", value], ["key", key]);
+}
+
 function withReason(err, reason) {
   return withDetails(err, ["reason", reason]);
+}
+
+export function argumentError(err) {
+  let updatedErr = err;
+  if (errorType(updatedErr) === "badElement") {
+    updatedErr = withErrorType(updatedErr, "badArgumentValue");
+  } else if (errorType(updatedErr) === "wrongType") {
+    updatedErr = withErrorType(updatedErr, "wrongArgumentType");
+  } else if (errorType(updatedErr) === "badValue") {
+    updatedErr = withErrorType(updatedErr, "badArgumentValue");
+  }
+  return updatedErr;
+}
+
+export function argumentPatternError(err) {
+  if (errorType(err) === "badElement") {
+    return argumentError(err.details.get("reason"));
+  } else {
+    return argumentError(err);
+  }
 }

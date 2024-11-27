@@ -1,7 +1,7 @@
 import test from "ava";
-import { arrayOf, oneOf } from "../src/bind.js";
 import { cast, infer } from "../src/infer.js";
 import { kpoMap } from "../src/kpobject.js";
+import { arrayOf, oneOf } from "../src/validate.js";
 
 // Two main operations:
 // - infer: given an operation and schemas for all inputs, what's the output schema?

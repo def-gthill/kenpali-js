@@ -1,8 +1,3 @@
-import { either } from "./bind.js";
-import callBuiltin, {
-  argumentError,
-  argumentPatternError,
-} from "./callBuiltin.js";
 import {
   ALIAS,
   ARRAY_COPY,
@@ -54,7 +49,11 @@ import {
 } from "./instructions.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
-import validate from "./validate.js";
+import validate, {
+  argumentError,
+  argumentPatternError,
+  either,
+} from "./validate.js";
 import {
   isArray,
   isBoolean,
@@ -546,7 +545,7 @@ class Vm {
 
   callBuiltin(callee) {
     if (this.trace) {
-      console.log(`Call builtin "${callee.builtinName}"`);
+      console.log(`Call builtin "${callee.builtinName ?? "<anonymous>"}"`);
     }
     this.callFrames.push(
       new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
@@ -555,13 +554,13 @@ class Vm {
     const posArgs = this.stack.pop();
     const kpcallback = (f, posArgs, namedArgs) => {
       if (isBuiltin(f)) {
-        return callBuiltin(f, posArgs, namedArgs, kpcallback);
+        return f(posArgs, namedArgs, kpcallback);
       } else {
         return this.callback(f, posArgs, namedArgs);
       }
     };
     try {
-      const result = callBuiltin(callee, posArgs, namedArgs, kpcallback);
+      const result = callee(posArgs, namedArgs, kpcallback);
       this.stack.pop(); // Discard called function
       this.stack.push(result);
       const callFrame = this.callFrames.pop();

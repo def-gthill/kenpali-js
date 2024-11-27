@@ -525,7 +525,10 @@ class Compiler {
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(FUNCTION, 0);
     this.addMark({ functionNumber: this.finishedFunctions.length });
-    this.addDiagnostic({ name: expression.builtinName, isBuiltin: true });
+    this.addDiagnostic({
+      name: expression.builtinName ?? "<anonymous>",
+      isBuiltin: true,
+    });
     this.finishedFunctions.push(finishedFunction);
   }
 

@@ -107,7 +107,6 @@ test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t)
 
   const result = kpcall(kpf, [callback], {});
 
-  t.is(callback.builtinName, "<anonymous>");
   t.is(result, 42);
 });
 

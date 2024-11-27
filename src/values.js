@@ -118,7 +118,7 @@ export function toString(value) {
       return `function ${value.name}`;
     }
   } else if (isBuiltin(value)) {
-    return `function ${value.builtinName ?? value.name}`;
+    return `function ${value.builtinName ?? value.name ?? "<anonymous>"}`;
   } else if (isError(value)) {
     return `error ${value.error} ${toString(value.details)}`;
   } else {
