@@ -35,6 +35,7 @@ export type KpValue =
   | KpError;
 
 export type Schema = KpValue;
+export type JsSchema = object;
 
 export interface KpProgram {
   instructions: any[];
@@ -78,9 +79,5 @@ export function toKpFunction(f: function): Builtin;
 export function kpcatch(f: function): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function matches(
-  value: KpValue,
-  schema: Schema,
-  options: CallOptions = {}
-): boolean;
+export function matches(value: KpValue, schema: JsSchema): boolean;
 export function toString(value: KpValue): string;
