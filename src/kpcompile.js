@@ -70,7 +70,6 @@ export default function kpcompile(
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const coreAsts = new Map([...loadCore(), ...builtins]);
-  // const coreAsts = new Map(loadCore());
   return new Compiler(expression, {
     names: builtins,
     library: coreAsts,
@@ -79,8 +78,13 @@ export default function kpcompile(
   }).compile();
 }
 
+let coreAst = null;
+
 function loadCore() {
-  return kpparseModule(core);
+  if (!coreAst) {
+    coreAst = kpparseModule(core);
+  }
+  return coreAst;
 }
 
 class Compiler {
