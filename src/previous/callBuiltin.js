@@ -48,9 +48,6 @@ function argumentErrorGivenParamObjects(paramObjects, err) {
 export function argumentError(err, argumentNames) {
   let updatedErr = err;
   if (errorType(updatedErr) === "badElement") {
-    updatedErr = updatedErr.details.get("reason");
-  }
-  if (errorType(updatedErr) === "badElement") {
     updatedErr = withErrorType(updatedErr, "badArgumentValue");
   } else if (errorType(updatedErr) === "wrongType") {
     updatedErr = withErrorType(updatedErr, "wrongArgumentType");
@@ -63,6 +60,14 @@ export function argumentError(err, argumentNames) {
     ]);
   }
   return updatedErr;
+}
+
+export function argumentPatternError(err, argumentNames) {
+  if (errorType(err) === "badElement") {
+    return argumentError(err.details.get("reason"), argumentNames);
+  } else {
+    return argumentError(err, argumentNames);
+  }
 }
 
 export function paramsFromBuiltin(f) {

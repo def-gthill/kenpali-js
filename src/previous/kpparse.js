@@ -6,7 +6,6 @@ import {
   defining,
   given,
   group,
-  importing,
   literal,
   name,
   object,
@@ -64,7 +63,7 @@ function parse(tokens, start) {
 function parseScope(tokens, start) {
   return parseAllOf(
     [
-      parseZeroOrMore(parseAnyOf(parseNameDefinition, parseImport), {
+      parseZeroOrMore(parseNameDefinition, {
         terminator: consume("SEMICOLON"),
         errorIfTerminatorMissing: "missingDefinitionSeparator",
       }),
@@ -150,13 +149,6 @@ function parseObjectPatternPropertyName(tokens, start) {
   return parseAllOf(
     [parseName, consume("COLON", "expectedPropertyName")],
     (name) => name.name
-  )(tokens, start);
-}
-
-function parseImport(tokens, start) {
-  return parseAllOf(
-    [consume("PLUS_PLUS", "expectedImport"), parseName],
-    (name) => importing(name.name)
   )(tokens, start);
 }
 

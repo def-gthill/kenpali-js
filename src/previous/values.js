@@ -20,6 +20,10 @@ export function typeOf(value) {
   }
 }
 
+export function isNull(value) {
+  return value === null;
+}
+
 export function isBoolean(value) {
   return typeof value === "boolean";
 }
@@ -37,14 +41,21 @@ export function isArray(value) {
 }
 
 export function isBuiltin(value) {
-  return typeof value === "function";
+  return (
+    typeof value === "function" ||
+    (value !== null &&
+      typeof value === "object" &&
+      "target" in value &&
+      value.isBuiltin)
+  );
 }
 
 export function isGiven(value) {
   return (
     value !== null &&
     typeof value === "object" &&
-    ("given" in value || "target" in value)
+    "target" in value &&
+    !value.isBuiltin
   );
 }
 
@@ -100,8 +111,14 @@ export function toString(value) {
         .join(", ") +
       "}"
     );
+  } else if (isGiven(value)) {
+    if (value.closure.length > 0) {
+      return `function ${value.name} closure=${toString(value.closure)}`;
+    } else {
+      return `function ${value.name}`;
+    }
   } else if (isBuiltin(value)) {
-    return `function ${value.builtinName}`;
+    return `function ${value.builtinName ?? value.name}`;
   } else if (isError(value)) {
     return `error ${value.error} ${toString(value.details)}`;
   } else {

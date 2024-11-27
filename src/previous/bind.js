@@ -374,12 +374,7 @@ function bindObjectShape(value, schema, kpcallback) {
     }
     ownBindings.set(restName, [
       rest,
-      objectOf(
-        kpobject(
-          ["keys", "string"],
-          ["values", schema.get(restName).get("rest")]
-        )
-      ),
+      objectOf("string", schema.get(restName).get("rest")),
     ]);
   }
   return kpobject(
@@ -403,27 +398,40 @@ export function matches(value, schema, kpcallback) {
   );
 }
 
-export function is(type, namedArgs = kpobject()) {
-  return kpoMerge(kpobject(["type", type]), namedArgs);
+export function is(type, where) {
+  const result = kpobject(["type", type]);
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
 }
 
 export function oneOf(values) {
   return kpobject(["oneOf", values]);
 }
 
-export function arrayOf(elementSchema, namedArgs = kpobject()) {
-  return kpoMerge(
-    kpobject(["type", "array"], ["elements", elementSchema]),
-    namedArgs
-  );
+export function arrayOf(elementSchema, where) {
+  const result = kpobject(["type", "array"], ["elements", elementSchema]);
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
 }
 
 export function tupleLike(shape) {
   return kpobject(["type", "array"], ["shape", shape]);
 }
 
-export function objectOf(namedArgs) {
-  return kpoMerge(kpobject(["type", "object"]), namedArgs);
+export function objectOf(keys, values, where) {
+  const result = kpobject(
+    ["type", "object"],
+    ["keys", keys],
+    ["values", values]
+  );
+  if (where) {
+    result.set("where", where);
+  }
+  return result;
 }
 
 export function recordLike(shape) {
