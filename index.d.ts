@@ -35,7 +35,7 @@ export type KpValue =
   | KpError;
 
 export type Schema = KpValue;
-export type JsSchema = object;
+export type JsSchema = string | object;
 
 export interface KpProgram {
   instructions: any[];
