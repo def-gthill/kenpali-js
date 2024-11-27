@@ -14,6 +14,7 @@ import {
   tupleLike,
 } from "./bind.js";
 import { argumentError } from "./callBuiltin.js";
+import { literal } from "./kpast.js";
 import kperror, { errorToNull, transformError } from "./kperror.js";
 import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -36,9 +37,9 @@ import {
 const rawBuiltins = [
   builtin(
     "plus",
-    { params: [{ rest: { name: "rest", type: "number" } }] },
-    function (args) {
-      return args.reduce((acc, value) => acc + value, 0);
+    { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
+    function ([numbers]) {
+      return numbers.reduce((acc, value) => acc + value, 0);
     }
   ),
   builtin(
@@ -76,9 +77,9 @@ const rawBuiltins = [
   ),
   builtin(
     "times",
-    { params: [{ rest: { name: "rest", type: "number" } }] },
-    function (args) {
-      return args.reduce((acc, value) => acc * value, 1);
+    { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
+    function ([numbers]) {
+      return numbers.reduce((acc, value) => acc * value, 1);
     }
   ),
   builtin(
@@ -123,12 +124,12 @@ const rawBuiltins = [
         {
           name: "with",
           type: "string",
-          defaultValue: "",
+          defaultValue: literal(""),
         },
       ],
     },
-    function ([strings], namedArgs) {
-      return strings.join(namedArgs.get("with"));
+    function ([strings, with_]) {
+      return strings.join(with_);
     }
   ),
   builtin(
@@ -209,10 +210,10 @@ const rawBuiltins = [
     {
       params: [
         { name: "first", type: "boolean" },
-        { rest: { name: "rest", type: "function" } },
+        { rest: { name: "rest", type: arrayOf("function") } },
       ],
     },
-    function ([first, ...rest], _, kpcallback) {
+    function ([first, rest], kpcallback) {
       if (!first) {
         return false;
       }
@@ -237,10 +238,10 @@ const rawBuiltins = [
     {
       params: [
         { name: "first", type: "boolean" },
-        { rest: { name: "rest", type: "function" } },
+        { rest: { name: "rest", type: arrayOf("function") } },
       ],
     },
-    function ([first, ...rest], _, kpcallback) {
+    function ([first, rest], kpcallback) {
       if (first) {
         return true;
       }
@@ -327,11 +328,11 @@ const rawBuiltins = [
         { name: "else", type: "function" },
       ],
     },
-    function ([condition], namedArgs, kpcallback) {
+    function ([condition, then, else_], kpcallback) {
       if (condition) {
-        return kpcallback(namedArgs.get("then"), [], kpobject());
+        return kpcallback(then, [], kpobject());
       } else {
-        return kpcallback(namedArgs.get("else"), [], kpobject());
+        return kpcallback(else_, [], kpobject());
       }
     }
   ),
@@ -343,24 +344,24 @@ const rawBuiltins = [
         {
           name: "while",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
         { name: "next", type: "function" },
         {
           name: "continueIf",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([start], namedArgs, kpcallback) {
+    function ([start, while_, next, continueIf], kpcallback) {
       let result = start;
       loop(
         "repeat",
         start,
-        namedArgs.get("while"),
-        namedArgs.get("next"),
-        namedArgs.get("continueIf"),
+        while_,
+        next,
+        continueIf,
         (current) => {
           result = current;
         },
@@ -384,32 +385,32 @@ const rawBuiltins = [
         {
           name: "while",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
         { name: "next", type: "function" },
         {
           name: "out",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
         {
           name: "continueIf",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([start], namedArgs, kpcallback) {
+    function ([start, while_, next, out, continueIf], kpcallback) {
       const result = [];
       loop(
         "build",
         start,
-        namedArgs.get("while"),
-        namedArgs.get("next"),
-        namedArgs.get("continueIf"),
+        while_,
+        next,
+        continueIf,
         (current) => {
-          const outElements = namedArgs.get("out")
-            ? kpcallback(namedArgs.get("out"), [current], kpobject())
+          const outElements = out
+            ? kpcallback(out, [current], kpobject())
             : [current];
           result.push(...outElements);
         },
@@ -446,14 +447,14 @@ const rawBuiltins = [
   builtin(
     "bind",
     { params: ["value", "schema"] },
-    function ([value, schema], _, kpcallback) {
+    function ([value, schema], kpcallback) {
       return bind(value, schema, kpcallback);
     }
   ),
   builtin(
     "matches",
     { params: ["value", "schema"] },
-    function ([value, schema], _, kpcallback) {
+    function ([value, schema], kpcallback) {
       return matches(value, schema, kpcallback);
     }
   ),
@@ -462,10 +463,15 @@ const rawBuiltins = [
     {
       params: [
         "value",
-        { rest: { name: "cases", type: tupleLike(["any", "function"]) } },
+        {
+          rest: {
+            name: "cases",
+            type: arrayOf(tupleLike(["any", "function"])),
+          },
+        },
       ],
     },
-    function ([value, ...cases], _, kpcallback) {
+    function ([value, cases], kpcallback) {
       for (const [schema, f] of cases) {
         const bindings = errorToNull(() => bind(value, schema));
         if (bindings) {
@@ -482,15 +488,15 @@ const rawBuiltins = [
         {
           name: "where",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([type], namedArgs) {
-      return is(type, namedArgs);
+    function ([type, where]) {
+      return is(type, where);
     }
   ),
-  builtin("oneOf", { params: [{ rest: "values" }] }, function (values) {
+  builtin("oneOf", { params: [{ rest: "values" }] }, function ([values]) {
     return oneOf(values);
   }),
   builtin(
@@ -501,12 +507,12 @@ const rawBuiltins = [
         {
           name: "where",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([type], namedArgs) {
-      return arrayOf(type, namedArgs);
+    function ([elementSchema, where]) {
+      return arrayOf(elementSchema, where);
     }
   ),
   builtin(
@@ -522,17 +528,17 @@ const rawBuiltins = [
     "objectOf",
     {
       namedParams: [
-        { name: "keys", defaultValue: "string" },
+        { name: "keys", defaultValue: literal("string") },
         "values",
         {
           name: "where",
           type: either("function", "null"),
-          defaultValue: null,
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([], namedArgs) {
-      return objectOf(namedArgs);
+    function ([keys, values, where]) {
+      return objectOf(keys, values, where);
     }
   ),
   builtin(
@@ -553,7 +559,7 @@ const rawBuiltins = [
       return optional(schema);
     }
   ),
-  builtin("either", { params: [{ rest: "schemas" }] }, function (schemas) {
+  builtin("either", { params: [{ rest: "schemas" }] }, function ([schemas]) {
     return either(...schemas);
   }),
   builtin(
@@ -589,7 +595,7 @@ const rawBuiltins = [
       params: [{ name: "type", type: "string" }],
       namedParams: [{ rest: "details" }],
     },
-    function ([type], details) {
+    function ([type, details]) {
       return kperror(type, ...kpoEntries(details));
     }
   ),

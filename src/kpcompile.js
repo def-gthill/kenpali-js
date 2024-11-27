@@ -1,22 +1,40 @@
 import { loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import {
+  ALIAS,
   ARRAY_COPY,
   ARRAY_CUT,
   ARRAY_EXTEND,
+  ARRAY_IS_EMPTY,
   ARRAY_POP,
   ARRAY_POP_OR_DEFAULT,
   ARRAY_PUSH,
   ARRAY_REVERSE,
   CALL,
+  CALL_BUILTIN,
   CAPTURE,
   CATCH,
   CLOSURE,
   DISCARD,
   EMPTY_ARRAY,
   EMPTY_OBJECT,
+  ERROR_IF_INVALID,
   FUNCTION,
   INDEX,
+  IS_ARRAY,
+  IS_BOOLEAN,
+  IS_BUILTIN,
+  IS_ERROR,
+  IS_FUNCTION,
+  IS_GIVEN,
+  IS_NULL,
+  IS_NUMBER,
+  IS_OBJECT,
+  IS_SEQUENCE,
+  IS_STRING,
+  JUMP,
+  JUMP_IF_FALSE,
+  JUMP_IF_TRUE,
   OBJECT_COPY,
   OBJECT_MERGE,
   OBJECT_POP,
@@ -36,6 +54,7 @@ import { defining, transformTree } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
+import { isObject, isString } from "./values.js";
 
 export function kpcompileJson(
   json,
@@ -50,7 +69,8 @@ export default function kpcompile(
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
-  const coreAsts = new Map(loadCore());
+  const coreAsts = new Map([...loadCore(), ...builtins]);
+  // const coreAsts = new Map(loadCore());
   return new Compiler(expression, {
     names: builtins,
     library: coreAsts,
@@ -131,7 +151,9 @@ class Compiler {
   }
 
   compileExpression(expression) {
-    if (expression === null || typeof expression !== "object") {
+    if (typeof expression === "function") {
+      this.compileBuiltin(expression);
+    } else if (expression === null || typeof expression !== "object") {
       throw kperror("notAnExpression", ["value", expression]);
     } else if ("literal" in expression) {
       this.compileLiteral(expression);
@@ -309,7 +331,7 @@ class Compiler {
       for (const element of pattern.objectPattern) {
         this.declareNames(element);
       }
-    } else if ("defaultValue" in pattern) {
+    } else if ("name" in pattern) {
       this.declareNames(pattern.name);
     } else if ("rest" in pattern) {
       this.declareNames(pattern.rest);
@@ -318,41 +340,49 @@ class Compiler {
     }
   }
 
-  assignNames(pattern, { isArgument = false } = {}) {
+  assignNames(pattern, { isArgumentPattern = false, isArgument = false } = {}) {
     const activeScope = this.activeScopes.at(-1);
     if (typeof pattern === "string") {
       this.addInstruction(WRITE_LOCAL, activeScope.getSlot(pattern));
       this.addDiagnostic({ name: pattern });
     } else if ("arrayPattern" in pattern) {
-      this.assignNamesInArrayPattern(pattern, { isArgument });
+      this.assignNamesInArrayPattern(pattern, { isArgumentPattern });
     } else if ("objectPattern" in pattern) {
-      this.assignNamesInObjectPattern(pattern, { isArgument });
+      this.assignNamesInObjectPattern(pattern, { isArgumentPattern });
+    } else if ("name" in pattern) {
+      if ("type" in pattern) {
+        this.validate(pattern.type, { isArgument, isArgumentPattern });
+      }
+      this.assignNames(pattern.name);
     }
   }
 
-  assignNamesInArrayPattern(pattern, { isArgument }) {
-    this.addInstruction(ARRAY_REVERSE);
+  assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
     this.addInstruction(ARRAY_COPY);
+    this.addInstruction(ARRAY_REVERSE);
     for (let i = 0; i < pattern.arrayPattern.length; i++) {
       const element = pattern.arrayPattern[i];
       if (typeof element === "object" && "rest" in element) {
         this.addInstruction(ARRAY_CUT, pattern.arrayPattern.length - i - 1);
         this.addInstruction(ARRAY_REVERSE);
-        this.assignNames(element.rest);
+        this.assignNames(element.rest, { isArgumentPattern });
       } else if (typeof element === "object" && "defaultValue" in element) {
         this.compileExpression(element.defaultValue);
         this.addInstruction(ARRAY_POP_OR_DEFAULT);
-        this.assignNames(element.name);
+        this.assignNames(element.name, { isArgument: isArgumentPattern });
       } else {
         this.addInstruction(ARRAY_POP);
-        this.addDiagnostic({ name: element, isArgument });
-        this.assignNames(element);
+        this.addDiagnostic({
+          name: this.paramName(element),
+          isArgument: isArgumentPattern,
+        });
+        this.assignNames(element, { isArgument: isArgumentPattern });
       }
     }
     this.addInstruction(DISCARD);
   }
 
-  assignNamesInObjectPattern(pattern, { isArgument }) {
+  assignNamesInObjectPattern(pattern, { isArgumentPattern }) {
     this.addInstruction(OBJECT_COPY);
     let rest = null;
     for (const element of pattern.objectPattern) {
@@ -362,16 +392,19 @@ class Compiler {
         this.addInstruction(VALUE, element.name);
         this.compileExpression(element.defaultValue);
         this.addInstruction(OBJECT_POP_OR_DEFAULT);
-        this.assignNames(element.name);
+        this.assignNames(element.name, { isArgument: isArgumentPattern });
       } else {
-        this.addInstruction(VALUE, element);
+        this.addInstruction(VALUE, this.paramName(element));
         this.addInstruction(OBJECT_POP);
-        this.addDiagnostic({ name: element, isArgument });
-        this.assignNames(element);
+        this.addDiagnostic({
+          name: this.paramName(element),
+          isArgument: isArgumentPattern,
+        });
+        this.assignNames(element, { isArgument: isArgumentPattern });
       }
     }
     if (rest) {
-      this.assignNames(rest);
+      this.assignNames(rest, { isArgumentPattern });
     } else {
       this.addInstruction(DISCARD);
     }
@@ -407,12 +440,12 @@ class Compiler {
     if (paramPattern.arrayPattern.length > 0) {
       this.addInstruction(READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgument: true });
+      this.assignNames(paramPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.objectPattern.length > 0) {
       this.addInstruction(READ_LOCAL, 0, 2);
       this.addDiagnostic({ name: "<namedArgs>" });
-      this.assignNames(namedParamPattern, { isArgument: true });
+      this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
     this.compileExpression(expression.result);
     this.addInstruction(WRITE_LOCAL, 0);
@@ -425,6 +458,7 @@ class Compiler {
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(FUNCTION, 0);
     this.addMark({ functionNumber: this.finishedFunctions.length });
+    this.addDiagnostic({ name: "<given>", isBuiltin: false });
     this.finishedFunctions.push(finishedFunction);
     for (const upvalue of finishedFunction.upvalues) {
       this.addInstruction(CLOSURE, upvalue.numLayers, upvalue.slot);
@@ -440,6 +474,55 @@ class Compiler {
         this.addInstruction(DISCARD);
       }
     }
+  }
+
+  compileBuiltin(expression) {
+    if (this.trace) {
+      console.log(`Compiling builtin ${expression.builtinName}`);
+    }
+    this.pushScope({
+      reservedSlots: 3,
+      functionStackIndex: this.activeFunctions.length,
+    });
+    this.activeFunctions.push(new CompiledFunction());
+    const paramPattern = { arrayPattern: expression.params ?? [] };
+    const namedParamPattern = {
+      objectPattern: expression.namedParams ?? [],
+    };
+    if (paramPattern.arrayPattern.length > 0) {
+      this.declareNames(paramPattern);
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.declareNames(namedParamPattern);
+    }
+    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
+    this.addInstruction(RESERVE, numDeclaredNames);
+    if (paramPattern.arrayPattern.length > 0) {
+      this.addInstruction(READ_LOCAL, 0, 1);
+      this.addDiagnostic({ name: "<posArgs>" });
+      this.assignNames(paramPattern, { isArgumentPattern: true });
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.addInstruction(READ_LOCAL, 0, 2);
+      this.addDiagnostic({ name: "<namedArgs>" });
+      this.assignNames(namedParamPattern, { isArgumentPattern: true });
+    }
+    this.addInstruction(VALUE, expression);
+    this.addInstruction(WRITE_LOCAL, 2);
+    this.addDiagnostic({ name: "<builtin>" });
+    this.addInstruction(PUSH, -numDeclaredNames);
+    this.addInstruction(CALL_BUILTIN);
+    this.addInstruction(POP);
+    this.addInstruction(WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.addInstruction(DISCARD); // The positional arguments handoff
+    // (The named arguments slot already got trampled by the result)
+    this.popScope();
+    const finishedFunction = this.activeFunctions.pop();
+    this.addInstruction(FUNCTION, 0);
+    this.addMark({ functionNumber: this.finishedFunctions.length });
+    this.addDiagnostic({ name: expression.builtinName, isBuiltin: true });
+    this.finishedFunctions.push(finishedFunction);
   }
 
   compileCalling(expression) {
@@ -472,6 +555,273 @@ class Compiler {
       jumpIndex - catchIndex;
   }
 
+  validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
+    this.validateRecursive(schema);
+    this.addInstruction(VALUE, schema);
+    this.addInstruction(ERROR_IF_INVALID);
+    this.addDiagnostic({ isArgument, isArgumentPattern });
+  }
+
+  validateRecursive(schema) {
+    if (isString(schema)) {
+      this.validateTypeSchema(schema);
+    } else if (isObject(schema)) {
+      if (schema.has("either")) {
+        this.validateEitherSchema(schema);
+      } else if (schema.has("oneOf")) {
+        this.validateOneOfSchema(schema);
+      } else if (schema.has("type")) {
+        this.validateTypeWithConditionsSchema(schema);
+      } else {
+        this.invalidSchema(schema);
+      }
+    } else {
+      this.invalidSchema(schema);
+    }
+  }
+
+  typeValidationInstructions = {
+    null: IS_NULL,
+    boolean: IS_BOOLEAN,
+    number: IS_NUMBER,
+    string: IS_STRING,
+    array: IS_ARRAY,
+    object: IS_OBJECT,
+    builtin: IS_BUILTIN,
+    given: IS_GIVEN,
+    error: IS_ERROR,
+    function: IS_FUNCTION,
+    sequence: IS_SEQUENCE,
+  };
+
+  validateTypeSchema(schema) {
+    if (schema === "any") {
+      this.addInstruction(VALUE, true);
+      return;
+    }
+    this.addInstruction(ALIAS);
+    const instruction = this.typeValidationInstructions[schema];
+    if (instruction === undefined) {
+      this.invalidSchema(schema);
+    }
+    this.addInstruction(instruction);
+  }
+
+  validateEitherSchema(schema) {
+    const jumpIndices = [];
+    for (const option of schema.get("either")) {
+      this.validateRecursive(option);
+      this.addInstruction(JUMP_IF_TRUE, 0);
+      jumpIndices.push(this.nextInstructionIndex());
+    }
+    this.addInstruction(VALUE, false);
+    this.addInstruction(JUMP, 2);
+    for (const jumpIndex of jumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, true);
+  }
+
+  validateOneOfSchema(schema) {
+    const jumpIndices = [];
+    for (const option of schema.get("oneOf")) {
+      this.addInstruction(ALIAS);
+      this.addInstruction(VALUE, option);
+      this.addInstruction(EQUALS);
+      this.addInstruction(JUMP_IF_TRUE, 0);
+      jumpIndices.push(this.nextInstructionIndex());
+    }
+    this.addInstruction(VALUE, false);
+    this.addInstruction(JUMP, 2);
+    for (const jumpIndex of jumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, true);
+  }
+
+  validateTypeWithConditionsSchema(schema) {
+    const jumpIndices = [];
+
+    const failIfFalse = () => {
+      this.addInstruction(JUMP_IF_FALSE, 0);
+      jumpIndices.push(this.nextInstructionIndex());
+    };
+
+    this.validateTypeSchema(schema.get("type"));
+    failIfFalse();
+
+    if (schema.get("type") === "array") {
+      if (schema.has("shape")) {
+        this.validateArrayShape(schema.get("shape"));
+        failIfFalse();
+      }
+      if (schema.has("elements")) {
+        this.validateArrayElements(schema.get("elements"));
+        failIfFalse();
+      }
+    } else if (schema.get("type") === "object") {
+      if (schema.has("shape")) {
+        this.validateObjectShape(schema.get("shape"));
+        failIfFalse();
+      }
+      if (schema.has("keys")) {
+        this.validateObjectKeys(schema.get("keys"));
+        failIfFalse();
+      }
+      if (schema.has("values")) {
+        this.validateObjectValues(schema.get("values"));
+        failIfFalse();
+      }
+    }
+    this.addInstruction(VALUE, true);
+    this.addInstruction(JUMP, 2);
+    for (const jumpIndex of jumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, false);
+  }
+
+  validateArrayShape(shape) {
+    this.addInstruction(ALIAS);
+    this.addInstruction(ARRAY_COPY);
+    this.addInstruction(ARRAY_REVERSE);
+    const passJumpIndices = [];
+    const failJumpIndices = [];
+    for (const element of shape) {
+      this.addInstruction(ALIAS);
+      this.addInstruction(ARRAY_IS_EMPTY);
+      this.addInstruction(JUMP_IF_TRUE, 0);
+      let subschema;
+      if (isObject(element) && element.has("optional")) {
+        subschema = element.get("optional");
+        passJumpIndices.push(this.nextInstructionIndex());
+      } else {
+        subschema = element;
+        failJumpIndices.push(this.nextInstructionIndex());
+      }
+      this.addInstruction(ARRAY_POP);
+      this.validateRecursive(subschema);
+      this.addInstruction(JUMP_IF_FALSE, 0);
+      failJumpIndices.push(this.nextInstructionIndex());
+      this.addInstruction(DISCARD);
+    }
+    this.addInstruction(DISCARD);
+    for (const jumpIndex of passJumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, true);
+    this.addInstruction(JUMP, 2);
+    for (const jumpIndex of failJumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, false);
+  }
+
+  validateArrayElements(schema) {
+    this.addInstruction(ALIAS);
+    this.addInstruction(ARRAY_COPY);
+    this.validateAll(schema);
+  }
+
+  validateObjectShape(shape) {
+    this.addInstruction(ALIAS);
+    this.addInstruction(OBJECT_COPY);
+    const failJumpIndices = [];
+    for (const [key, valueSchema] of shape) {
+      if (isObject(valueSchema) && valueSchema.has("optional")) {
+        this.addInstruction(VALUE, key);
+        this.addInstruction(OBJECT_HAS);
+        this.addInstruction(JUMP_IF_FALSE, 0);
+        const jumpIndex = this.nextInstructionIndex();
+        this.addInstruction(VALUE, key);
+        this.addInstruction(OBJECT_POP);
+        this.validateRecursive(valueSchema.get("optional"));
+        this.addInstruction(JUMP_IF_FALSE, 0);
+        failJumpIndices.push(this.nextInstructionIndex());
+        this.setInstruction(
+          jumpIndex - 1,
+          this.nextInstructionIndex() - jumpIndex
+        );
+      } else {
+        this.addInstruction(VALUE, key);
+        this.addInstruction(OBJECT_HAS);
+        this.addInstruction(JUMP_IF_FALSE, 0);
+        failJumpIndices.push(this.nextInstructionIndex());
+        this.addInstruction(VALUE, key);
+        this.addInstruction(OBJECT_POP);
+        this.validateRecursive(valueSchema);
+        this.addInstruction(JUMP_IF_FALSE, 0);
+        failJumpIndices.push(this.nextInstructionIndex());
+      }
+      this.addInstruction(DISCARD);
+    }
+    this.addInstruction(DISCARD);
+    this.addInstruction(VALUE, true);
+    this.addInstruction(JUMP, 2);
+    for (const jumpIndex of failJumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(VALUE, false);
+  }
+
+  validateObjectKeys(schema) {
+    this.addInstruction(ALIAS);
+    this.addInstruction(OBJECT_KEYS);
+    this.validateAll(schema);
+  }
+
+  validateObjectValues(schema) {
+    this.addInstruction(ALIAS);
+    this.addInstruction(OBJECT_VALUES);
+    this.validateAll(schema);
+  }
+
+  validateAll(schema) {
+    const backwardLoopIndex = this.nextInstructionIndex();
+    this.addInstruction(ALIAS);
+    this.addInstruction(ARRAY_IS_EMPTY);
+    this.addInstruction(JUMP_IF_TRUE, 0);
+    const forwardLoopIndex = this.nextInstructionIndex();
+    this.addInstruction(ARRAY_POP);
+    this.validateRecursive(schema);
+    this.addInstruction(JUMP_IF_FALSE, 0);
+    const failJumpIndex = this.nextInstructionIndex();
+    this.addInstruction(DISCARD);
+    this.addInstruction(JUMP, 0);
+    this.setInstruction(
+      this.nextInstructionIndex() - 1,
+      backwardLoopIndex - this.nextInstructionIndex()
+    );
+    this.setInstruction(
+      forwardLoopIndex - 1,
+      this.nextInstructionIndex() - forwardLoopIndex
+    );
+    this.addInstruction(DISCARD);
+    this.addInstruction(VALUE, true);
+    this.addInstruction(JUMP, 4);
+    this.setInstruction(
+      failJumpIndex - 1,
+      this.nextInstructionIndex() - failJumpIndex
+    );
+    this.addInstruction(DISCARD); // The value that failed
+    this.addInstruction(DISCARD); // The working array
+    this.addInstruction(VALUE, false);
+  }
+
+  invalidSchema(schema) {
+    throw kperror("invalidSchema", ["schema", schema]);
+  }
+
+  paramName(param) {
+    return typeof param === "string" ? param : param.name;
+  }
+
   currentScope() {
     return this.activeScopes.at(-1);
   }
@@ -502,6 +852,14 @@ class Compiler {
 
   addInstruction(...instruction) {
     this.currentFunction().instructions.push(...instruction);
+  }
+
+  setInstruction(index, value) {
+    this.currentFunction().instructions[index] = value;
+  }
+
+  nextInstructionIndex() {
+    return this.currentFunction().instructions.length;
   }
 
   addMark(mark) {
