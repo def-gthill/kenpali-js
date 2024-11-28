@@ -666,7 +666,6 @@ class Vm {
         this.throw_(
           kperror(
             "indexOutOfBounds",
-            ["function", "at"],
             ["value", collection],
             ["length", collection.length],
             ["index", index]
