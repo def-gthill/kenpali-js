@@ -34,8 +34,57 @@ export type KpValue =
   | Given
   | KpError;
 
-export type Schema = KpValue;
-export type JsSchema = string | object;
+export type TypeSchema =
+  | "null"
+  | "boolean"
+  | "number"
+  | "string"
+  | "array"
+  | "object"
+  | "builtin"
+  | "given"
+  | "error"
+  | "function"
+  | "sequence";
+
+export interface EitherSchema {
+  either: Schema[];
+}
+
+export interface OneOfSchema {
+  oneOf: KpValue[];
+}
+
+export interface TypeWithWhereSchema {
+  type: TypeSchema;
+  where: (value: KpValue) => boolean;
+}
+
+export interface ArrayWithConditionsSchema {
+  type: "array";
+  shape?: Schema[];
+  elements?: Schema;
+  where?: (value: KpValue) => boolean;
+}
+
+export interface ObjectWithConditionsSchema {
+  type: "object";
+  shape?: Record<string, Schema>;
+  keys?: TypeWithWhereSchema & { type: "string" };
+  values?: Schema;
+  where?: (value: KpValue) => boolean;
+}
+
+export type TypeWithConditionsSchema =
+  | TypeWithWhereSchema
+  | ArrayWithConditionsSchema
+  | ObjectWithConditionsSchema;
+
+export type Schema =
+  | TypeSchema
+  | EitherSchema
+  | OneOfSchema
+  | TypeWithConditionsSchema;
 
 export interface KpProgram {
   instructions: any[];
@@ -79,5 +128,6 @@ export function toKpFunction(f: function): Builtin;
 export function kpcatch(f: function): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function matches(value: KpValue, schema: JsSchema): boolean;
+export function matches(value: KpValue, schema: Schema): boolean;
+export function validate(value: KpValue, schema: Schema): void;
 export function toString(value: KpValue): string;
