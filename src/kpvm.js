@@ -342,11 +342,17 @@ export class Vm {
           this.throw_(kperror("missingArgument", ["name", diagnostic.name]));
           return;
         } else {
-          this.throw_(kperror("missingElement", ["name", diagnostic.name]));
+          this.throw_(
+            kperror(
+              "missingElement",
+              ["value", value],
+              ["name", diagnostic.name]
+            )
+          );
           return;
         }
       } else {
-        this.throw_(kperror("missingElement"));
+        this.throw_(kperror("missingElement", ["value", value]));
         return;
       }
     }
@@ -421,6 +427,23 @@ export class Vm {
     }
     const key = this.stack.pop();
     const value = this.stack.at(-1).get(key);
+    if (value === undefined) {
+      const diagnostic = this.getDiagnostic();
+      if (diagnostic) {
+        if (diagnostic.isArgument) {
+          this.throw_(kperror("missingArgument", ["name", key]));
+          return;
+        } else {
+          this.throw_(
+            kperror("missingProperty", ["value", value], ["key", key])
+          );
+          return;
+        }
+      } else {
+        this.throw_(kperror("missingProperty", ["value", value], ["key", key]));
+        return;
+      }
+    }
     this.stack.at(-1).delete(key);
     this.stack.push(value);
   }
