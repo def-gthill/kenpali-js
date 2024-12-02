@@ -89,7 +89,7 @@ export function kpvmCall(
   );
 }
 
-class Vm {
+export class Vm {
   constructor(
     { instructions, diagnostics = [] },
     { trace = false, timeLimitSeconds = 0 } = {}
