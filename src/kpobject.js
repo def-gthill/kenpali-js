@@ -1,4 +1,4 @@
-import { isArray, isError, isFunction } from "./values";
+import { isArray, isError, isFunction } from "./values.js";
 
 export default function kpobject(...entries) {
   return new Map(entries);

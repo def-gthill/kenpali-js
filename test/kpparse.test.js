@@ -10,7 +10,9 @@ import {
   pipeline,
   unquote,
 } from "../src/kpast.js";
+import { kpcatch } from "../src/kperror.js";
 import { kpparseSugared } from "../src/kpparse.js";
+import { assertIsError } from "./assertIsError.js";
 
 test("Variables can have names starting with literal keywords", (t) => {
   const code = `trueValue`;
@@ -101,4 +103,10 @@ test("An object spread operator in an argument list parses to an objectSpread no
       },
     ])
   );
+});
+
+test("A failed parse reports the farthest position reached", (t) => {
+  const code = "foo = [42, 97}";
+  const result = kpcatch(() => kpparseSugared(code));
+  assertIsError(t, result, "unclosedArray", { line: 1, column: 14 });
 });

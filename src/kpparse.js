@@ -483,17 +483,15 @@ function parseAnyOf(...parsers) {
     }
     const [farthestLine, farthestColumn] = errors
       .map(pos)
-      .sort(([lineA, lineB], [columnA, columnB]) =>
+      .sort(([lineA, columnA], [lineB, columnB]) =>
         lineA === lineB ? columnA - columnB : lineA - lineB
       )
       .at(-1);
-    const farthestErrors = errors.filter((error) => {
+    const firstFarthestError = errors.find((error) => {
       const [line, column] = pos(error);
       return line === farthestLine && column === farthestColumn;
     });
-    return syntaxError("noAlternativeWorked", tokens, start, {
-      errors: farthestErrors,
-    });
+    return firstFarthestError;
   };
 }
 
