@@ -1,3 +1,5 @@
+import { isArray, isError, isFunction } from "./values";
+
 export default function kpobject(...entries) {
   return new Map(entries);
 }
@@ -9,8 +11,10 @@ export function toKpobject(object) {
 export function deepToKpobject(value) {
   if (value === null) {
     return value;
-  } else if (Array.isArray(value)) {
+  } else if (isArray(value)) {
     return value.map(deepToKpobject);
+  } else if (isFunction(value) || isError(value)) {
+    return value;
   } else if (typeof value === "object") {
     return kpoMap(toKpobject(value), ([key, value]) => [
       key,

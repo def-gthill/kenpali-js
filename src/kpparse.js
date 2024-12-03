@@ -15,6 +15,7 @@ import {
   unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
+import { deepToKpobject } from "./kpobject.js";
 
 export default function kpparse(code) {
   return desugar(kpparseSugared(code));
@@ -497,7 +498,7 @@ function parseAnyOf(...parsers) {
 }
 
 function pos(error) {
-  return [error.line, error.column];
+  return [error.details.get("line"), error.details.get("column")];
 }
 
 function parseAllOf(parsers, converter = (...args) => args) {
@@ -589,8 +590,10 @@ function syntaxError(name, tokens, offendingTokenIndex, properties) {
   const offendingToken = tokens[offendingTokenIndex];
   return {
     error: name,
-    line: offendingToken.line,
-    column: offendingToken.column,
-    ...properties,
+    details: deepToKpobject({
+      line: offendingToken.line,
+      column: offendingToken.column,
+      ...properties,
+    }),
   };
 }
