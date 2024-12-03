@@ -232,10 +232,14 @@ class Compiler {
       throw kperror("unknownModule", ["name", expression.from]);
     }
     const global = module.get(expression.name);
-    if (global !== undefined) {
-      this.addInstruction(VALUE, global);
-      return;
+    if (global === undefined) {
+      throw kperror(
+        "nameNotDefined",
+        ["name", expression.name],
+        ["module", expression.from]
+      );
     }
+    this.addInstruction(VALUE, global);
   }
 
   resolvePlainName(expression) {
