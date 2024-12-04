@@ -91,6 +91,10 @@ export interface KpProgram {
   diagnostics: any[];
 }
 
+export interface ParseOptions {
+  trace?: boolean;
+}
+
 export interface CallOptions {
   timeLimitSeconds?: number;
 }
@@ -107,7 +111,7 @@ export interface VmOptions extends CallOptions {
 
 export type EvalOptions = CompileOptions & VmOptions;
 
-export function kpparse(code: string): KpAstNode;
+export function kpparse(code: string, options: ParseOptions = {}): KpAstNode;
 export function kpeval(
   expression: KpAstNode,
   options: EvalOptions = {}

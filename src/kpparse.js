@@ -60,6 +60,7 @@ export function parseModule(parser, start) {
   return parseZeroOrMore("module", parseNameDefinition, {
     terminator: consume("SEMICOLON"),
     errorIfTerminatorMissing: "missingDefinitionSeparator",
+    finalTerminatorMandatory: true,
   })(parser, start);
 }
 
@@ -74,6 +75,7 @@ function parseScope(parser, start) {
       parseZeroOrMore("definitions", parseNameDefinition, {
         terminator: consume("SEMICOLON"),
         errorIfTerminatorMissing: "missingDefinitionSeparator",
+        finalTerminatorMandatory: true,
       }),
       parseAssignable,
     ],
@@ -502,7 +504,7 @@ function parseSingle(tokenType, converter) {
   return function ({ tokens, trace }, start) {
     if (tokens[start].type === tokenType) {
       if (trace) {
-        console.log(`Found ${tokenType} at ${start}`);
+        console.log(`Found ${tokenType} (${tokens[start].text}) at ${start}`);
       }
       return { ast: converter(tokens[start]), end: start + 1 };
     } else {
@@ -659,19 +661,29 @@ function parseAllOfFlat(nodeName, parsers, converter = (...args) => args) {
 function parseZeroOrMore(
   nodeName,
   parser,
-  { terminator, errorIfTerminatorMissing } = {}
+  {
+    terminator,
+    errorIfTerminatorMissing,
+    finalTerminatorMandatory = false,
+  } = {}
 ) {
   return parseRepeatedly(nodeName, parser, {
     terminator,
     errorIfTerminatorMissing,
     minimumCount: 0,
+    finalTerminatorMandatory,
   });
 }
 
 function parseRepeatedly(
   nodeName,
   parser,
-  { terminator, errorIfTerminatorMissing, minimumCount } = {}
+  {
+    terminator,
+    errorIfTerminatorMissing,
+    minimumCount,
+    finalTerminatorMandatory = false,
+  } = {}
 ) {
   return function ({ tokens, trace }, start) {
     let index = start;
@@ -683,22 +695,35 @@ function parseRepeatedly(
       const parserResult = parser({ tokens, trace }, index);
       if ("error" in parserResult) {
         if (
-          !farthestPartial ||
-          compareErrors(pos(parserResult), pos(farthestPartial)) > 1
+          !terminatorMissing &&
+          (!farthestPartial ||
+            compareErrors(pos(parserResult), pos(farthestPartial)) > 1)
         ) {
           farthestPartial = parserResult;
         }
         if (elements.length >= minimumCount) {
-          if (trace) {
-            const errorType = farthestPartial.error;
-            const details = farthestPartial.details;
-            console.log(
-              `Found ${nodeName} at ${start} after hitting ` +
-                `${errorType} at line ${details.get("line")}, ` +
-                `column ${details.get("column")}`
-            );
+          if (finalTerminatorMandatory && terminatorMissing) {
+            const error = syntaxError(errorIfTerminatorMissing, tokens, index);
+            if (
+              farthestPartial &&
+              compareErrors(pos(farthestPartial), pos(error))
+            ) {
+              return { ...farthestPartial, error: errorIfTerminatorMissing };
+            } else {
+              return error;
+            }
+          } else {
+            if (trace) {
+              const errorType = farthestPartial.error;
+              const details = farthestPartial.details;
+              console.log(
+                `Found ${nodeName} at ${start} after hitting ` +
+                  `${errorType} at line ${details.get("line")}, ` +
+                  `column ${details.get("column")}`
+              );
+            }
+            return { ast: elements, end: index, farthestPartial };
           }
-          return { ast: elements, end: index, farthestPartial };
         } else if (
           farthestPartial &&
           compareErrors(pos(farthestPartial), pos(parserResult))

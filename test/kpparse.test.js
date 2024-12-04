@@ -105,6 +105,15 @@ test("An object spread operator in an argument list parses to an objectSpread no
   );
 });
 
+test("The semicolon between the definitions and result is mandatory", (t) => {
+  const code = "foo = 42 foo";
+  const result = kpcatch(() => kpparseSugared(code));
+  assertIsError(t, result, "missingDefinitionSeparator", {
+    line: 1,
+    column: 10,
+  });
+});
+
 test("A failed parse reports the farthest position reached", (t) => {
   const code = "foo = [42, 97}";
   const result = kpcatch(() => kpparseSugared(code));
