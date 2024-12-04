@@ -689,41 +689,27 @@ function parseRepeatedly(
     let index = start;
     const elements = [];
     let farthestPartial;
-    let terminatorMissing = false;
 
     while (true) {
       const parserResult = parser({ tokens, trace }, index);
       if ("error" in parserResult) {
         if (
-          !terminatorMissing &&
-          (!farthestPartial ||
-            compareErrors(pos(parserResult), pos(farthestPartial)) > 1)
+          !farthestPartial ||
+          compareErrors(pos(parserResult), pos(farthestPartial)) > 1
         ) {
           farthestPartial = parserResult;
         }
         if (elements.length >= minimumCount) {
-          if (finalTerminatorMandatory && terminatorMissing) {
-            const error = syntaxError(errorIfTerminatorMissing, tokens, index);
-            if (
-              farthestPartial &&
-              compareErrors(pos(farthestPartial), pos(error))
-            ) {
-              return { ...farthestPartial, error: errorIfTerminatorMissing };
-            } else {
-              return error;
-            }
-          } else {
-            if (trace) {
-              const errorType = farthestPartial.error;
-              const details = farthestPartial.details;
-              console.log(
-                `Found ${nodeName} at ${start} after hitting ` +
-                  `${errorType} at line ${details.get("line")}, ` +
-                  `column ${details.get("column")}`
-              );
-            }
-            return { ast: elements, end: index, farthestPartial };
+          if (trace) {
+            const errorType = farthestPartial.error;
+            const details = farthestPartial.details;
+            console.log(
+              `Found ${nodeName} at ${start} after hitting ` +
+                `${errorType} at line ${details.get("line")}, ` +
+                `column ${details.get("column")}`
+            );
           }
+          return { ast: elements, end: index, farthestPartial };
         } else if (
           farthestPartial &&
           compareErrors(pos(farthestPartial), pos(parserResult))
@@ -751,23 +737,33 @@ function parseRepeatedly(
         continue;
       }
 
-      if (terminatorMissing) {
-        const error = syntaxError(errorIfTerminatorMissing, tokens, index);
-        if (
-          farthestPartial &&
-          compareErrors(pos(farthestPartial), pos(error))
-        ) {
-          return { ...farthestPartial, error: errorIfTerminatorMissing };
-        } else {
-          return error;
-        }
-      }
-
       const terminatorResult = terminator({ tokens, trace }, index);
       if ("error" in terminatorResult) {
-        terminatorMissing = true;
+        if (elements.length >= minimumCount) {
+          if (finalTerminatorMandatory) {
+            const error = syntaxError(errorIfTerminatorMissing, tokens, index);
+            if (
+              farthestPartial &&
+              compareErrors(pos(farthestPartial), pos(error))
+            ) {
+              return { ...farthestPartial, error: errorIfTerminatorMissing };
+            } else {
+              return error;
+            }
+          } else {
+            if (trace) {
+              const errorType = farthestPartial.error;
+              const details = farthestPartial.details;
+              console.log(
+                `Found ${nodeName} at ${start} after hitting ` +
+                  `${errorType} at line ${details.get("line")}, ` +
+                  `column ${details.get("column")}`
+              );
+            }
+            return { ast: elements, end: index, farthestPartial };
+          }
+        }
       } else {
-        terminatorMissing = false;
         index = terminatorResult.end;
       }
     }
