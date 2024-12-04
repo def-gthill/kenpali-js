@@ -17,25 +17,30 @@ import {
 import kplex from "./kplex.js";
 import { deepToKpobject } from "./kpobject.js";
 
-export default function kpparse(code) {
-  return desugar(kpparseSugared(code));
+export default function kpparse(code, { trace = false } = {}) {
+  return desugar(kpparseSugared(code, { trace }));
 }
 
-export function kpparseModule(code) {
-  return kpparseSugared(code, parseModule).map(([name, f]) => [
-    name,
-    desugar(f),
-  ]);
+export function kpparseModule(code, { trace = false } = {}) {
+  return kpparseSugared(code, { parseRoot: parseModule, trace }).map(
+    ([name, f]) => [name, desugar(f)]
+  );
 }
 
-export function kpparseSugared(code, parseRoot = parseAll) {
+export function kpparseSugared(
+  code,
+  { parseRoot = parseAll, trace = false } = {}
+) {
   const tokens = kplex(code);
-  return kpparseTokens(tokens, parseRoot);
+  return kpparseTokens(tokens, { parseRoot, trace });
 }
 
-export function kpparseTokens(tokens, parseRoot = parseAll) {
+export function kpparseTokens(
+  tokens,
+  { parseRoot = parseAll, trace = false } = {}
+) {
   const tokenList = [...tokens];
-  const parseResult = parseRoot(tokenList);
+  const parseResult = parseRoot({ tokens: tokenList, trace }, 0);
   if ("error" in parseResult) {
     throw parseResult;
   } else {
@@ -43,28 +48,30 @@ export function kpparseTokens(tokens, parseRoot = parseAll) {
   }
 }
 
-export function parseAll(tokens) {
-  return parseAllOf([parse, consume("EOF", "unparsedInput")], (ast) => ast)(
-    tokens,
-    0
-  );
+export function parseAll(parser, start) {
+  return parseAllOf(
+    "kpcode",
+    [parseExpression, consume("EOF", "unparsedInput")],
+    (ast) => ast
+  )(parser, start);
 }
 
-export function parseModule(tokens) {
-  return parseZeroOrMore(parseNameDefinition, {
+export function parseModule(parser, start) {
+  return parseZeroOrMore("module", parseNameDefinition, {
     terminator: consume("SEMICOLON"),
     errorIfTerminatorMissing: "missingDefinitionSeparator",
-  })(tokens, 0);
+  })(parser, start);
 }
 
-function parse(tokens, start) {
-  return parseScope(tokens, start);
+function parseExpression(parser, start) {
+  return parseScope(parser, start);
 }
 
-function parseScope(tokens, start) {
+function parseScope(parser, start) {
   return parseAllOf(
+    "scope",
     [
-      parseZeroOrMore(parseNameDefinition, {
+      parseZeroOrMore("definitions", parseNameDefinition, {
         terminator: consume("SEMICOLON"),
         errorIfTerminatorMissing: "missingDefinitionSeparator",
       }),
@@ -72,97 +79,125 @@ function parseScope(tokens, start) {
     ],
     (definitions, result) =>
       definitions.length === 0 ? result : defining(...definitions, result)
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseNameDefinition(tokens, start) {
-  return parseAllOf([
+function parseNameDefinition(parser, start) {
+  return parseAllOf("definition", [
     parseDefiningPattern,
     consume("EQUALS", "missingEqualsInDefinition"),
     parseAssignable,
-  ])(tokens, start);
+  ])(parser, start);
 }
 
-function parseDefiningPattern(tokens, start) {
+function parseDefiningPattern(parser, start) {
   return parseAnyOf(
+    "definingPattern",
     convert(parseName, (name) => name.name),
     parseArrayPattern,
     parseObjectPattern
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArrayPattern(tokens, start) {
+function parseArrayPattern(parser, start) {
   return parseAllOfFlat(
+    "arrayPattern",
     [
       consume("OPEN_BRACKET", "expectedArrayPattern"),
-      parseZeroOrMore(parseArrayPatternElement, {
+      parseZeroOrMore("arrayPatternElements", parseArrayPatternElement, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingArrayPatternSeparator",
       }),
       consume("CLOSE_BRACKET", "unclosedArrayPattern"),
     ],
     arrayPattern
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArrayPatternElement(tokens, start) {
+function parseArrayPatternElement(parser, start) {
   return parseAnyOf(
+    "arrayPatternElement",
     parseAllOf(
-      [parseName, consume("EQUALS", "expectedDefault"), parse],
+      "arrayPatternDefault",
+      [parseName, consume("EQUALS", "expectedDefault"), parseExpression],
       (name, defaultValue) => ({ name: name.name, defaultValue })
     ),
-    parseAllOf([consume("STAR", "expectedRest"), parseName], (name) => ({
-      rest: name.name,
-    })),
+    parseAllOf(
+      "arrayPatternRest",
+      [consume("STAR", "expectedRest"), parseName],
+      (name) => ({
+        rest: name.name,
+      })
+    ),
     parseDefiningPattern
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObjectPattern(tokens, start) {
+function parseObjectPattern(parser, start) {
   return parseAllOfFlat(
+    "objectPattern",
     [
       consume("OPEN_BRACE", "expectedObjectPattern"),
-      parseZeroOrMore(parseObjectPatternElement, {
+      parseZeroOrMore("objectPatternElements", parseObjectPatternElement, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingObjectPatternSeparator",
       }),
       consume("CLOSE_BRACE", "unclosedObject"),
     ],
     objectPattern
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObjectPatternElement(tokens, start) {
+function parseObjectPatternElement(parser, start) {
   return parseAnyOf(
-    parseAllOf([
+    "objectPatternElement",
+    parseAllOf("objectPatternDefault", [
       parseObjectPatternPropertyName,
       consume("EQUALS", "expectedDefault"),
-      parse,
+      parseExpression,
     ]),
-    parseAllOf([consume("DOUBLE_STAR", "expectedRest"), parseName], (name) => ({
-      namedRest: name.name,
-    })),
+    parseAllOf(
+      "objectPatternRest",
+      [consume("DOUBLE_STAR", "expectedRest"), parseName],
+      (name) => ({
+        namedRest: name.name,
+      })
+    ),
     parseObjectPatternPropertyName
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObjectPatternPropertyName(tokens, start) {
+function parseObjectPatternPropertyName(parser, start) {
   return parseAllOf(
+    "objectPatternName",
     [parseName, consume("COLON", "expectedPropertyName")],
     (name) => name.name
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseAssignable(tokens, start) {
-  return parseAnyOf(parseArrowFunction, parsePipeline)(tokens, start);
+function parseAssignable(parser, start) {
+  return parseAnyOf(
+    "assignable",
+    parseArrowFunction,
+    parsePipeline
+  )(parser, start);
 }
 
-function parsePipeline(tokens, start) {
+function parsePipeline(parser, start) {
   return parseAllOf(
+    "pipeline",
     [
       parseAtomic,
       parseZeroOrMore(
-        parseAnyOf(parseCall, parsePipeCall, parsePipe, parseAt, parseBang)
+        "pipelineSteps",
+        parseAnyOf(
+          "pipelineStep",
+          parseCall,
+          parsePipeCall,
+          parsePipe,
+          parseAt,
+          parseBang
+        )
       ),
     ],
     (expression, calls) => {
@@ -172,62 +207,65 @@ function parsePipeline(tokens, start) {
         return expression;
       }
     }
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseCall(tokens, start) {
-  return convert(parseArgumentList, (list) => ["CALL", list])(tokens, start);
+function parseCall(parser, start) {
+  return convert(parseArgumentList, (list) => ["CALL", list])(parser, start);
 }
 
-function parsePipeCall(tokens, start) {
-  return parseAllOf([
+function parsePipeCall(parser, start) {
+  return parseAllOf("pipeCall", [
     parseSingle("PIPE", () => "PIPECALL"),
     parseAtomic,
     parseArgumentList,
-  ])(tokens, start);
+  ])(parser, start);
 }
 
-function parsePipe(tokens, start) {
-  return parseAllOf([parseSingle("PIPE", () => "PIPE"), parseAtomic])(
-    tokens,
+function parsePipe(parser, start) {
+  return parseAllOf("pipe", [parseSingle("PIPE", () => "PIPE"), parseAtomic])(
+    parser,
     start
   );
 }
 
-function parseAt(tokens, start) {
-  return parseAllOf([
+function parseAt(parser, start) {
+  return parseAllOf("at", [
     parseSingle("AT", () => "AT"),
-    parseAnyOf(parsePropertyIndex, parseAtomic),
-  ])(tokens, start);
+    parseAnyOf("atTarget", parsePropertyIndex, parseAtomic),
+  ])(parser, start);
 }
 
-function parsePropertyIndex(tokens, start) {
+function parsePropertyIndex(parser, start) {
   return parseAllOf(
+    "propertyIndex",
     [parseName, consume("COLON", "expectedPropertyIndex")],
     (name) => literal(name.name)
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseBang(tokens, start) {
-  return parseSingle("BANG", () => ["BANG"])(tokens, start);
+function parseBang(parser, start) {
+  return parseSingle("BANG", () => ["BANG"])(parser, start);
 }
 
-function parseArrowFunction(tokens, start) {
+function parseArrowFunction(parser, start) {
   return parseAllOf(
+    "arrowFunction",
     [
       parseParameterList,
       consume("ARROW", "expectedArrowFunction"),
       parseAssignable,
     ],
     given
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseParameterList(tokens, start) {
+function parseParameterList(parser, start) {
   return parseAllOf(
+    "parameterList",
     [
-      consume("OPEN_PAREN", "expectedArrowFunction"),
-      parseZeroOrMore(parseParameter, {
+      consume("OPEN_PAREN", "expectedParameterList"),
+      parseZeroOrMore("parameters", parseParameter, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingParameterSeparator",
       }),
@@ -249,16 +287,18 @@ function parseParameterList(tokens, start) {
       }
       return result;
     }
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseParameter(tokens, start) {
+function parseParameter(parser, start) {
   return parseAnyOf(
+    "parameter",
     parseAllOf(
+      "parameterDefault",
       [
         parseParameterName,
         consume("EQUALS", "expectedParameterDefault"),
-        parse,
+        parseExpression,
       ],
       (param, defaultValue) => {
         if ("named" in param) {
@@ -269,32 +309,37 @@ function parseParameter(tokens, start) {
       }
     ),
     parseAllOf(
+      "restParameter",
       [consume("STAR", "expectedRestParameter"), parseName],
       (name) => ({ positional: { rest: name.name } })
     ),
     parseAllOf(
+      "namedRestParameter",
       [consume("DOUBLE_STAR", "expectedNamedRestParameter"), parseName],
       (name) => ({ named: { rest: name.name } })
     ),
     parseParameterName
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseParameterName(tokens, start) {
+function parseParameterName(parser, start) {
   return parseAnyOf(
+    "parameterName",
     parseAllOf(
+      "namedParameter",
       [parseName, consume("COLON", "expectedNamedParameter")],
       (name) => ({ named: name.name })
     ),
     convert(parseName, (node) => ({ positional: node.name }))
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArgumentList(tokens, start) {
+function parseArgumentList(parser, start) {
   return parseAllOf(
+    "argumentList",
     [
       consume("OPEN_PAREN", "expectedArguments"),
-      parseZeroOrMore(parseArgument, {
+      parseZeroOrMore("arguments", parseArgument, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingArgumentSeparator",
       }),
@@ -309,31 +354,34 @@ function parseArgumentList(tokens, start) {
       );
       return { args: posArgs, namedArgs };
     }
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArgument(tokens, start) {
+function parseArgument(parser, start) {
   return parseAnyOf(
+    "argument",
     parseNamedArgument,
     parsePositionalArgument,
     parseArraySpread,
     parseObjectSpread
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parsePositionalArgument(tokens, start) {
-  return parseAssignable(tokens, start);
+function parsePositionalArgument(parser, start) {
+  return parseAssignable(parser, start);
 }
 
-function parseNamedArgument(tokens, start) {
+function parseNamedArgument(parser, start) {
   return parseAllOf(
+    "namedArgument",
     [parseName, consume("COLON", "expectedNamedArgument"), parseAssignable],
     (name, value) => [name.name, value]
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseAtomic(tokens, start) {
+function parseAtomic(parser, start) {
   return parseAnyOf(
+    "atomic",
     parseUnquote,
     parseGroup,
     parseArray,
@@ -341,106 +389,121 @@ function parseAtomic(tokens, start) {
     parseLiteral,
     parseNameFromModule,
     parseName
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseUnquote(tokens, start) {
+function parseUnquote(parser, start) {
   return parseAllOf(
+    "unquote",
     [
       consume("OPEN_ANGLES", "expectedUnquote"),
-      parse,
+      parseExpression,
       consume("CLOSE_ANGLES", "unclosedUnquote"),
     ],
     unquote
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseGroup(tokens, start) {
+function parseGroup(parser, start) {
   return parseAllOf(
+    "group",
     [
       consume("OPEN_PAREN", "expectedGroup"),
-      parse,
+      parseExpression,
       consume("CLOSE_PAREN", "unclosedGroup"),
     ],
     group
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArray(tokens, start) {
+function parseArray(parser, start) {
   return parseAllOfFlat(
+    "array",
     [
       consume("OPEN_BRACKET", "expectedArray"),
-      parseZeroOrMore(parseArrayElement, {
+      parseZeroOrMore("arrayElements", parseArrayElement, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingArraySeparator",
       }),
       consume("CLOSE_BRACKET", "unclosedArray"),
     ],
     array
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseArrayElement(tokens, start) {
-  return parseAnyOf(parseAssignable, parseArraySpread)(tokens, start);
+function parseArrayElement(parser, start) {
+  return parseAnyOf(
+    "arrayElement",
+    parseAssignable,
+    parseArraySpread
+  )(parser, start);
 }
 
-function parseArraySpread(tokens, start) {
+function parseArraySpread(parser, start) {
   return parseAllOfFlat(
-    [consume("STAR", "expectedSpread"), parse],
+    "arraySpread",
+    [consume("STAR", "expectedSpread"), parseExpression],
     arraySpread
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObject(tokens, start) {
+function parseObject(parser, start) {
   return parseAllOfFlat(
+    "object",
     [
       consume("OPEN_BRACE", "expectedObject"),
-      parseZeroOrMore(parseObjectEntry, {
+      parseZeroOrMore("objectEntries", parseObjectEntry, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingObjectSeparator",
       }),
       consume("CLOSE_BRACE", "unclosedObject"),
     ],
     object
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObjectEntry(tokens, start) {
+function parseObjectEntry(parser, start) {
   return parseAnyOf(
-    parseAllOf([
+    "objectElement",
+    parseAllOf("objectEntry", [
       parseAssignable,
       consume("COLON", "missingKeyValueSeparator"),
       parseAssignable,
     ]),
     parseObjectSpread
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseObjectSpread(tokens, start) {
+function parseObjectSpread(parser, start) {
   return parseAllOfFlat(
+    "objectSpread",
     [consume("DOUBLE_STAR", "expectedSpread"), parseAssignable],
     objectSpread
-  )(tokens, start);
+  )(parser, start);
 }
 
-function parseLiteral(tokens, start) {
-  return parseSingle("LITERAL", (token) => literal(token.value))(tokens, start);
+function parseLiteral(parser, start) {
+  return parseSingle("LITERAL", (token) => literal(token.value))(parser, start);
 }
 
-function parseName(tokens, start) {
-  return parseSingle("NAME", (token) => name(token.text))(tokens, start);
+function parseName(parser, start) {
+  return parseSingle("NAME", (token) => name(token.text))(parser, start);
 }
 
-function parseNameFromModule(tokens, start) {
+function parseNameFromModule(parser, start) {
   return parseAllOf(
-    [parseName, consume("DOT"), parseName],
+    "nameFromModule",
+    [parseName, consume("DOT", "expectedModuleAccess"), parseName],
     (module, unqualifiedName) => name(unqualifiedName.name, module.name)
-  )(tokens, start);
+  )(parser, start);
 }
 
 function parseSingle(tokenType, converter) {
-  return function (tokens, start) {
+  return function ({ tokens, trace }, start) {
     if (tokens[start].type === tokenType) {
+      if (trace) {
+        console.log(`Found ${tokenType} at ${start}`);
+      }
       return { ast: converter(tokens[start]), end: start + 1 };
     } else {
       return syntaxError(
@@ -461,7 +524,7 @@ function capitalize(text) {
 }
 
 function consume(tokenType, errorIfMissing) {
-  return function (tokens, start) {
+  return function ({ tokens }, start) {
     if (tokens[start].type === tokenType) {
       return { end: start + 1 };
     } else {
@@ -470,16 +533,24 @@ function consume(tokenType, errorIfMissing) {
   };
 }
 
-function parseAnyOf(...parsers) {
-  return function (tokens, start) {
+function parseAnyOf(nodeName, ...parsers) {
+  return function ({ tokens, trace }, start) {
     const errors = [];
+    let success;
     for (const parser of parsers) {
-      const result = parser(tokens, start);
+      const result = parser({ tokens, trace }, start);
       if ("error" in result) {
         errors.push(result);
       } else {
-        return result;
+        success = result;
+        break;
       }
+    }
+    if (errors.length === 0) {
+      if (trace) {
+        console.log(`Found ${nodeName} at ${start}`);
+      }
+      return success;
     }
     const [farthestLine, farthestColumn] = errors
       .map(pos)
@@ -491,6 +562,34 @@ function parseAnyOf(...parsers) {
       const [line, column] = pos(error);
       return line === farthestLine && column === farthestColumn;
     });
+    if (success) {
+      if (
+        success.farthestPartial &&
+        compareErrors(pos(success.farthestPartial), pos(firstFarthestError)) > 0
+      ) {
+        if (trace) {
+          const errorType = success.farthestPartial.error;
+          const details = success.farthestPartial.details;
+          console.log(
+            `Found ${nodeName} at ${start} after hitting ` +
+              `${errorType} at line ${details.get("line")}, ` +
+              `column ${details.get("column")}`
+          );
+        }
+        return success;
+      } else {
+        if (trace) {
+          const errorType = firstFarthestError.error;
+          const details = firstFarthestError.details;
+          console.log(
+            `Found ${nodeName} at ${start} after hitting ` +
+              `${errorType} at line ${details.get("line")}, ` +
+              `column ${details.get("column")}`
+          );
+        }
+        return { ...success, farthestPartial: firstFarthestError };
+      }
+    }
     return firstFarthestError;
   };
 }
@@ -499,34 +598,70 @@ function pos(error) {
   return [error.details.get("line"), error.details.get("column")];
 }
 
-function parseAllOf(parsers, converter = (...args) => args) {
-  return function (tokens, start) {
+function compareErrors([lineA, columnA], [lineB, columnB]) {
+  return lineA === lineB ? columnA - columnB : lineA - lineB;
+}
+
+function parseAllOf(nodeName, parsers, converter = (...args) => args) {
+  return function ({ tokens, trace }, start) {
     const elements = [];
+    let farthestPartial;
     let index = start;
     for (const parser of parsers) {
-      const result = parser(tokens, index);
+      const result = parser({ tokens, trace }, index);
       if ("error" in result) {
-        return result;
+        if (
+          farthestPartial &&
+          compareErrors(pos(farthestPartial), pos(result))
+        ) {
+          return farthestPartial;
+        } else {
+          return result;
+        }
       } else {
         if ("ast" in result) {
           elements.push(result.ast);
+          if (
+            result.farthestPartial &&
+            (!farthestPartial ||
+              compareErrors(pos(result.farthestPartial), pos(farthestPartial)) >
+                1)
+          ) {
+            farthestPartial = result.farthestPartial;
+          }
         }
         index = result.end;
       }
     }
-    return { ast: converter(...elements), end: index };
+    if (trace) {
+      if (farthestPartial) {
+        const errorType = farthestPartial.error;
+        const details = farthestPartial.details;
+        console.log(
+          `Found ${nodeName} at ${start} after hitting ` +
+            `${errorType} at line ${details.get("line")}, ` +
+            `column ${details.get("column")}`
+        );
+      } else {
+        console.log(`Found ${nodeName} at ${start}`);
+      }
+    }
+    return { ast: converter(...elements), end: index, farthestPartial };
   };
 }
 
-function parseAllOfFlat(parsers, converter = (...args) => args) {
-  return parseAllOf(parsers, (...args) => converter(...[].concat([], ...args)));
+function parseAllOfFlat(nodeName, parsers, converter = (...args) => args) {
+  return parseAllOf(nodeName, parsers, (...args) =>
+    converter(...[].concat([], ...args))
+  );
 }
 
 function parseZeroOrMore(
+  nodeName,
   parser,
   { terminator, errorIfTerminatorMissing } = {}
 ) {
-  return parseRepeatedly(parser, {
+  return parseRepeatedly(nodeName, parser, {
     terminator,
     errorIfTerminatorMissing,
     minimumCount: 0,
@@ -534,24 +669,56 @@ function parseZeroOrMore(
 }
 
 function parseRepeatedly(
+  nodeName,
   parser,
   { terminator, errorIfTerminatorMissing, minimumCount } = {}
 ) {
-  return function (tokens, start) {
+  return function ({ tokens, trace }, start) {
     let index = start;
     const elements = [];
+    let farthestPartial;
     let terminatorMissing = false;
 
     while (true) {
-      const parserResult = parser(tokens, index);
+      const parserResult = parser({ tokens, trace }, index);
       if ("error" in parserResult) {
+        if (
+          !farthestPartial ||
+          compareErrors(pos(parserResult), pos(farthestPartial)) > 1
+        ) {
+          farthestPartial = parserResult;
+        }
         if (elements.length >= minimumCount) {
-          return { ast: elements, end: index };
+          if (trace) {
+            const errorType = farthestPartial.error;
+            const details = farthestPartial.details;
+            console.log(
+              `Found ${nodeName} at ${start} after hitting ` +
+                `${errorType} at line ${details.get("line")}, ` +
+                `column ${details.get("column")}`
+            );
+          }
+          return { ast: elements, end: index, farthestPartial };
+        } else if (
+          farthestPartial &&
+          compareErrors(pos(farthestPartial), pos(parserResult))
+        ) {
+          return farthestPartial;
         } else {
           return parserResult;
         }
       } else {
         elements.push(parserResult.ast);
+        if (
+          parserResult.farthestPartial &&
+          (!farthestPartial ||
+            compareErrors(
+              pos(parserResult.farthestPartial),
+              pos(farthestPartial)
+            ) > 1)
+        ) {
+          farthestPartial = parserResult.farthestPartial;
+        }
         index = parserResult.end;
       }
 
@@ -560,10 +727,18 @@ function parseRepeatedly(
       }
 
       if (terminatorMissing) {
-        return syntaxError(errorIfTerminatorMissing, tokens, index);
+        const error = syntaxError(errorIfTerminatorMissing, tokens, index);
+        if (
+          farthestPartial &&
+          compareErrors(pos(farthestPartial), pos(error))
+        ) {
+          return { ...farthestPartial, error: errorIfTerminatorMissing };
+        } else {
+          return error;
+        }
       }
 
-      const terminatorResult = terminator(tokens, index);
+      const terminatorResult = terminator({ tokens, trace }, index);
       if ("error" in terminatorResult) {
         terminatorMissing = true;
       } else {
@@ -575,12 +750,12 @@ function parseRepeatedly(
 }
 
 function convert(parser, converter) {
-  return function (tokens, start) {
-    const result = parser(tokens, start);
+  return function (parseOptions, start) {
+    const result = parser(parseOptions, start);
     if ("error" in result) {
       return result;
     }
-    return { ast: converter(result.ast), end: result.end };
+    return { ...result, ast: converter(result.ast) };
   };
 }
 
