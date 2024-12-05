@@ -47,7 +47,7 @@ fib(14)
 const stringSplitting = String.raw`
 parseCsv = (text) => (
   text | splitLines | transform(
-    (line) => (line | split(","))
+    (line) => (line | split(on: ","))
   )
 );
 parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")

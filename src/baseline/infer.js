@@ -1,4 +1,4 @@
-import { oneOf } from "./bind.js";
+import { oneOf } from "./validate.js";
 import { equals } from "./values.js";
 
 export function infer(node) {

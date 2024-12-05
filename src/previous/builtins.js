@@ -1,8 +1,10 @@
-import {
+import { literal } from "./kpast.js";
+import kperror, { transformError } from "./kperror.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
+import kpparse from "./kpparse.js";
+import validate, {
+  argumentError,
   arrayOf,
-  as,
-  bind,
-  default_,
   either,
   is,
   matches,
@@ -10,14 +12,8 @@ import {
   oneOf,
   optional,
   recordLike,
-  rest,
   tupleLike,
-} from "./bind.js";
-import { argumentError } from "./callBuiltin.js";
-import { literal } from "./kpast.js";
-import kperror, { errorToNull, transformError } from "./kperror.js";
-import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
-import kpparse from "./kpparse.js";
+} from "./validate.js";
 import {
   equals,
   isArray,
@@ -122,14 +118,24 @@ const rawBuiltins = [
       params: [{ name: "strings", type: arrayOf("string") }],
       namedParams: [
         {
-          name: "with",
+          name: "on",
           type: "string",
           defaultValue: literal(""),
         },
       ],
     },
-    function ([strings, with_]) {
-      return strings.join(with_);
+    function ([strings, on]) {
+      return strings.join(on);
+    }
+  ),
+  builtin(
+    "split",
+    {
+      params: [{ name: "string", type: "string" }],
+      namedParams: [{ name: "on", type: "string" }],
+    },
+    function ([string, on]) {
+      return string.split(on);
     }
   ),
   builtin(
@@ -420,6 +426,33 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "sort",
+    {
+      params: [{ name: "array", type: "array" }],
+      namedParams: [
+        {
+          name: "by",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+      ],
+    },
+    function ([array, by], kpcallback) {
+      if (by) {
+        const withSortKey = array.map((element) => [
+          element,
+          kpcallback(by, [element], kpobject()),
+        ]);
+        withSortKey.sort(([_a, aKey], [_b, bKey]) => compare(aKey, bKey));
+        return withSortKey.map(([element, _]) => element);
+      } else {
+        const result = [...array];
+        result.sort();
+        return result;
+      }
+    }
+  ),
+  builtin(
     "keys",
     { params: [{ name: "object", type: "object" }] },
     function ([object]) {
@@ -445,10 +478,110 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "bind",
+    "at",
+    {
+      params: [
+        { name: "collection", type: either("sequence", "object") },
+        { name: "index", type: either("number", "string") },
+      ],
+      namedParams: ["default"],
+    },
+    function ([collection, index, default_]) {
+      if (isString(collection) || isArray(collection)) {
+        if (!isNumber(index)) {
+          this.throw_(
+            kperror("wrongType", ["value", index], ["expectedType", "number"])
+          );
+        }
+        if (index < 1 || index > collection.length) {
+          return default_;
+        }
+        return collection[index - 1];
+      } else {
+        if (!isString(index)) {
+          this.throw_(
+            kperror("wrongType", ["value", index], ["expectedType", "string"])
+          );
+        }
+        if (collection.has(index)) {
+          return collection.get(index);
+        } else {
+          return default_;
+        }
+      }
+    }
+  ),
+  builtin(
+    "buildMap",
+    {
+      params: ["start"],
+      namedParams: [
+        {
+          name: "while",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+        { name: "next", type: "function" },
+        { name: "keys", type: "function" },
+        {
+          name: "new",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+        {
+          name: "update",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+        {
+          name: "continueIf",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+      ],
+    },
+    function (
+      [start, while_, next, keys, new_, update, continueIf],
+      kpcallback
+    ) {
+      const result = kpobject();
+      loop(
+        "buildMap",
+        start,
+        while_,
+        next,
+        continueIf,
+        (current) => {
+          const keysResult = kpcallback(keys, [current], kpobject());
+          for (const key of keysResult) {
+            if (result.has(key)) {
+              if (update) {
+                result.set(
+                  key,
+                  kpcallback(update, [current, result.get(key)], kpobject())
+                );
+              } else {
+                result.set(key, [current]);
+              }
+            } else {
+              result.set(
+                key,
+                new_ ? kpcallback(new_, [current], kpobject()) : [current]
+              );
+            }
+          }
+        },
+        kpcallback
+      );
+      return result;
+    }
+  ),
+  builtin(
+    "validate",
     { params: ["value", "schema"] },
     function ([value, schema], kpcallback) {
-      return bind(value, schema, kpcallback);
+      validate(value, schema, kpcallback);
+      return true;
     }
   ),
   builtin(
@@ -456,28 +589,6 @@ const rawBuiltins = [
     { params: ["value", "schema"] },
     function ([value, schema], kpcallback) {
       return matches(value, schema, kpcallback);
-    }
-  ),
-  builtin(
-    "switch",
-    {
-      params: [
-        "value",
-        {
-          rest: {
-            name: "cases",
-            type: arrayOf(tupleLike(["any", "function"])),
-          },
-        },
-      ],
-    },
-    function ([value, cases], kpcallback) {
-      for (const [schema, f] of cases) {
-        const bindings = errorToNull(() => bind(value, schema));
-        if (bindings) {
-          return kpcallback(f, [value], bindings);
-        }
-      }
     }
   ),
   builtin(
@@ -562,33 +673,6 @@ const rawBuiltins = [
   builtin("either", { params: [{ rest: "schemas" }] }, function ([schemas]) {
     return either(...schemas);
   }),
-  builtin(
-    "as",
-    {
-      params: ["schema", { name: "name", type: "string" }],
-    },
-    function ([schema, name]) {
-      return as(schema, name);
-    }
-  ),
-  builtin(
-    "default",
-    {
-      params: ["schema", "defaultValue"],
-    },
-    function ([schema, defaultValue]) {
-      return default_(schema, defaultValue);
-    }
-  ),
-  builtin(
-    "rest",
-    {
-      params: ["schema"],
-    },
-    function ([schema]) {
-      return rest(schema);
-    }
-  ),
   builtin(
     "error",
     {
@@ -708,7 +792,7 @@ function toValue(expression) {
 }
 
 function validateArgument(value, schema) {
-  transformError(() => bind(value, schema), argumentError);
+  transformError(() => validate(value, schema), argumentError);
 }
 
 export function loadBuiltins() {

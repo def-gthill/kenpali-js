@@ -1,3 +1,5 @@
+import { isArray, isError, isFunction } from "./values.js";
+
 export default function kpobject(...entries) {
   return new Map(entries);
 }
@@ -6,21 +8,38 @@ export function toKpobject(object) {
   return kpobject(...Object.entries(object));
 }
 
+export function deepToKpobject(value) {
+  if (value === null) {
+    return value;
+  } else if (isArray(value)) {
+    return value.map(deepToKpobject);
+  } else if (isFunction(value) || isError(value)) {
+    return value;
+  } else if (typeof value === "object") {
+    return kpoMap(toKpobject(value), ([key, value]) => [
+      key,
+      deepToKpobject(value),
+    ]);
+  } else {
+    return value;
+  }
+}
+
 export function toJsObject(kpo) {
   return Object.fromEntries([...kpo]);
 }
 
-export function deepToJsObject(expression) {
-  if (expression === null) {
-    return expression;
-  } else if (Array.isArray(expression)) {
-    return expression.map(deepToJsObject);
-  } else if (expression instanceof Map) {
+export function deepToJsObject(value) {
+  if (value === null) {
+    return value;
+  } else if (Array.isArray(value)) {
+    return value.map(deepToJsObject);
+  } else if (value instanceof Map) {
     return toJsObject(
-      kpoMap(expression, ([key, value]) => [key, deepToJsObject(value)])
+      kpoMap(value, ([key, value]) => [key, deepToJsObject(value)])
     );
   } else {
-    return expression;
+    return value;
   }
 }
 

@@ -70,7 +70,6 @@ export default function kpcompile(
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const coreAsts = new Map([...loadCore(), ...builtins]);
-  // const coreAsts = new Map(loadCore());
   return new Compiler(expression, {
     names: builtins,
     library: coreAsts,
@@ -79,8 +78,13 @@ export default function kpcompile(
   }).compile();
 }
 
+let coreAst = null;
+
 function loadCore() {
-  return kpparseModule(core);
+  if (!coreAst) {
+    coreAst = kpparseModule(core);
+  }
+  return coreAst;
 }
 
 class Compiler {
@@ -228,10 +232,14 @@ class Compiler {
       throw kperror("unknownModule", ["name", expression.from]);
     }
     const global = module.get(expression.name);
-    if (global !== undefined) {
-      this.addInstruction(VALUE, global);
-      return;
+    if (global === undefined) {
+      throw kperror(
+        "nameNotDefined",
+        ["name", expression.name],
+        ["module", expression.from]
+      );
     }
+    this.addInstruction(VALUE, global);
   }
 
   resolvePlainName(expression) {
@@ -521,7 +529,10 @@ class Compiler {
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(FUNCTION, 0);
     this.addMark({ functionNumber: this.finishedFunctions.length });
-    this.addDiagnostic({ name: expression.builtinName, isBuiltin: true });
+    this.addDiagnostic({
+      name: expression.builtinName ?? "<anonymous>",
+      isBuiltin: true,
+    });
     this.finishedFunctions.push(finishedFunction);
   }
 

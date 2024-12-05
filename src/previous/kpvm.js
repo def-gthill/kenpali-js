@@ -1,8 +1,3 @@
-import { either } from "./bind.js";
-import callBuiltin, {
-  argumentError,
-  argumentPatternError,
-} from "./callBuiltin.js";
 import {
   ALIAS,
   ARRAY_COPY,
@@ -54,7 +49,11 @@ import {
 } from "./instructions.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
-import validate from "./validate.js";
+import validate, {
+  argumentError,
+  argumentPatternError,
+  either,
+} from "./validate.js";
 import {
   isArray,
   isBoolean,
@@ -90,7 +89,7 @@ export function kpvmCall(
   );
 }
 
-class Vm {
+export class Vm {
   constructor(
     { instructions, diagnostics = [] },
     { trace = false, timeLimitSeconds = 0 } = {}
@@ -343,11 +342,17 @@ class Vm {
           this.throw_(kperror("missingArgument", ["name", diagnostic.name]));
           return;
         } else {
-          this.throw_(kperror("missingElement", ["name", diagnostic.name]));
+          this.throw_(
+            kperror(
+              "missingElement",
+              ["value", value],
+              ["name", diagnostic.name]
+            )
+          );
           return;
         }
       } else {
-        this.throw_(kperror("missingElement"));
+        this.throw_(kperror("missingElement", ["value", value]));
         return;
       }
     }
@@ -422,6 +427,23 @@ class Vm {
     }
     const key = this.stack.pop();
     const value = this.stack.at(-1).get(key);
+    if (value === undefined) {
+      const diagnostic = this.getDiagnostic();
+      if (diagnostic) {
+        if (diagnostic.isArgument) {
+          this.throw_(kperror("missingArgument", ["name", key]));
+          return;
+        } else {
+          this.throw_(
+            kperror("missingProperty", ["value", value], ["key", key])
+          );
+          return;
+        }
+      } else {
+        this.throw_(kperror("missingProperty", ["value", value], ["key", key]));
+        return;
+      }
+    }
     this.stack.at(-1).delete(key);
     this.stack.push(value);
   }
@@ -546,7 +568,7 @@ class Vm {
 
   callBuiltin(callee) {
     if (this.trace) {
-      console.log(`Call builtin "${callee.builtinName}"`);
+      console.log(`Call builtin "${callee.builtinName ?? "<anonymous>"}"`);
     }
     this.callFrames.push(
       new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
@@ -555,13 +577,13 @@ class Vm {
     const posArgs = this.stack.pop();
     const kpcallback = (f, posArgs, namedArgs) => {
       if (isBuiltin(f)) {
-        return callBuiltin(f, posArgs, namedArgs, kpcallback);
+        return f(posArgs, namedArgs, kpcallback);
       } else {
         return this.callback(f, posArgs, namedArgs);
       }
     };
     try {
-      const result = callBuiltin(callee, posArgs, namedArgs, kpcallback);
+      const result = callee(posArgs, namedArgs, kpcallback);
       this.stack.pop(); // Discard called function
       this.stack.push(result);
       const callFrame = this.callFrames.pop();
@@ -667,7 +689,6 @@ class Vm {
         this.throw_(
           kperror(
             "indexOutOfBounds",
-            ["function", "at"],
             ["value", collection],
             ["length", collection.length],
             ["index", index]
