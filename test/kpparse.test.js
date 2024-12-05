@@ -119,3 +119,9 @@ test("A failed parse reports the farthest position reached", (t) => {
   const result = kpcatch(() => kpparseSugared(code));
   assertIsError(t, result, "unclosedArray", { line: 1, column: 14 });
 });
+
+test("Missing semicolons inside functions produce helpful errors", (t) => {
+  const code = "() => (foo = 42 foo)";
+  const result = kpcatch(() => kpparseSugared(code));
+  assertIsError(t, result, "unclosedParameters", { line: 1, column: 17 });
+});

@@ -504,7 +504,9 @@ function parseSingle(tokenType, converter) {
   return function ({ tokens, trace }, start) {
     if (tokens[start].type === tokenType) {
       if (trace) {
-        console.log(`Found ${tokenType} (${tokens[start].text}) at ${start}`);
+        console.log(
+          foundMessage(`${tokenType} (${tokens[start].text})`, tokens, start)
+        );
       }
       return { ast: converter(tokens[start]), end: start + 1 };
     } else {
@@ -550,58 +552,55 @@ function parseAnyOf(nodeName, ...parsers) {
     }
     if (errors.length === 0) {
       if (trace) {
-        console.log(`Found ${nodeName} at ${start}`);
+        console.log(foundMessage(nodeName, tokens, start));
       }
       return success;
     }
     const [farthestLine, farthestColumn] = errors
-      .map(pos)
+      .map(errorPos)
       .sort(([lineA, columnA], [lineB, columnB]) =>
         lineA === lineB ? columnA - columnB : lineA - lineB
       )
       .at(-1);
     const firstFarthestError = errors.find((error) => {
-      const [line, column] = pos(error);
+      const [line, column] = errorPos(error);
       return line === farthestLine && column === farthestColumn;
     });
     if (success) {
       if (
         success.farthestPartial &&
-        compareErrors(pos(success.farthestPartial), pos(firstFarthestError)) > 0
+        comparePos(
+          errorPos(success.farthestPartial),
+          errorPos(firstFarthestError)
+        ) > 0
       ) {
         if (trace) {
-          const errorType = success.farthestPartial.error;
-          const details = success.farthestPartial.details;
           console.log(
-            `Found ${nodeName} at ${start} after hitting ` +
-              `${errorType} at line ${details.get("line")}, ` +
-              `column ${details.get("column")}`
+            foundMessage(nodeName, tokens, start, success.farthestPartial)
           );
         }
         return success;
       } else {
         if (trace) {
-          const errorType = firstFarthestError.error;
-          const details = firstFarthestError.details;
           console.log(
-            `Found ${nodeName} at ${start} after hitting ` +
-              `${errorType} at line ${details.get("line")}, ` +
-              `column ${details.get("column")}`
+            foundMessage(nodeName, tokens, start, firstFarthestError)
           );
         }
         return { ...success, farthestPartial: firstFarthestError };
       }
     }
+    if (
+      trace &&
+      comparePos(errorPos(firstFarthestError), tokenPos(tokens, start)) > 0
+    ) {
+      console.log(
+        `No option for ${nodeName} matched after hitting ${
+          firstFarthestError.error
+        } at ${posString(errorPos(firstFarthestError))}`
+      );
+    }
     return firstFarthestError;
   };
-}
-
-function pos(error) {
-  return [error.details.get("line"), error.details.get("column")];
-}
-
-function compareErrors([lineA, columnA], [lineB, columnB]) {
-  return lineA === lineB ? columnA - columnB : lineA - lineB;
 }
 
 function parseAllOf(nodeName, parsers, converter = (...args) => args) {
@@ -613,21 +612,32 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
       const result = parser({ tokens, trace }, index);
       if ("error" in result) {
         if (
-          farthestPartial &&
-          compareErrors(pos(farthestPartial), pos(result))
+          !farthestPartial ||
+          comparePos(errorPos(result), errorPos(farthestPartial)) >= 0
         ) {
-          return farthestPartial;
-        } else {
-          return result;
+          farthestPartial = result;
         }
+        if (
+          trace &&
+          comparePos(errorPos(farthestPartial), tokenPos(tokens, start)) > 0
+        ) {
+          console.log(
+            `Unable to finish ${nodeName} after hitting ${
+              farthestPartial.error
+            } at ${posString(errorPos(farthestPartial))}`
+          );
+        }
+        return farthestPartial;
       } else {
         if ("ast" in result) {
           elements.push(result.ast);
           if (
             result.farthestPartial &&
             (!farthestPartial ||
-              compareErrors(pos(result.farthestPartial), pos(farthestPartial)) >
-                1)
+              comparePos(
+                errorPos(result.farthestPartial),
+                errorPos(farthestPartial)
+              ) >= 0)
           ) {
             farthestPartial = result.farthestPartial;
           }
@@ -636,17 +646,7 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
       }
     }
     if (trace) {
-      if (farthestPartial) {
-        const errorType = farthestPartial.error;
-        const details = farthestPartial.details;
-        console.log(
-          `Found ${nodeName} at ${start} after hitting ` +
-            `${errorType} at line ${details.get("line")}, ` +
-            `column ${details.get("column")}`
-        );
-      } else {
-        console.log(`Found ${nodeName} at ${start}`);
-      }
+      console.log(foundMessage(nodeName, tokens, start, farthestPartial));
     }
     return { ast: converter(...elements), end: index, farthestPartial };
   };
@@ -695,38 +695,34 @@ function parseRepeatedly(
       if ("error" in parserResult) {
         if (
           !farthestPartial ||
-          compareErrors(pos(parserResult), pos(farthestPartial)) > 1
+          comparePos(errorPos(parserResult), errorPos(farthestPartial)) >= 0
         ) {
           farthestPartial = parserResult;
         }
         if (elements.length >= minimumCount) {
           if (trace) {
-            const errorType = farthestPartial.error;
-            const details = farthestPartial.details;
             console.log(
-              `Found ${nodeName} at ${start} after hitting ` +
-                `${errorType} at line ${details.get("line")}, ` +
-                `column ${details.get("column")}`
+              foundMessage(
+                `${elements.length} ${nodeName}`,
+                tokens,
+                start,
+                farthestPartial
+              )
             );
           }
           return { ast: elements, end: index, farthestPartial };
-        } else if (
-          farthestPartial &&
-          compareErrors(pos(farthestPartial), pos(parserResult))
-        ) {
-          return farthestPartial;
         } else {
-          return parserResult;
+          return farthestPartial;
         }
       } else {
         elements.push(parserResult.ast);
         if (
           parserResult.farthestPartial &&
           (!farthestPartial ||
-            compareErrors(
-              pos(parserResult.farthestPartial),
-              pos(farthestPartial)
-            ) > 1)
+            comparePos(
+              errorPos(parserResult.farthestPartial),
+              errorPos(farthestPartial)
+            ) >= 0)
         ) {
           farthestPartial = parserResult.farthestPartial;
         }
@@ -743,21 +739,26 @@ function parseRepeatedly(
           if (finalTerminatorMandatory) {
             const error = syntaxError(errorIfTerminatorMissing, tokens, index);
             if (
-              farthestPartial &&
-              compareErrors(pos(farthestPartial), pos(error))
+              !farthestPartial ||
+              comparePos(errorPos(error), errorPos(farthestPartial)) >= 0
             ) {
-              return { ...farthestPartial, error: errorIfTerminatorMissing };
-            } else {
-              return error;
+              farthestPartial = error;
             }
+            if (
+              trace &&
+              comparePos(errorPos(farthestPartial), tokenPos(tokens, start)) > 0
+            ) {
+              console.log(
+                `Unable to finish ${nodeName} after hitting ${
+                  farthestPartial.error
+                } at ${posString(errorPos(farthestPartial))}`
+              );
+            }
+            return farthestPartial;
           } else {
             if (trace) {
-              const errorType = farthestPartial.error;
-              const details = farthestPartial.details;
               console.log(
-                `Found ${nodeName} at ${start} after hitting ` +
-                  `${errorType} at line ${details.get("line")}, ` +
-                  `column ${details.get("column")}`
+                foundMessage(nodeName, tokens, start, farthestPartial)
               );
             }
             return { ast: elements, end: index, farthestPartial };
@@ -778,6 +779,35 @@ function convert(parser, converter) {
     }
     return { ...result, ast: converter(result.ast) };
   };
+}
+
+function errorPos(error) {
+  return [error.details.get("line"), error.details.get("column")];
+}
+
+function tokenPos(tokens, index) {
+  const token = tokens[index];
+  return [token.line, token.column];
+}
+
+function posString([line, column]) {
+  return `${line}:${column}`;
+}
+
+function foundMessage(nodeName, tokens, start, farthestPartial) {
+  if (farthestPartial) {
+    return `Found ${nodeName} at ${posString(
+      tokenPos(tokens, start)
+    )} after hitting ${farthestPartial.error} at ${posString(
+      errorPos(farthestPartial)
+    )}`;
+  } else {
+    return `Found ${nodeName} at ${posString(tokenPos(tokens, start))}`;
+  }
+}
+
+function comparePos([lineA, columnA], [lineB, columnB]) {
+  return lineA === lineB ? columnA - columnB : lineA - lineB;
 }
 
 function syntaxError(name, tokens, offendingTokenIndex, properties) {
