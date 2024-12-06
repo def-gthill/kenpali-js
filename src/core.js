@@ -68,4 +68,27 @@ properties = (object) => (
 merge = (objects) => (
     objects | transform(properties) | flatten | toObject
 );
+group = (pairs) => (
+    keys = pairs
+    | transform((pair) => (
+        [key, value] = pair;
+        key
+    ))
+    | newSet @ elements:();
+    result = keys
+    | transform((key) => [key, mutableArray()])
+    | newMap;
+    x = pairs
+    | transform((pair) => (
+        [key, value] = pair;
+        result @ at:(key) @ append:(value)
+    ));
+    result
+    @ entries:()
+    | transform((entry) => (
+        [key, value] = entry;
+        [key, value @ elements:()]
+    ))
+    | newMap
+);
 `;

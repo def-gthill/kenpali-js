@@ -512,6 +512,93 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "newSet",
+    {
+      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+    },
+    function ([elements]) {
+      const set = new Set(elements);
+      return kpobject(
+        [
+          "size",
+          builtin("size", {}, function () {
+            return set.size;
+          }),
+        ],
+        [
+          "elements",
+          builtin("elements", {}, function () {
+            return [...set.keys()];
+          }),
+        ],
+        [
+          "has",
+          builtin("has", { params: ["element"] }, function ([element]) {
+            return set.has(element);
+          }),
+        ]
+      );
+    }
+  ),
+  builtin(
+    "newMap",
+    {
+      params: [{ name: "entries", type: arrayOf(tupleLike(["any", "any"])) }],
+    },
+    function ([entries]) {
+      const map = new Map(entries);
+      return kpobject(
+        [
+          "size",
+          builtin("size", {}, function () {
+            return map.size;
+          }),
+        ],
+        [
+          "keys",
+          builtin("keys", {}, function () {
+            return [...map.keys()];
+          }),
+        ],
+        [
+          "values",
+          builtin("values", {}, function () {
+            return [...map.values()];
+          }),
+        ],
+        [
+          "entries",
+          builtin("entries", {}, function () {
+            return [...map.entries()];
+          }),
+        ],
+        [
+          "has",
+          builtin("has", { params: ["key"] }, function ([element]) {
+            return map.has(element);
+          }),
+        ],
+        [
+          "at",
+          builtin(
+            "at",
+            {
+              params: ["key"],
+              namedParams: [{ name: "default", defaultValue: literal(null) }],
+            },
+            function ([key], namedArgs) {
+              if (map.has(key)) {
+                return map.get(key);
+              } else {
+                return namedArgs.get("default");
+              }
+            }
+          ),
+        ]
+      );
+    }
+  ),
+  builtin(
     "mutableArray",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
@@ -519,6 +606,18 @@ const rawBuiltins = [
     function ([elements]) {
       const array = [...elements];
       const object = kpobject(
+        [
+          "size",
+          builtin("size", {}, function () {
+            return array.length;
+          }),
+        ],
+        [
+          "elements",
+          builtin("elements", {}, function () {
+            return [...array];
+          }),
+        ],
         [
           "append",
           builtin("append", { params: ["element"] }, function ([element]) {
@@ -571,12 +670,6 @@ const rawBuiltins = [
           builtin("pop", {}, function () {
             return array.pop();
           }),
-        ],
-        [
-          "elements",
-          builtin("elements", {}, function () {
-            return [...array];
-          }),
         ]
       );
       return object;
@@ -590,6 +683,18 @@ const rawBuiltins = [
     function ([elements]) {
       const set = new Set(elements);
       const object = kpobject(
+        [
+          "size",
+          builtin("size", {}, function () {
+            return set.size;
+          }),
+        ],
+        [
+          "elements",
+          builtin("elements", {}, function () {
+            return [...set.keys()];
+          }),
+        ],
         [
           "add",
           builtin("add", { params: ["element"] }, function ([element]) {
@@ -609,12 +714,90 @@ const rawBuiltins = [
           builtin("has", { params: ["element"] }, function ([element]) {
             return set.has(element);
           }),
+        ]
+      );
+      return object;
+    }
+  ),
+  builtin(
+    "mutableMap",
+    {
+      params: [{ name: "entries", type: arrayOf(tupleLike(["any", "any"])) }],
+    },
+    function ([entries]) {
+      const map = new Map(entries);
+      const object = kpobject(
+        [
+          "size",
+          builtin("size", {}, function () {
+            return map.size;
+          }),
         ],
         [
-          "elements",
-          builtin("elements", {}, function () {
-            return [...set.keys()];
+          "keys",
+          builtin("keys", {}, function () {
+            return [...map.keys()];
           }),
+        ],
+        [
+          "values",
+          builtin("values", {}, function () {
+            return [...map.values()];
+          }),
+        ],
+        [
+          "entries",
+          builtin("entries", {}, function () {
+            return [...map.entries()];
+          }),
+        ],
+        [
+          "set",
+          builtin("set", { params: ["key", "value"] }, function ([key, value]) {
+            map.set(key, value);
+            return object;
+          }),
+        ],
+        [
+          "storeAt",
+          builtin(
+            "storeAt",
+            { params: ["value", "key"] },
+            function ([value, key]) {
+              map.set(key, value);
+              return object;
+            }
+          ),
+        ],
+        [
+          "remove",
+          builtin("remove", { params: ["key"] }, function ([key]) {
+            map.delete(key);
+            return object;
+          }),
+        ],
+        [
+          "has",
+          builtin("has", { params: ["key"] }, function ([element]) {
+            return map.has(element);
+          }),
+        ],
+        [
+          "at",
+          builtin(
+            "at",
+            {
+              params: ["key"],
+              namedParams: [{ name: "default", defaultValue: literal(null) }],
+            },
+            function ([key], namedArgs) {
+              if (map.has(key)) {
+                return map.get(key);
+              } else {
+                return namedArgs.get("default");
+              }
+            }
+          ),
         ]
       );
       return object;
