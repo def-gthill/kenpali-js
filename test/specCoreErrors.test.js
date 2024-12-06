@@ -6,7 +6,7 @@ import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
 import { runSpecFile } from "./specRunner.js";
 
-const specPath = "../kenpali/kenpali-builtin-errors.md";
+const specPath = "../kenpali/kenpali-core-errors.md";
 
 runSpecFile(
   specPath,
