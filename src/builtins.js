@@ -577,6 +577,115 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "mutableArray",
+    {
+      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+    },
+    function ([elements]) {
+      const array = [...elements];
+      const object = kpobject(
+        [
+          "append",
+          builtin("append", { params: ["element"] }, function ([element]) {
+            array.push(element);
+            return object;
+          }),
+        ],
+        [
+          "set",
+          builtin(
+            "set",
+            {
+              params: [{ name: "index", type: "number" }, "element"],
+            },
+            function ([index, element]) {
+              array[index - 1] = element;
+              return object;
+            }
+          ),
+        ],
+        [
+          "storeAt",
+          builtin(
+            "storeAt",
+            {
+              params: ["element", { name: "index", type: "number" }],
+            },
+            function ([element, index]) {
+              array[index - 1] = element;
+              return object;
+            }
+          ),
+        ],
+        [
+          "at",
+          builtin(
+            "at",
+            { params: [{ name: "index", type: "number" }] },
+            function ([index]) {
+              if (index > 0) {
+                return array[index - 1];
+              } else {
+                return array.at(index);
+              }
+            }
+          ),
+        ],
+        [
+          "pop",
+          builtin("pop", {}, function () {
+            return array.pop();
+          }),
+        ],
+        [
+          "elements",
+          builtin("elements", {}, function () {
+            return [...array];
+          }),
+        ]
+      );
+      return object;
+    }
+  ),
+  builtin(
+    "mutableSet",
+    {
+      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+    },
+    function ([elements]) {
+      const set = new Set(elements);
+      const object = kpobject(
+        [
+          "add",
+          builtin("add", { params: ["element"] }, function ([element]) {
+            set.add(element);
+            return object;
+          }),
+        ],
+        [
+          "remove",
+          builtin("remove", { params: ["element"] }, function ([element]) {
+            set.delete(element);
+            return object;
+          }),
+        ],
+        [
+          "has",
+          builtin("has", { params: ["element"] }, function ([element]) {
+            return set.has(element);
+          }),
+        ],
+        [
+          "elements",
+          builtin("elements", {}, function () {
+            return [...set.keys()];
+          }),
+        ]
+      );
+      return object;
+    }
+  ),
+  builtin(
     "validate",
     { params: ["value", "schema"] },
     function ([value, schema], kpcallback) {
