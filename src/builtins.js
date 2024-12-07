@@ -1,6 +1,6 @@
 import { literal } from "./kpast.js";
 import kperror, { transformError } from "./kperror.js";
-import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
+import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
 import validate, {
   argumentError,
@@ -517,7 +517,9 @@ const rawBuiltins = [
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
     },
     function ([elements]) {
-      const set = new Set(elements);
+      const keys = elements.map(toKey);
+      const set = new Set(keys);
+      const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
       return kpobject(
         [
           "size",
@@ -528,13 +530,13 @@ const rawBuiltins = [
         [
           "elements",
           builtin("elements", {}, function () {
-            return [...set.keys()];
+            return [...set.keys()].map((key) => originalKeys.get(key));
           }),
         ],
         [
           "has",
           builtin("has", { params: ["element"] }, function ([element]) {
-            return set.has(element);
+            return set.has(toKey(element));
           }),
         ]
       );
@@ -1015,6 +1017,16 @@ function toValue(expression) {
     );
   } else {
     throw kperror("");
+  }
+}
+
+function toKey(value) {
+  if (isString(value) || isArray(value)) {
+    return toString(value);
+  } else if (isObject(value)) {
+    const keys = kpoKeys(value);
+    keys.sort(compare);
+    return toString(kpobject(...keys.map((key) => [key, value.get(key)])));
   }
 }
 
