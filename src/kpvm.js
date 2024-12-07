@@ -71,18 +71,18 @@ import {
 
 export default function kpvm(
   program,
-  { trace = false, timeLimitSeconds = 0 } = {}
+  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
 ) {
-  return new Vm(program, { trace, timeLimitSeconds }).run();
+  return new Vm(program, { trace, timeLimitSeconds, debugLog }).run();
 }
 
 export function kpvmCall(
   kpf,
   posArgs,
   namedArgs,
-  { trace = false, timeLimitSeconds = 0 } = {}
+  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
 ) {
-  return new Vm(kpf.program, { trace, timeLimitSeconds }).callback(
+  return new Vm(kpf.program, { trace, timeLimitSeconds, debugLog }).callback(
     kpf,
     posArgs,
     namedArgs
@@ -92,13 +92,14 @@ export function kpvmCall(
 export class Vm {
   constructor(
     { instructions, diagnostics = [] },
-    { trace = false, timeLimitSeconds = 0 } = {}
+    { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
   ) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
     this.trace = trace;
     this.timeLimitSeconds = timeLimitSeconds;
     this.startTime = Date.now();
+    this.debugLog = debugLog;
 
     this.cursor = 0;
     this.stack = [];
@@ -577,13 +578,15 @@ export class Vm {
     const posArgs = this.stack.pop();
     const kpcallback = (f, posArgs, namedArgs) => {
       if (isBuiltin(f)) {
-        return f(posArgs, namedArgs, kpcallback);
+        return f(posArgs, namedArgs, kpcallback, { debugLog: this.debugLog });
       } else {
         return this.callback(f, posArgs, namedArgs);
       }
     };
     try {
-      const result = callee(posArgs, namedArgs, kpcallback);
+      const result = callee(posArgs, namedArgs, kpcallback, {
+        debugLog: this.debugLog,
+      });
       this.stack.pop(); // Discard called function
       this.stack.push(result);
       const callFrame = this.callFrames.pop();
@@ -657,7 +660,7 @@ export class Vm {
     const kpcallback = (f, posArgs, namedArgs) =>
       this.callback(f, posArgs, namedArgs);
     try {
-      const result = callee(args, kpcallback);
+      const result = callee(args, kpcallback, { debugLog: this.debugLog });
       this.stack.push(result);
       const callFrame = this.callFrames.pop();
       this.cursor = callFrame.returnIndex;

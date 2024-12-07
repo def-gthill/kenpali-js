@@ -71,3 +71,11 @@ test("A time limit can be set on execution", (t) => {
   const code = `1 | repeat(while: () => true, next: (n) => n)`;
   t.throws(() => kpeval(kpparse(code), { timeLimitSeconds: 0.1 }));
 });
+
+test("Debug logging can be configured", (t) => {
+  const code = `1 | build(while: (n) => n | debug | isLessThan(100), next: (n) => n | times(2))`;
+  const debugLog = [];
+  const result = kpeval(kpparse(code), { debugLog: (s) => debugLog.push(s) });
+  t.deepEqual(result, [1, 2, 4, 8, 16, 32, 64]);
+  t.deepEqual(debugLog, ["1", "2", "4", "8", "16", "32", "64", "128"]);
+});

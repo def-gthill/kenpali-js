@@ -97,6 +97,7 @@ export interface ParseOptions {
 
 export interface CallOptions {
   timeLimitSeconds?: number;
+  debugLog?: (message: string) => void;
 }
 
 export interface CompileOptions {

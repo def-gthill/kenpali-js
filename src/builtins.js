@@ -31,6 +31,10 @@ import {
 } from "./values.js";
 
 const rawBuiltins = [
+  builtin("debug", { params: ["value"] }, function ([value], _, { debugLog }) {
+    debugLog(toString(value));
+    return value;
+  }),
   builtin(
     "plus",
     { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
