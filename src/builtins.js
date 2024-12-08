@@ -549,10 +549,20 @@ const rawBuiltins = [
   builtin(
     "newMap",
     {
-      params: [{ name: "entries", type: arrayOf(tupleLike(["any", "any"])) }],
+      params: [
+        {
+          name: "entries",
+          type: arrayOf(tupleLike(["any", "any"])),
+          defaultValue: literal([]),
+        },
+      ],
     },
     function ([entries]) {
-      const map = new Map(entries);
+      const realEntries = entries.map(([key, value]) => [toKey(key), value]);
+      const map = new Map(realEntries);
+      const originalKeys = new Map(
+        realEntries.map(([key, _], i) => [key, entries[i][0]])
+      );
       return kpobject(
         [
           "size",
@@ -563,7 +573,7 @@ const rawBuiltins = [
         [
           "keys",
           builtin("keys", {}, function () {
-            return [...map.keys()];
+            return [...map.keys()].map((key) => originalKeys.get(key));
           }),
         ],
         [
@@ -575,13 +585,16 @@ const rawBuiltins = [
         [
           "entries",
           builtin("entries", {}, function () {
-            return [...map.entries()];
+            return [...map.entries()].map(([key, value]) => [
+              originalKeys.get(key),
+              value,
+            ]);
           }),
         ],
         [
           "has",
-          builtin("has", { params: ["key"] }, function ([element]) {
-            return map.has(element);
+          builtin("has", { params: ["key"] }, function ([key]) {
+            return map.has(toKey(key));
           }),
         ],
         [
@@ -593,8 +606,9 @@ const rawBuiltins = [
               namedParams: [{ name: "default", defaultValue: literal(null) }],
             },
             function ([key], namedArgs) {
-              if (map.has(key)) {
-                return map.get(key);
+              const realKey = toKey(key);
+              if (map.has(realKey)) {
+                return map.get(realKey);
               } else {
                 return namedArgs.get("default");
               }
@@ -676,6 +690,13 @@ const rawBuiltins = [
           builtin("pop", {}, function () {
             return array.pop();
           }),
+        ],
+        [
+          "clear",
+          builtin("clear", {}, function () {
+            array.length = 0;
+            return object;
+          }),
         ]
       );
       return object;
@@ -687,7 +708,9 @@ const rawBuiltins = [
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
     },
     function ([elements]) {
-      const set = new Set(elements);
+      const keys = elements.map(toKey);
+      const set = new Set(keys);
+      const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
       const object = kpobject(
         [
           "size",
@@ -698,27 +721,39 @@ const rawBuiltins = [
         [
           "elements",
           builtin("elements", {}, function () {
-            return [...set.keys()];
+            return [...set.keys()].map((key) => originalKeys.get(key));
           }),
         ],
         [
           "add",
           builtin("add", { params: ["element"] }, function ([element]) {
-            set.add(element);
+            const key = toKey(element);
+            set.add(key);
+            originalKeys.set(key, element);
             return object;
           }),
         ],
         [
           "remove",
           builtin("remove", { params: ["element"] }, function ([element]) {
-            set.delete(element);
+            const key = toKey(element);
+            set.delete(key);
+            originalKeys.delete(key);
             return object;
           }),
         ],
         [
           "has",
           builtin("has", { params: ["element"] }, function ([element]) {
-            return set.has(element);
+            return set.has(toKey(element));
+          }),
+        ],
+        [
+          "clear",
+          builtin("clear", {}, function () {
+            set.clear();
+            originalKeys.clear();
+            return object;
           }),
         ]
       );
@@ -728,10 +763,20 @@ const rawBuiltins = [
   builtin(
     "mutableMap",
     {
-      params: [{ name: "entries", type: arrayOf(tupleLike(["any", "any"])) }],
+      params: [
+        {
+          name: "entries",
+          type: arrayOf(tupleLike(["any", "any"])),
+          defaultValue: literal([]),
+        },
+      ],
     },
     function ([entries]) {
-      const map = new Map(entries);
+      const realEntries = entries.map(([key, value]) => [toKey(key), value]);
+      const map = new Map(realEntries);
+      const originalKeys = new Map(
+        realEntries.map(([key, _], i) => [key, entries[i][0]])
+      );
       const object = kpobject(
         [
           "size",
@@ -742,7 +787,7 @@ const rawBuiltins = [
         [
           "keys",
           builtin("keys", {}, function () {
-            return [...map.keys()];
+            return [...map.keys()].map((key) => originalKeys.get(key));
           }),
         ],
         [
@@ -754,13 +799,18 @@ const rawBuiltins = [
         [
           "entries",
           builtin("entries", {}, function () {
-            return [...map.entries()];
+            return [...map.entries()].map(([key, value]) => [
+              originalKeys.get(key),
+              value,
+            ]);
           }),
         ],
         [
           "set",
           builtin("set", { params: ["key", "value"] }, function ([key, value]) {
-            map.set(key, value);
+            const realKey = toKey(key);
+            map.set(realKey, value);
+            originalKeys.set(realKey, key);
             return object;
           }),
         ],
@@ -770,7 +820,9 @@ const rawBuiltins = [
             "storeAt",
             { params: ["value", "key"] },
             function ([value, key]) {
-              map.set(key, value);
+              const realKey = toKey(key);
+              map.set(realKey, value);
+              originalKeys.set(realKey, key);
               return object;
             }
           ),
@@ -778,14 +830,16 @@ const rawBuiltins = [
         [
           "remove",
           builtin("remove", { params: ["key"] }, function ([key]) {
-            map.delete(key);
+            const realKey = toKey(key);
+            map.delete(realKey);
+            originalKeys.delete(realKey);
             return object;
           }),
         ],
         [
           "has",
-          builtin("has", { params: ["key"] }, function ([element]) {
-            return map.has(element);
+          builtin("has", { params: ["key"] }, function ([key]) {
+            return map.has(toKey(key));
           }),
         ],
         [
@@ -797,13 +851,22 @@ const rawBuiltins = [
               namedParams: [{ name: "default", defaultValue: literal(null) }],
             },
             function ([key], namedArgs) {
-              if (map.has(key)) {
-                return map.get(key);
+              const realKey = toKey(key);
+              if (map.has(realKey)) {
+                return map.get(realKey);
               } else {
                 return namedArgs.get("default");
               }
             }
           ),
+        ],
+        [
+          "clear",
+          builtin("clear", {}, function () {
+            map.clear();
+            originalKeys.clear();
+            return object;
+          }),
         ]
       );
       return object;

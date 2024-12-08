@@ -688,7 +688,11 @@ export class Vm {
           kperror("wrongType", ["value", index], ["expectedType", "number"])
         );
       }
-      if (index < 1 || index > collection.length) {
+      if (
+        index === 0 ||
+        index < -collection.length ||
+        index > collection.length
+      ) {
         this.throw_(
           kperror(
             "indexOutOfBounds",
@@ -698,7 +702,11 @@ export class Vm {
           )
         );
       }
-      this.stack.push(collection[index - 1]);
+      if (index > 0) {
+        this.stack.push(collection[index - 1]);
+      } else {
+        this.stack.push(collection.at(index));
+      }
     } else if (isObject(collection)) {
       if (!isString(index)) {
         this.throw_(
