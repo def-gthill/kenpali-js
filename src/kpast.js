@@ -103,14 +103,20 @@ export function transformTree(expression, handlers) {
   } else if ("array" in expression) {
     return transformNode("handleArray", (node) => ({
       ...node,
-      array: node.array.map(recurse),
+      array: node.array.map((element) => {
+        if ("spread" in element) {
+          return { spread: recurse(element.spread) };
+        } else {
+          return recurse(element);
+        }
+      }),
     }));
   } else if ("object" in expression) {
     return transformNode("handleObject", (node) => ({
       ...node,
       object: node.object.map((element) => {
         if ("spread" in element) {
-          return recurse(element);
+          return { spread: recurse(element.spread) };
         } else {
           const [key, value] = element;
           return [typeof key === "string" ? key : recurse(key), recurse(value)];
