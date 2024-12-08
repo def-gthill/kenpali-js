@@ -1051,7 +1051,6 @@ function loop(
       }
     }
     callback(current);
-    const nextResult = kpcallback(next, [current], kpobject());
     if (continueIf) {
       const continueIfCondition = kpcallback(continueIf, [current], kpobject());
       if (!isBoolean(continueIfCondition)) {
@@ -1062,10 +1061,10 @@ function loop(
         );
       }
       if (!continueIfCondition) {
-        return nextResult;
+        return current;
       }
     }
-    current = nextResult;
+    current = kpcallback(next, [current], kpobject());
   }
 }
 
