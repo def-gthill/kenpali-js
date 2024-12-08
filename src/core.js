@@ -25,8 +25,13 @@ slice = (coll, indices) => (
     result | butIf(isString(coll), () => join(result))
 );
 to = (start, end, by: = 1) => (
+    isNoFurtherThan = if(
+        by | isMoreThan(0),
+        then: () => isAtMost,
+        else: () => isAtLeast,
+    );
     start | build(
-        while: (i) => i | isAtMost(end),
+        while: (i) => i | isNoFurtherThan(end),
         next: (i) => i | plus(by),
     )
 );
