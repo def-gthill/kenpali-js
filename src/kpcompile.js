@@ -366,6 +366,7 @@ class Compiler {
   }
 
   assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
+    this.validate("array");
     this.addInstruction(ARRAY_COPY);
     this.addInstruction(ARRAY_REVERSE);
     for (let i = 0; i < pattern.arrayPattern.length; i++) {
@@ -391,6 +392,7 @@ class Compiler {
   }
 
   assignNamesInObjectPattern(pattern, { isArgumentPattern }) {
+    this.validate("object");
     this.addInstruction(OBJECT_COPY);
     let rest = null;
     for (const element of pattern.objectPattern) {
