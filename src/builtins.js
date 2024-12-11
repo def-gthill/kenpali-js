@@ -422,6 +422,13 @@ const rawBuiltins = [
           const outElements = out
             ? kpcallback(out, [current], kpobject())
             : [current];
+          if (!isArray(outElements)) {
+            throw kperror(
+              "wrongReturnType",
+              ["value", outElements],
+              ["expectedType", "array"]
+            );
+          }
           result.push(...outElements);
         },
         kpcallback
