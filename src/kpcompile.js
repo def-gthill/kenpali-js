@@ -99,7 +99,7 @@ class Compiler {
   ) {
     const filteredLibrary = new LibraryFilter(library, expression).filter();
     if (trace) {
-      console.log(
+      this.log(
         `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
       );
     }
@@ -107,6 +107,7 @@ class Compiler {
     this.names = names;
     this.modules = modules;
     this.trace = trace;
+    this.traceLevel = 0;
 
     this.activeFunctions = [new CompiledFunction()];
     this.activeScopes = [];
@@ -123,6 +124,20 @@ class Compiler {
       console.log("--------------------");
     }
     return program;
+  }
+
+  log(message) {
+    console.log(`${Array(this.traceLevel).fill("| ").join("")}${message}`);
+  }
+
+  logNodeStart(message) {
+    this.log(message);
+    this.traceLevel += 1;
+  }
+
+  logNodeEnd(message) {
+    this.traceLevel -= 1;
+    this.log(message);
   }
 
   combineFunctions() {
@@ -187,6 +202,9 @@ class Compiler {
   }
 
   compileArray(expression) {
+    if (this.trace) {
+      this.logNodeStart("Starting array");
+    }
     this.addInstruction(EMPTY_ARRAY);
     for (const element of expression.array) {
       if ("spread" in element) {
@@ -197,9 +215,15 @@ class Compiler {
         this.addInstruction(ARRAY_PUSH);
       }
     }
+    if (this.trace) {
+      this.logNodeEnd("Finished array");
+    }
   }
 
   compileObject(expression) {
+    if (this.trace) {
+      this.logNodeStart("Starting object");
+    }
     this.addInstruction(EMPTY_OBJECT);
     for (const entry of expression.object) {
       if ("spread" in entry) {
@@ -215,6 +239,9 @@ class Compiler {
         this.compileExpression(value);
         this.addInstruction(OBJECT_PUSH);
       }
+    }
+    if (this.trace) {
+      this.logNodeEnd("Finished object");
     }
   }
 
@@ -250,7 +277,7 @@ class Compiler {
       if (slot !== undefined) {
         if (functionsTraversed.length > 0) {
           if (this.trace) {
-            console.log(`Resolved "${expression.name}" in outer function`);
+            this.log(`Resolved "${expression.name}" in outer function`);
           }
           const outermostFunction = functionsTraversed.at(-1);
           let upvalueIndex = this.activeFunctions[
@@ -265,9 +292,13 @@ class Compiler {
           scope.setNeedsClosing(slot);
         } else {
           if (this.trace) {
-            console.log(
-              `Resolved "${expression.name}" in scope ${numLayers} out`
-            );
+            if (numLayers === 0) {
+              this.log(`Resolved "${expression.name}" in current scope`);
+            } else {
+              this.log(
+                `Resolved "${expression.name}" in scope ${numLayers} out`
+              );
+            }
           }
           this.addInstruction(READ_LOCAL, numLayers, slot);
         }
@@ -327,10 +358,10 @@ class Compiler {
   declareNames(pattern) {
     const activeScope = this.activeScopes.at(-1);
     if (typeof pattern === "string") {
-      if (this.trace) {
-        console.log(`Declare name "${pattern}"`);
-      }
       activeScope.declareName(pattern);
+      if (this.trace) {
+        this.log(`Declared name "${pattern}"`);
+      }
     } else if ("arrayPattern" in pattern) {
       for (const element of pattern.arrayPattern) {
         this.declareNames(element);
@@ -422,7 +453,7 @@ class Compiler {
 
   compileGiven(expression) {
     if (this.trace) {
-      console.log(
+      this.logNodeStart(
         `New function of ${JSON.stringify(
           expression.given.params ?? []
         )} ${JSON.stringify(expression.given.namedParams ?? [])}`
@@ -463,7 +494,7 @@ class Compiler {
     this.clearLocals();
     this.popScope();
     if (this.trace) {
-      console.log("Finished function");
+      this.logNodeEnd("Finished function");
     }
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(FUNCTION, 0);
@@ -488,7 +519,7 @@ class Compiler {
 
   compileBuiltin(expression) {
     if (this.trace) {
-      console.log(`Compiling builtin ${expression.builtinName}`);
+      this.log(`Compiling builtin ${expression.builtinName}`);
     }
     this.pushScope({
       reservedSlots: 3,
@@ -557,12 +588,12 @@ class Compiler {
     this.addInstruction(CATCH, 0);
     const catchIndex = this.currentFunction().instructions.length;
     if (this.trace) {
-      console.log(`Catching at ${catchIndex}`);
+      this.log(`Catching at ${catchIndex}`);
     }
     this.compileExpression(expression.catching);
     const jumpIndex = this.currentFunction().instructions.length;
     if (this.trace) {
-      console.log(`Recovery point at ${jumpIndex}`);
+      this.log(`Recovery point at ${jumpIndex}`);
     }
     this.currentFunction().instructions[catchIndex - 1] =
       jumpIndex - catchIndex;
@@ -842,9 +873,11 @@ class Compiler {
   pushScope({ reservedSlots = 1, functionStackIndex = null } = {}) {
     if (this.trace) {
       if (functionStackIndex === null) {
-        console.log(`Push ${reservedSlots}`);
+        this.logNodeStart(`Starting scope, reserving ${reservedSlots}`);
       } else {
-        console.log(`Push ${reservedSlots} (function ${functionStackIndex})`);
+        this.logNodeStart(
+          `Starting scope for function ${functionStackIndex}, reserving ${reservedSlots}`
+        );
       }
     }
     this.activeScopes.push(
@@ -854,7 +887,7 @@ class Compiler {
 
   popScope() {
     if (this.trace) {
-      console.log("Pop");
+      this.logNodeEnd("Finished scope");
     }
     this.activeScopes.pop();
   }

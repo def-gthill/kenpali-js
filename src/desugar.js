@@ -71,15 +71,57 @@ function desugarPropertyDefinition(expression) {
 function desugarDefining(expression) {
   return defining(
     ...kpoEntries(expression.defining).map(([name, value]) => [
-      name,
+      desugarDefiningPattern(name),
       desugar(value),
     ]),
     desugar(expression.result)
   );
 }
 
+function desugarDefiningPattern(pattern) {
+  if (typeof pattern === "string") {
+    return pattern;
+  } else if ("arrayPattern" in pattern) {
+    return { arrayPattern: desugarArrayPattern(pattern.arrayPattern) };
+  } else if ("objectPattern" in pattern) {
+    return { objectPattern: desugarObjectPattern(pattern.objectPattern) };
+  } else if ("name" in pattern) {
+    return { ...pattern, name: desugarDefiningPattern(pattern.name) };
+  }
+}
+
+function desugarArrayPattern(pattern) {
+  return pattern.map(desugarDefiningPatternElement);
+}
+
+function desugarObjectPattern(pattern) {
+  return pattern.map(desugarDefiningPatternElement);
+}
+
+function desugarDefiningPatternElement(element) {
+  if (typeof element === "object" && "rest" in element) {
+    return { rest: desugarDefiningPattern(element.rest) };
+  } else if (typeof element === "object" && "defaultValue" in element) {
+    return {
+      name: desugarDefiningPattern(element.name),
+      defaultValue: desugar(element.defaultValue),
+    };
+  } else {
+    return desugarDefiningPattern(element);
+  }
+}
+
 function desugarGiven(expression) {
-  return given(expression.given, desugar(expression.result));
+  const params = {};
+  if (expression.given.params) {
+    params.params = desugarArrayPattern(expression.given.params ?? []);
+  }
+  if (expression.given.namedParams) {
+    params.namedParams = desugarObjectPattern(
+      expression.given.namedParams ?? []
+    );
+  }
+  return given(params, desugar(expression.result));
 }
 
 function desugarUnquote(expression) {

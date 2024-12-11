@@ -332,7 +332,7 @@ function parseParameterName(parser, start) {
       [parseName, consume("COLON", "expectedNamedParameter")],
       (name) => ({ named: name.name })
     ),
-    convert(parseName, (node) => ({ positional: node.name }))
+    convert(parseDefiningPattern, (node) => ({ positional: node }))
   )(parser, start);
 }
 

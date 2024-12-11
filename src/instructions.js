@@ -120,12 +120,15 @@ class Disassembler {
   disassemble() {
     const instructionStrings = [];
     while (this.cursor < this.instructions.length) {
+      const instructionStart = this.cursor;
       let instructionString = this.disassembleInstruction();
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
-        instructionString = `${instructionString} ${toString(
+        instructionString = `${instructionStart} ${instructionString} ${toString(
           toKpobject(diagnostic)
         )}`;
+      } else {
+        instructionString = `${instructionStart} ${instructionString}`;
       }
       instructionStrings.push(instructionString);
     }

@@ -102,6 +102,7 @@ export class Vm {
     this.debugLog = debugLog;
 
     this.cursor = 0;
+    this.instructionStart = 0;
     this.stack = [];
     this.scopeFrames = [new ScopeFrame(0)];
     this.callFrames = [];
@@ -215,6 +216,9 @@ export class Vm {
   }
 
   runInstruction() {
+    if (this.trace) {
+      this.instructionStart = this.cursor;
+    }
     const instructionType = this.next();
     if (!this.instructionTable[instructionType]) {
       throw new Error(`Unknown instruction ${instructionType}`);
@@ -222,24 +226,28 @@ export class Vm {
     this.instructionTable[instructionType]();
   }
 
+  logInstruction(message) {
+    console.log(`${this.instructionStart} ${message}`);
+  }
+
   runValue() {
     const value = this.next();
     if (this.trace) {
-      console.log(`VALUE ${toString(value)}`);
+      this.logInstruction(`VALUE ${toString(value)}`);
     }
     this.stack.push(value);
   }
 
   runAlias() {
     if (this.trace) {
-      console.log("ALIAS");
+      this.logInstruction("ALIAS");
     }
     this.stack.push(this.stack.at(-1));
   }
 
   runDiscard() {
     if (this.trace) {
-      console.log("DISCARD");
+      this.logInstruction("DISCARD");
     }
     this.stack.pop();
   }
@@ -247,7 +255,7 @@ export class Vm {
   runReserve() {
     const numSlots = this.next();
     if (this.trace) {
-      console.log(`RESERVE ${numSlots}`);
+      this.logInstruction(`RESERVE ${numSlots}`);
     }
     for (let i = 0; i < numSlots; i++) {
       this.stack.push(undefined);
@@ -257,7 +265,9 @@ export class Vm {
   runWriteLocal() {
     const localIndex = this.next();
     if (this.trace) {
-      console.log(`WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`);
+      this.logInstruction(
+        `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
+      );
     }
     const absoluteIndex = this.scopeFrames.at(-1).stackIndex + localIndex;
     const value = this.stack.pop();
@@ -268,7 +278,7 @@ export class Vm {
     const stepsOut = this.next();
     const localIndex = this.next();
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
       );
     }
@@ -288,7 +298,7 @@ export class Vm {
     const offset = this.next();
     const stackIndex = this.stack.length - 1 + offset;
     if (this.trace) {
-      console.log(`PUSH ${offset} (at ${stackIndex})`);
+      this.logInstruction(`PUSH ${offset} (at ${stackIndex})`);
     }
     this.scopeFrames.push(new ScopeFrame(stackIndex));
   }
@@ -296,21 +306,21 @@ export class Vm {
   runPop() {
     const frame = this.scopeFrames.pop();
     if (this.trace) {
-      console.log(`POP (at ${frame.stackIndex})`);
+      this.logInstruction(`POP (at ${frame.stackIndex})`);
     }
     this.stack.length = frame.stackIndex + 1;
   }
 
   runEmptyArray() {
     if (this.trace) {
-      console.log("EMPTY_ARRAY");
+      this.logInstruction("EMPTY_ARRAY");
     }
     this.stack.push([]);
   }
 
   runArrayPush() {
     if (this.trace) {
-      console.log("ARRAY_PUSH");
+      this.logInstruction("ARRAY_PUSH");
     }
     const value = this.stack.pop();
     this.stack.at(-1).push(value);
@@ -318,7 +328,7 @@ export class Vm {
 
   runArrayExtend() {
     if (this.trace) {
-      console.log("ARRAY_EXTEND");
+      this.logInstruction("ARRAY_EXTEND");
     }
     const value = this.stack.pop();
     this.stack.at(-1).push(...value);
@@ -326,14 +336,14 @@ export class Vm {
 
   runArrayReverse() {
     if (this.trace) {
-      console.log("ARRAY_REVERSE");
+      this.logInstruction("ARRAY_REVERSE");
     }
     this.stack.at(-1).reverse();
   }
 
   runArrayPop() {
     if (this.trace) {
-      console.log("ARRAY_POP");
+      this.logInstruction("ARRAY_POP");
     }
     const value = this.stack.at(-1).pop();
     if (value === undefined) {
@@ -362,7 +372,7 @@ export class Vm {
 
   runArrayPopOrDefault() {
     if (this.trace) {
-      console.log("ARRAY_POP_OR_DEFAULT");
+      this.logInstruction("ARRAY_POP_OR_DEFAULT");
     }
     const defaultValue = this.stack.pop();
     const value =
@@ -373,7 +383,7 @@ export class Vm {
   runArrayCut() {
     const position = this.next();
     if (this.trace) {
-      console.log(`ARRAY_CUT ${position}`);
+      this.logInstruction(`ARRAY_CUT ${position}`);
     }
     const array = this.stack.pop();
     this.stack.push(array.slice(0, position));
@@ -382,7 +392,7 @@ export class Vm {
 
   runArrayCopy() {
     if (this.trace) {
-      console.log("ARRAY_COPY");
+      this.logInstruction("ARRAY_COPY");
     }
     const array = this.stack.pop();
     this.stack.push([...array]);
@@ -390,7 +400,7 @@ export class Vm {
 
   runArrayIsEmpty() {
     if (this.trace) {
-      console.log("ARRAY_IS_EMPTY");
+      this.logInstruction("ARRAY_IS_EMPTY");
     }
     const array = this.stack.pop();
     this.stack.push(array.length === 0);
@@ -398,14 +408,14 @@ export class Vm {
 
   runEmptyObject() {
     if (this.trace) {
-      console.log("EMPTY_OBJECT");
+      this.logInstruction("EMPTY_OBJECT");
     }
     this.stack.push(kpobject());
   }
 
   runObjectPush() {
     if (this.trace) {
-      console.log("OBJECT_PUSH");
+      this.logInstruction("OBJECT_PUSH");
     }
     const value = this.stack.pop();
     const key = this.stack.pop();
@@ -414,7 +424,7 @@ export class Vm {
 
   runObjectMerge() {
     if (this.trace) {
-      console.log("OBJECT_MERGE");
+      this.logInstruction("OBJECT_MERGE");
     }
     const object = this.stack.pop();
     for (const [key, value] of object) {
@@ -424,7 +434,7 @@ export class Vm {
 
   runObjectPop() {
     if (this.trace) {
-      console.log("OBJECT_POP");
+      this.logInstruction("OBJECT_POP");
     }
     const key = this.stack.pop();
     const value = this.stack.at(-1).get(key);
@@ -451,7 +461,7 @@ export class Vm {
 
   runObjectPopOrDefault() {
     if (this.trace) {
-      console.log("OBJECT_POP_OR_DEFAULT");
+      this.logInstruction("OBJECT_POP_OR_DEFAULT");
     }
     const defaultValue = this.stack.pop();
     const key = this.stack.pop();
@@ -464,7 +474,7 @@ export class Vm {
 
   runObjectCopy() {
     if (this.trace) {
-      console.log("OBJECT_COPY");
+      this.logInstruction("OBJECT_COPY");
     }
     const object = this.stack.pop();
     this.stack.push(kpobject(...kpoEntries(object)));
@@ -473,7 +483,7 @@ export class Vm {
   runJump() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP ${distance}`);
+      this.logInstruction(`JUMP ${distance}`);
     }
     this.cursor += distance;
   }
@@ -481,7 +491,7 @@ export class Vm {
   runJumpIfTrue() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP_IF_TRUE ${distance}`);
+      this.logInstruction(`JUMP_IF_TRUE ${distance}`);
     }
     const condition = this.stack.pop();
     if (condition) {
@@ -492,7 +502,7 @@ export class Vm {
   runJumpIfFalse() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP_IF_FALSE ${distance}`);
+      this.logInstruction(`JUMP_IF_FALSE ${distance}`);
     }
     const condition = this.stack.pop();
     if (!condition) {
@@ -504,7 +514,7 @@ export class Vm {
     const target = this.next();
     const diagnostic = this.getDiagnostic();
     if (this.trace) {
-      console.log(`FUNCTION ${target} (${diagnostic.name})`);
+      this.logInstruction(`FUNCTION ${target} (${diagnostic.name})`);
     }
     this.stack.push(
       new Function(
@@ -520,7 +530,7 @@ export class Vm {
     const stepsOut = this.next();
     const index = this.next();
     if (this.trace) {
-      console.log(`CLOSURE ${stepsOut} ${index}`);
+      this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
     }
     const f = this.stack.at(-1);
     let upvalue;
@@ -544,7 +554,7 @@ export class Vm {
 
   runCall() {
     if (this.trace) {
-      console.log("CALL");
+      this.logInstruction("CALL");
     }
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
@@ -605,7 +615,7 @@ export class Vm {
 
   runCapture() {
     if (this.trace) {
-      console.log("CAPTURE");
+      this.logInstruction("CAPTURE");
     }
     const value = this.stack.pop();
     this.openUpvalues[this.stack.length].close(value);
@@ -615,7 +625,7 @@ export class Vm {
   runReadUpvalue() {
     const upvalueIndex = this.next();
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
       );
     }
@@ -635,7 +645,7 @@ export class Vm {
 
   runReturn() {
     if (this.trace) {
-      console.log("RETURN");
+      this.logInstruction("RETURN");
     }
     if (this.callFrames.length === 0) {
       this.cursor = this.instructions.length;
@@ -650,7 +660,7 @@ export class Vm {
 
   runCallBuiltin() {
     if (this.trace) {
-      console.log("CALL_BUILTIN");
+      this.logInstruction("CALL_BUILTIN");
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     this.callFrames.push(new CallFrame(frameIndex, this.cursor));
@@ -678,7 +688,7 @@ export class Vm {
 
   runIndex() {
     if (this.trace) {
-      console.log("INDEX");
+      this.logInstruction("INDEX");
     }
     const index = this.stack.pop();
     const collection = this.stack.pop();
@@ -734,14 +744,14 @@ export class Vm {
   runCatch() {
     const recoveryOffset = this.next();
     if (this.trace) {
-      console.log(`CATCH ${recoveryOffset}`);
+      this.logInstruction(`CATCH ${recoveryOffset}`);
     }
     this.scopeFrames.at(-1).setRecovery(this.cursor + recoveryOffset);
   }
 
   runIsNull() {
     if (this.trace) {
-      console.log("IS_NULL");
+      this.logInstruction("IS_NULL");
     }
     const value = this.stack.pop();
     this.stack.push(isNull(value));
@@ -749,7 +759,7 @@ export class Vm {
 
   runIsBoolean() {
     if (this.trace) {
-      console.log("IS_BOOLEAN");
+      this.logInstruction("IS_BOOLEAN");
     }
     const value = this.stack.pop();
     this.stack.push(isBoolean(value));
@@ -757,7 +767,7 @@ export class Vm {
 
   runIsNumber() {
     if (this.trace) {
-      console.log("IS_NUMBER");
+      this.logInstruction("IS_NUMBER");
     }
     const value = this.stack.pop();
     this.stack.push(isNumber(value));
@@ -765,7 +775,7 @@ export class Vm {
 
   runIsString() {
     if (this.trace) {
-      console.log("IS_STRING");
+      this.logInstruction("IS_STRING");
     }
     const value = this.stack.pop();
     this.stack.push(isString(value));
@@ -773,7 +783,7 @@ export class Vm {
 
   runIsArray() {
     if (this.trace) {
-      console.log("IS_ARRAY");
+      this.logInstruction("IS_ARRAY");
     }
     const value = this.stack.pop();
     this.stack.push(isArray(value));
@@ -781,7 +791,7 @@ export class Vm {
 
   runIsObject() {
     if (this.trace) {
-      console.log("IS_OBJECT");
+      this.logInstruction("IS_OBJECT");
     }
     const value = this.stack.pop();
     this.stack.push(isObject(value));
@@ -789,7 +799,7 @@ export class Vm {
 
   runIsBuiltin() {
     if (this.trace) {
-      console.log("IS_BUILTIN");
+      this.logInstruction("IS_BUILTIN");
     }
     const value = this.stack.pop();
     this.stack.push(isBuiltin(value));
@@ -797,7 +807,7 @@ export class Vm {
 
   runIsGiven() {
     if (this.trace) {
-      console.log("IS_GIVEN");
+      this.logInstruction("IS_GIVEN");
     }
     const value = this.stack.pop();
     this.stack.push(isGiven(value));
@@ -805,7 +815,7 @@ export class Vm {
 
   runIsError() {
     if (this.trace) {
-      console.log("IS_ERROR");
+      this.logInstruction("IS_ERROR");
     }
     const value = this.stack.pop();
     this.stack.push(isError(value));
@@ -813,7 +823,7 @@ export class Vm {
 
   runIsFunction() {
     if (this.trace) {
-      console.log("IS_FUNCTION");
+      this.logInstruction("IS_FUNCTION");
     }
     const value = this.stack.pop();
     this.stack.push(isFunction(value));
@@ -821,7 +831,7 @@ export class Vm {
 
   runIsSequence() {
     if (this.trace) {
-      console.log("IS_SEQUENCE");
+      this.logInstruction("IS_SEQUENCE");
     }
     const value = this.stack.pop();
     this.stack.push(isSequence(value));
@@ -829,7 +839,7 @@ export class Vm {
 
   runErrorIfInvalid() {
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `ERROR_IF_INVALID isArgument=${this.getDiagnostic().isArgument}`
       );
     }
