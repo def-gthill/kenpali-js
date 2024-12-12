@@ -128,12 +128,10 @@ export function transformTree(expression, handlers) {
   } else if ("defining" in expression) {
     return transformNode("handleDefining", (node) => ({
       ...node,
-      defining: Array.isArray(node.defining)
-        ? node.defining.map(([name, value]) => [
-            typeof name === "string" ? name : recurse(name),
-            recurse(value),
-          ])
-        : kpoMap(node.defining, ([name, value]) => [name, recurse(value)]),
+      defining: node.defining.map(([name, value]) => [
+        typeof name === "string" ? name : recurse(name),
+        recurse(value),
+      ]),
       result: recurse(node.result),
     }));
   } else if ("given" in expression) {

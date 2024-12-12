@@ -357,7 +357,9 @@ class Compiler {
 
   declareNames(pattern) {
     const activeScope = this.activeScopes.at(-1);
-    if (typeof pattern === "string") {
+    if (pattern === null) {
+      return;
+    } else if (typeof pattern === "string") {
       activeScope.declareName(pattern);
       if (this.trace) {
         this.log(`Declared name "${pattern}"`);
@@ -381,7 +383,10 @@ class Compiler {
 
   assignNames(pattern, { isArgumentPattern = false, isArgument = false } = {}) {
     const activeScope = this.activeScopes.at(-1);
-    if (typeof pattern === "string") {
+    if (pattern === null) {
+      // Expression statement, throw away the result
+      this.addInstruction(DISCARD);
+    } else if (typeof pattern === "string") {
       this.addInstruction(WRITE_LOCAL, activeScope.getSlot(pattern));
       this.addDiagnostic({ name: pattern });
     } else if ("arrayPattern" in pattern) {

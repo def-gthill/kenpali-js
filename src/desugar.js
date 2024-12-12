@@ -71,7 +71,7 @@ function desugarPropertyDefinition(expression) {
 function desugarDefining(expression) {
   return defining(
     ...kpoEntries(expression.defining).map(([name, value]) => [
-      desugarDefiningPattern(name),
+      name ? desugarDefiningPattern(name) : name,
       desugar(value),
     ]),
     desugar(expression.result)

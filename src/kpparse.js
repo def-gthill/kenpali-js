@@ -57,7 +57,7 @@ export function parseAll(parser, start) {
 }
 
 export function parseModule(parser, start) {
-  return parseZeroOrMore("module", parseNameDefinition, {
+  return parseZeroOrMore("module", parseStatement, {
     terminator: consume("SEMICOLON"),
     errorIfTerminatorMissing: "missingDefinitionSeparator",
     finalTerminatorMandatory: true,
@@ -72,22 +72,28 @@ function parseScope(parser, start) {
   return parseAllOf(
     "scope",
     [
-      parseZeroOrMore("definitions", parseNameDefinition, {
+      parseZeroOrMore("statements", parseStatement, {
         terminator: consume("SEMICOLON"),
-        errorIfTerminatorMissing: "missingDefinitionSeparator",
+        errorIfTerminatorMissing: "missingStatementSeparator",
         finalTerminatorMandatory: true,
       }),
       parseAssignable,
     ],
-    (definitions, result) =>
-      definitions.length === 0 ? result : defining(...definitions, result)
+    (statements, result) =>
+      statements.length === 0 ? result : defining(...statements, result)
   )(parser, start);
 }
 
-function parseNameDefinition(parser, start) {
-  return parseAllOf("definition", [
-    parseDefiningPattern,
-    consume("EQUALS", "missingEqualsInDefinition"),
+function parseStatement(parser, start) {
+  return parseAllOf("statement", [
+    parseOptional(
+      "assignmentTargets",
+      parseAllOfFlat(
+        "assignmentTarget",
+        [parseDefiningPattern, consume("EQUALS", "missingEqualsInDefinition")],
+        (result) => result
+      )
+    ),
     parseAssignable,
   ])(parser, start);
 }
@@ -658,6 +664,16 @@ function parseAllOfFlat(nodeName, parsers, converter = (...args) => args) {
   );
 }
 
+function parseOptional(nodeName, parser) {
+  return convert(
+    parseRepeatedly(nodeName, parser, {
+      minimumCount: 0,
+      maximumCount: 1,
+    }),
+    (result) => (result.length === 0 ? null : result[0])
+  );
+}
+
 function parseZeroOrMore(
   nodeName,
   parser,
@@ -682,6 +698,7 @@ function parseRepeatedly(
     terminator,
     errorIfTerminatorMissing,
     minimumCount,
+    maximumCount = Infinity,
     finalTerminatorMandatory = false,
   } = {}
 ) {
@@ -690,7 +707,8 @@ function parseRepeatedly(
     const elements = [];
     let farthestPartial;
 
-    while (true) {
+    while (elements.length < maximumCount) {
+      let previousIndex = index;
       const parserResult = parser({ tokens, trace }, index);
       if ("error" in parserResult) {
         if (
@@ -744,17 +762,18 @@ function parseRepeatedly(
             ) {
               farthestPartial = error;
             }
-            if (
-              trace &&
-              comparePos(errorPos(farthestPartial), tokenPos(tokens, start)) > 0
-            ) {
+            elements.pop();
+            if (trace) {
               console.log(
-                `Unable to finish ${nodeName} after hitting ${
-                  farthestPartial.error
-                } at ${posString(errorPos(farthestPartial))}`
+                foundMessage(
+                  `${elements.length} ${nodeName}`,
+                  tokens,
+                  start,
+                  farthestPartial
+                )
               );
             }
-            return farthestPartial;
+            return { ast: elements, end: previousIndex, farthestPartial };
           } else {
             if (trace) {
               console.log(
@@ -768,6 +787,7 @@ function parseRepeatedly(
         index = terminatorResult.end;
       }
     }
+    return { ast: elements, end: index, farthestPartial };
   };
 }
 
