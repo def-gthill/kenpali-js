@@ -962,6 +962,9 @@ class CompiledScope {
   }
 
   declareName(name) {
+    if (this.nameSlots.has(name)) {
+      throw kperror("duplicateName", ["name", name]);
+    }
     this.nameSlots.set(name, this.nextSlot);
     this.nextSlot += 1;
   }

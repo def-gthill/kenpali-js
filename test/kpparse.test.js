@@ -108,7 +108,7 @@ test("An object spread operator in an argument list parses to an objectSpread no
 test("The semicolon between the definitions and result is mandatory", (t) => {
   const code = "foo = 42 foo";
   const result = kpcatch(() => kpparseSugared(code));
-  assertIsError(t, result, "missingDefinitionSeparator", {
+  assertIsError(t, result, "missingStatementSeparator", {
     line: 1,
     column: 10,
   });
