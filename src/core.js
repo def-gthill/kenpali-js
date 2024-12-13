@@ -99,4 +99,5 @@ group = (pairs) => (
     ))
     | newMap
 );
+also = (value, f) => (f(value); value);
 `;
