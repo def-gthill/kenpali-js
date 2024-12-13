@@ -67,6 +67,9 @@ chunk = (array, size) => (
     starts = 1 | to(length(array), by: size);
     starts | transform((start) => (array | slice(start | toSize(size))))
 );
+reverse = (array) => (
+    array | length | to(1, by: -1) | transform((i) => array @ i)
+);
 properties = (object) => (
     object | keys | transform((key) => [key, object @ key])
 );
