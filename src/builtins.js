@@ -625,6 +625,24 @@ const rawBuiltins = [
       );
     }
   ),
+  builtin("variable", { params: ["initialValue"] }, function ([initialValue]) {
+    let value = initialValue;
+    return kpobject(
+      [
+        "get",
+        builtin("get", {}, function () {
+          return value;
+        }),
+      ],
+      [
+        "set",
+        builtin("set", { params: ["newValue"] }, function ([newValue]) {
+          value = newValue;
+          return value;
+        }),
+      ]
+    );
+  }),
   builtin(
     "mutableArray",
     {
