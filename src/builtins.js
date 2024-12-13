@@ -293,7 +293,7 @@ const rawBuiltins = [
       if (isNumber(value)) {
         return value;
       }
-      if (!/^-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?$/.test(value)) {
+      if (!/^-?((\d+))(.\d+)?([Ee][+-]?\d+)?$/.test(value)) {
         throw kperror("notNumeric", ["value", value]);
       }
       return parseFloat(value);
