@@ -4,6 +4,7 @@ const tokenSpec = [
   // Literals
   ["NUMBER", r`-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?`],
   ["STRING", r`"(\\"|[^"])*"`],
+  ["RAW_STRING", "`[^`]*`"],
   // Groupers
   ["OPEN_QUOTE_PAREN", r`'\(`],
   ["CLOSE_QUOTE_PAREN", r`\)'`],
@@ -66,6 +67,9 @@ export default function* kplex(code) {
     } else if (kind === "STRING") {
       kind = "LITERAL";
       value = JSON.parse(text);
+    } else if (kind === "RAW_STRING") {
+      kind = "LITERAL";
+      value = text.slice(1, text.length - 1);
     } else if (kind === "NEWLINE" || kind === "COMMENT") {
       lineStart = mo.index + text.length;
       lineNum += 1;
