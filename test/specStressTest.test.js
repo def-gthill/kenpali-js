@@ -14,7 +14,7 @@ runSpecFile(
     kpcatch(() => {
       const ast = kpparse(code);
       const program = kpcompile(ast);
-      // const program = kpcompile(ast, {trace: true});
+      // const program = kpcompile(ast, { trace: true });
       const result = kpvm(program);
       // const result = kpvm(program, { trace: true });
       return result;

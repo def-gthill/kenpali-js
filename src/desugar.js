@@ -101,6 +101,8 @@ function desugarObjectPattern(pattern) {
 function desugarDefiningPatternElement(element) {
   if (typeof element === "object" && "rest" in element) {
     return { rest: desugarDefiningPattern(element.rest) };
+  } else if (typeof element === "object" && "namedRest" in element) {
+    return { rest: desugarDefiningPattern(element.namedRest) };
   } else if (typeof element === "object" && "defaultValue" in element) {
     return {
       name: desugarDefiningPattern(element.name),

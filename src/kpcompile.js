@@ -340,18 +340,14 @@ class Compiler {
 
   defineNames(statements) {
     for (const statement of statements) {
-      if (Array.isArray(statement)) {
-        const [pattern, _] = statement;
-        this.declareNames(pattern);
-      }
+      const [pattern, _] = statement;
+      this.declareNames(pattern);
     }
     this.addInstruction(RESERVE, this.activeScopes.at(-1).numDeclaredNames());
     for (const statement of statements) {
-      if (Array.isArray(statement)) {
-        const [pattern, expression] = statement;
-        this.compileExpression(expression);
-        this.assignNames(pattern);
-      }
+      const [pattern, expression] = statement;
+      this.compileExpression(expression);
+      this.assignNames(pattern);
     }
   }
 
