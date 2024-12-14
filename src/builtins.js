@@ -1118,6 +1118,8 @@ function toKey(value) {
     const keys = kpoKeys(value);
     keys.sort(compare);
     return toString(kpobject(...keys.map((key) => [key, value.get(key)])));
+  } else {
+    return value;
   }
 }
 
