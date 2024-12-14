@@ -15,6 +15,36 @@ butIf = (value, condition, ifTrue) => (
 isBetween = (n, lower, upper) => (
     n | isAtLeast(lower) | and(() => n | isAtMost(upper))
 );
+least = (array) => (
+    [1, null] | repeat(
+        next: ([i, leastSoFar]) => [
+            i | increment,
+            if(
+                leastSoFar | isNull | or(
+                    () => array @ i | isLessThan(leastSoFar)
+                ),
+                then: () => array @ i,
+                else: () => leastSoFar,
+            )
+        ],
+        continueIf: ([i, leastSoFar]) => i | isAtMost(array | length),
+    ) @ 2
+);
+most = (array) => (
+    [1, null] | repeat(
+        next: ([i, mostSoFar]) => [
+            i | increment,
+            if(
+                mostSoFar | isNull | or(
+                    () => array @ i | isMoreThan(mostSoFar)
+                ),
+                then: () => array @ i,
+                else: () => mostSoFar,
+            )
+        ],
+        continueIf: ([i, mostSoFar]) => i | isAtMost(array | length),
+    ) @ 2
+);
 isEmpty = (coll) => (length(coll) | equals(0));
 dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
 dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
