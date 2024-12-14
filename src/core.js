@@ -106,28 +106,25 @@ properties = (object) => (
 merge = (objects) => (
     objects | transform(properties) | flatten | toObject
 );
-group = (pairs) => (
-    keys = pairs
-    | transform((pair) => (
-        [key, value] = pair;
-        key
-    ))
-    | newSet @ elements:();
-    result = keys
-    | transform((key) => [key, mutableArray()])
-    | newMap;
-    x = pairs
-    | transform((pair) => (
-        [key, value] = pair;
-        result @ at:(key) @ append:(value)
+group = (pairs, onGroup: = (x) => x) => (
+    result = mutableMap();
+    pairs
+    | transform(([key, value]) => (
+        if(
+            result @ has:(key),
+            then: () => result @ at:(key) @ append:(value),
+            else: () => result @ set:(key, mutableArray([value])),
+        )
     ));
-    result
-    @ entries:()
-    | transform((entry) => (
-        [key, value] = entry;
-        [key, value @ elements:()]
+    result @ entries:()
+    | transform(([key, value]) => (
+        [key, value @ elements:() | onGroup]
     ))
-    | newMap
+);
+groupBy = (array, by, onGroup: = (x) => x) => (
+    array
+    | transform((element) => [by(element), element])
+    | group(onGroup: onGroup)
 );
 also = (value, f) => (f(value); value);
 `;
