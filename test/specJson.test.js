@@ -28,6 +28,5 @@ runSpecFile(
       expectedErrorName,
       JSON.parse(expectedErrorDetails)
     );
-  },
-  ["Object destructuring with aliases"]
+  }
 );
