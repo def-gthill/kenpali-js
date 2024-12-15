@@ -437,7 +437,8 @@ export class Vm {
       this.logInstruction("OBJECT_POP");
     }
     const key = this.stack.pop();
-    const value = this.stack.at(-1).get(key);
+    const collection = this.stack.at(-1);
+    const value = collection.get(key);
     if (value === undefined) {
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
@@ -446,12 +447,14 @@ export class Vm {
           return;
         } else {
           this.throw_(
-            kperror("missingProperty", ["value", value], ["key", key])
+            kperror("missingProperty", ["value", collection], ["key", key])
           );
           return;
         }
       } else {
-        this.throw_(kperror("missingProperty", ["value", value], ["key", key]));
+        this.throw_(
+          kperror("missingProperty", ["value", collection], ["key", key])
+        );
         return;
       }
     }

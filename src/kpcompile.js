@@ -867,7 +867,13 @@ class Compiler {
   }
 
   paramName(param) {
-    return typeof param === "string" ? param : param.name;
+    if (typeof param === "string") {
+      return param;
+    } else if ("property" in param) {
+      return param.property;
+    } else {
+      return param.name;
+    }
   }
 
   currentScope() {

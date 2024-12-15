@@ -159,11 +159,15 @@ function parseObjectPattern(parser, start) {
 function parseObjectPatternElement(parser, start) {
   return parseAnyOf(
     "objectPatternElement",
-    parseAllOf("objectPatternDefault", [
-      parseObjectPatternPropertyName,
-      consume("EQUALS", "expectedDefault"),
-      parseExpression,
-    ]),
+    parseAllOf(
+      "objectPatternDefault",
+      [
+        parseObjectPatternPropertyName,
+        consume("EQUALS", "expectedDefault"),
+        parseExpression,
+      ],
+      (name, defaultValue) => ({ name: name.name, defaultValue })
+    ),
     parseAllOf(
       "objectPatternRest",
       [consume("DOUBLE_STAR", "expectedRest"), parseName],
@@ -171,7 +175,19 @@ function parseObjectPatternElement(parser, start) {
         namedRest: name.name,
       })
     ),
-    parseObjectPatternPropertyName
+    parseAnyOf(
+      "objectPatternStandard",
+      parseAllOf(
+        "objectPatternEntry",
+        [
+          parseAssignable,
+          consume("COLON", "missingKeyTargetSeparator"),
+          parseDefiningPattern,
+        ],
+        (name, pattern) => ({ name: pattern, property: name.name })
+      ),
+      parseObjectPatternPropertyName
+    )
   )(parser, start);
 }
 
