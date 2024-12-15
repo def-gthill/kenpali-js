@@ -667,8 +667,13 @@ export class Vm {
     const callee = this.stack[frameIndex];
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
-    const kpcallback = (f, posArgs, namedArgs) =>
-      this.callback(f, posArgs, namedArgs);
+    const kpcallback = (f, posArgs, namedArgs) => {
+      if (typeof f === "function") {
+        return f(posArgs, namedArgs, kpcallback, { debugLog: this.debugLog });
+      } else {
+        return this.callback(f, posArgs, namedArgs);
+      }
+    };
     try {
       const result = callee(args, kpcallback, { debugLog: this.debugLog });
       this.stack.push(result);
