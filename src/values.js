@@ -112,11 +112,7 @@ export function toString(value) {
       "}"
     );
   } else if (isGiven(value)) {
-    if (value.closure.length > 0) {
-      return `function ${value.name} closure=${toString(value.closure)}`;
-    } else {
-      return `function ${value.name}`;
-    }
+    return `function ${value.name}`;
   } else if (isBuiltin(value)) {
     return `function ${value.builtinName ?? value.name ?? "<anonymous>"}`;
   } else if (isError(value)) {

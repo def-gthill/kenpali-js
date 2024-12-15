@@ -169,7 +169,7 @@ class Compiler {
     return { instructions, diagnostics };
   }
 
-  compileExpression(expression) {
+  compileExpression(expression, name) {
     if (typeof expression === "function") {
       this.compileBuiltin(expression);
     } else if (expression === null || typeof expression !== "object") {
@@ -185,7 +185,13 @@ class Compiler {
     } else if ("defining" in expression) {
       this.compileDefining(expression);
     } else if ("given" in expression) {
-      this.compileGiven(expression);
+      const enclosingFunctionName = this.activeFunctions.at(-1).name;
+      let givenName =
+        name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
+      if (enclosingFunctionName) {
+        givenName = `${enclosingFunctionName}/${givenName}`;
+      }
+      this.compileGiven(expression, givenName);
     } else if ("calling" in expression) {
       this.compileCalling(expression);
     } else if ("indexing" in expression) {
@@ -346,7 +352,8 @@ class Compiler {
     this.addInstruction(RESERVE, this.activeScopes.at(-1).numDeclaredNames());
     for (const statement of statements) {
       const [pattern, expression] = statement;
-      this.compileExpression(expression);
+      const name = typeof pattern === "string" ? pattern : undefined;
+      this.compileExpression(expression, name);
       this.assignNames(pattern);
     }
   }
@@ -452,19 +459,15 @@ class Compiler {
     }
   }
 
-  compileGiven(expression) {
+  compileGiven(expression, name) {
     if (this.trace) {
-      this.logNodeStart(
-        `New function of ${JSON.stringify(
-          expression.given.params ?? []
-        )} ${JSON.stringify(expression.given.namedParams ?? [])}`
-      );
+      this.logNodeStart(`Starting function ${name}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.activeFunctions.push(new CompiledFunction());
+    this.activeFunctions.push(new CompiledFunction(name));
     const paramPattern = { arrayPattern: expression.given.params ?? [] };
     const namedParamPattern = {
       objectPattern: expression.given.namedParams ?? [],
@@ -500,7 +503,7 @@ class Compiler {
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(FUNCTION, 0);
     this.addMark({ functionNumber: this.finishedFunctions.length });
-    this.addDiagnostic({ name: "<given>", isBuiltin: false });
+    this.addDiagnostic({ name, isBuiltin: false });
     this.finishedFunctions.push(finishedFunction);
     for (const upvalue of finishedFunction.upvalues) {
       this.addInstruction(CLOSURE, upvalue.numLayers, upvalue.slot);
@@ -923,11 +926,18 @@ class Compiler {
 }
 
 class CompiledFunction {
-  constructor() {
+  constructor(name) {
+    this.name = name;
     this.instructions = [];
     this.marks = [];
     this.diagnostics = [];
     this.upvalues = [];
+    this.anonymousFunctionCount = 0;
+  }
+
+  nextAnonymousFunctionName() {
+    this.anonymousFunctionCount += 1;
+    return `$${this.anonymousFunctionCount}`;
   }
 
   upvalue(numLayers, slot) {

@@ -20,5 +20,6 @@ runSpecFile(
     const expectedOutputValue = fromString(expectedOutput);
     t.deepEqual(actualOutputValue, expectedOutputValue);
   },
-  (t) => t.fail("Error testing not implemented")
+  (t) => t.fail("Error testing not implemented"),
+  ["To string on givens"]
 );
