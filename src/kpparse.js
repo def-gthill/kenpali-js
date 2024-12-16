@@ -430,7 +430,7 @@ function parseObject(parser, start) {
     "object",
     [
       consume("OPEN_BRACE", "expectedObject"),
-      parseZeroOrMore("objectEntries", parseObjectEntry, {
+      parseZeroOrMore("objectElements", parseObjectElement, {
         terminator: consume("COMMA"),
         errorIfTerminatorMissing: "missingObjectSeparator",
       }),
@@ -440,7 +440,7 @@ function parseObject(parser, start) {
   )(parser, start);
 }
 
-function parseObjectEntry(parser, start) {
+function parseObjectElement(parser, start) {
   return parseAnyOf(
     "objectElement",
     parseAllOf("objectEntry", [
@@ -448,6 +448,11 @@ function parseObjectEntry(parser, start) {
       consume("COLON", "missingKeyValueSeparator"),
       parseAssignable,
     ]),
+    parseAllOfFlat(
+      "objectName",
+      [parseName, consume("COLON", "missingKeyValueSeparator")],
+      (args) => args
+    ),
     parseObjectSpread
   )(parser, start);
 }
@@ -628,7 +633,7 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
   };
 }
 
-function parseAllOfFlat(nodeName, parsers, converter = (...args) => args) {
+function parseAllOfFlat(nodeName, parsers, converter) {
   return parseAllOf(nodeName, parsers, (...args) =>
     converter(...[].concat([], ...args))
   );

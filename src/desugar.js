@@ -48,6 +48,8 @@ function desugarObject(expression) {
     ...expression.object.map((element) => {
       if ("objectSpread" in element) {
         return { spread: desugar(element.objectSpread) };
+      } else if ("name" in element) {
+        return [element.name, element];
       } else {
         const [key, value] = element;
         return [desugarPropertyDefinition(key), desugar(value)];
