@@ -127,8 +127,12 @@ function parseArrayPatternElement(parser, start) {
     "arrayPatternElement",
     parseAllOf(
       "arrayPatternDefault",
-      [parseName, consume("EQUALS", "expectedDefault"), parseExpression],
-      (name, defaultValue) => ({ name: name.name, defaultValue })
+      [
+        parseDefiningPattern,
+        consume("EQUALS", "expectedDefault"),
+        parseExpression,
+      ],
+      (name, defaultValue) => ({ name, defaultValue })
     ),
     parseAllOf(
       "arrayPatternRest",
@@ -166,7 +170,7 @@ function parseObjectPatternElement(parser, start) {
         consume("EQUALS", "expectedDefault"),
         parseExpression,
       ],
-      (name, defaultValue) => ({ name: name.name, defaultValue })
+      (name, defaultValue) => ({ name, defaultValue })
     ),
     parseAllOf(
       "objectPatternRest",
@@ -317,44 +321,8 @@ function parseParameterList(parser, start) {
 function parseParameter(parser, start) {
   return parseAnyOf(
     "parameter",
-    parseAllOf(
-      "parameterDefault",
-      [
-        parseParameterName,
-        consume("EQUALS", "expectedParameterDefault"),
-        parseExpression,
-      ],
-      (param, defaultValue) => {
-        if ("named" in param) {
-          return { named: { name: param.named, defaultValue } };
-        } else {
-          return { positional: { name: param.positional, defaultValue } };
-        }
-      }
-    ),
-    parseAllOf(
-      "restParameter",
-      [consume("STAR", "expectedRestParameter"), parseName],
-      (name) => ({ positional: { rest: name.name } })
-    ),
-    parseAllOf(
-      "namedRestParameter",
-      [consume("DOUBLE_STAR", "expectedNamedRestParameter"), parseName],
-      (name) => ({ named: { rest: name.name } })
-    ),
-    parseParameterName
-  )(parser, start);
-}
-
-function parseParameterName(parser, start) {
-  return parseAnyOf(
-    "parameterName",
-    parseAllOf(
-      "namedParameter",
-      [parseName, consume("COLON", "expectedNamedParameter")],
-      (name) => ({ named: name.name })
-    ),
-    convert(parseDefiningPattern, (node) => ({ positional: node }))
+    convert(parseObjectPatternElement, (pattern) => ({ named: pattern })),
+    convert(parseArrayPatternElement, (pattern) => ({ positional: pattern }))
   )(parser, start);
 }
 
