@@ -12,7 +12,6 @@ import {
   objectPattern,
   objectSpread,
   pipeline,
-  unquote,
 } from "./kpast.js";
 import kplex from "./kplex.js";
 import { deepToKpobject } from "./kpobject.js";
@@ -374,25 +373,12 @@ function parseNamedArgument(parser, start) {
 function parseAtomic(parser, start) {
   return parseAnyOf(
     "atomic",
-    parseUnquote,
     parseGroup,
     parseArray,
     parseObject,
     parseLiteral,
     parseNameFromModule,
     parseName
-  )(parser, start);
-}
-
-function parseUnquote(parser, start) {
-  return parseAllOf(
-    "unquote",
-    [
-      consume("OPEN_ANGLES", "expectedUnquote"),
-      parseExpression,
-      consume("CLOSE_ANGLES", "unclosedUnquote"),
-    ],
-    unquote
   )(parser, start);
 }
 

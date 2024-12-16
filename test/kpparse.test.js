@@ -8,7 +8,6 @@ import {
   object,
   objectSpread,
   pipeline,
-  unquote,
 } from "../src/kpast.js";
 import { kpcatch } from "../src/kperror.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -21,14 +20,14 @@ test("Variables can have names starting with literal keywords", (t) => {
 });
 
 test("Object key syntactic sugar parses to reflect the sugar", (t) => {
-  const code = `{foo: 1, "bar": 2, <<baz>>: 3}`;
+  const code = `{foo: 1, "bar": 2, (baz): 3}`;
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
     object(
       [name("foo"), literal(1)],
       [literal("bar"), literal(2)],
-      [unquote(name("baz")), literal(3)]
+      [group(name("baz")), literal(3)]
     )
   );
 });

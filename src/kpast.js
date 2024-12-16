@@ -59,10 +59,6 @@ export function catching(expression) {
   return { catching: expression };
 }
 
-export function unquote(expression) {
-  return { unquote: expression };
-}
-
 //#region Syntactic sugar
 
 export function group(expression) {

@@ -8,7 +8,6 @@ import {
   literal,
   name,
   object,
-  unquote,
 } from "./kpast.js";
 import { kpoEntries } from "./kpobject.js";
 
@@ -21,8 +20,6 @@ export default function desugar(expression) {
     return desugarDefining(expression);
   } else if ("given" in expression) {
     return desugarGiven(expression);
-  } else if ("unquote" in expression) {
-    return desugarUnquote(expression);
   } else if ("group" in expression) {
     return desugarGroup(expression);
   } else if ("access" in expression) {
@@ -126,10 +123,6 @@ function desugarGiven(expression) {
   return given(params, desugar(expression.result));
 }
 
-function desugarUnquote(expression) {
-  return unquote(desugar(expression.unquote));
-}
-
 function desugarGroup(expression) {
   return desugar(expression.group);
 }
@@ -144,8 +137,6 @@ function desugarAccess(expression) {
 function desugarProperty(expression) {
   if ("name" in expression) {
     return literal(expression.name);
-  } else if ("unquote" in expression) {
-    return desugar(expression.unquote);
   } else {
     return desugar(expression);
   }

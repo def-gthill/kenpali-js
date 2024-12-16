@@ -14,14 +14,13 @@ import {
   object,
   pipeline,
   spread,
-  unquote,
 } from "../src/kpast.js";
 
 test("Object key syntactic sugar desugars to standard object syntax", (t) => {
   const expression = object(
     [name("foo"), literal(1)],
     [literal("bar"), literal(2)],
-    [unquote(name("baz")), literal(3)]
+    [group(name("baz")), literal(3)]
   );
   const result = desugar(expression);
   t.deepEqual(
@@ -98,10 +97,4 @@ test("Desugaring propagates through pipelines", (t) => {
     result,
     indexing(calling(pipeDesugared, [pipeDesugared]), pipeDesugared)
   );
-});
-
-test("Desugaring propagates through unquoting", (t) => {
-  const expression = unquote(pipeSugared);
-  const result = desugar(expression);
-  t.deepEqual(result, unquote(pipeDesugared));
 });
