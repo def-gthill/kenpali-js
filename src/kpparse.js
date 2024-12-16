@@ -135,10 +135,8 @@ function parseArrayPatternElement(parser, start) {
     ),
     parseAllOf(
       "arrayPatternRest",
-      [consume("STAR", "expectedRest"), parseName],
-      (name) => ({
-        rest: name.name,
-      })
+      [consume("STAR", "expectedRest"), parseDefiningPattern],
+      (pattern) => ({ rest: pattern })
     ),
     parseDefiningPattern
   )(parser, start);
@@ -165,7 +163,7 @@ function parseObjectPatternElement(parser, start) {
     parseAllOf(
       "objectPatternDefault",
       [
-        parseObjectPatternPropertyName,
+        parseObjectPatternSimple,
         consume("EQUALS", "expectedDefault"),
         parseExpression,
       ],
@@ -173,24 +171,26 @@ function parseObjectPatternElement(parser, start) {
     ),
     parseAllOf(
       "objectPatternRest",
-      [consume("DOUBLE_STAR", "expectedRest"), parseName],
-      (name) => ({
-        namedRest: name.name,
-      })
+      [consume("DOUBLE_STAR", "expectedRest"), parseDefiningPattern],
+      (pattern) => ({ namedRest: pattern })
     ),
-    parseAnyOf(
-      "objectPatternStandard",
-      parseAllOf(
-        "objectPatternEntry",
-        [
-          parseAssignable,
-          consume("COLON", "missingKeyTargetSeparator"),
-          parseDefiningPattern,
-        ],
-        (name, pattern) => ({ name: pattern, property: name.name })
-      ),
-      parseObjectPatternPropertyName
-    )
+    parseObjectPatternSimple
+  )(parser, start);
+}
+
+function parseObjectPatternSimple(parser, start) {
+  return parseAnyOf(
+    "objectPatternSimple",
+    parseAllOf(
+      "objectPatternEntry",
+      [
+        parseAssignable,
+        consume("COLON", "missingKeyTargetSeparator"),
+        parseDefiningPattern,
+      ],
+      (name, pattern) => ({ name: pattern, property: name.name })
+    ),
+    parseObjectPatternPropertyName
   )(parser, start);
 }
 
