@@ -116,7 +116,10 @@ export function toString(value) {
   } else if (isBuiltin(value)) {
     return `function ${functionName(value)}`;
   } else if (isError(value)) {
-    return `error ${value.error} ${toString(value.details)}`;
+    return [
+      `error ${value.error} ${toString(value.details)}`,
+      ...(value.calls ?? []).map((call) => `in ${call.get("function")}`),
+    ].join("\n");
   } else {
     return JSON.stringify(value);
   }

@@ -892,9 +892,6 @@ export class Vm {
         this.callFrames.at(-1).stackIndex >= frame.stackIndex
       ) {
         const callFrame = this.callFrames.pop();
-        if (!error.calls) {
-          throw new Error(`Trying to throw ${JSON.stringify(error)}`);
-        }
         error.calls.push(kpobject(["function", callFrame.name]));
       }
     }
