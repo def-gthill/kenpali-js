@@ -1,52 +1,4 @@
-import {
-  ALIAS,
-  ARRAY_COPY,
-  ARRAY_CUT,
-  ARRAY_EXTEND,
-  ARRAY_IS_EMPTY,
-  ARRAY_POP,
-  ARRAY_POP_OR_DEFAULT,
-  ARRAY_PUSH,
-  ARRAY_REVERSE,
-  CALL,
-  CALL_BUILTIN,
-  CAPTURE,
-  CATCH,
-  CLOSURE,
-  DISCARD,
-  EMPTY_ARRAY,
-  EMPTY_OBJECT,
-  ERROR_IF_INVALID,
-  FUNCTION,
-  INDEX,
-  IS_ARRAY,
-  IS_BOOLEAN,
-  IS_BUILTIN,
-  IS_ERROR,
-  IS_FUNCTION,
-  IS_GIVEN,
-  IS_NULL,
-  IS_NUMBER,
-  IS_OBJECT,
-  IS_SEQUENCE,
-  IS_STRING,
-  JUMP,
-  JUMP_IF_FALSE,
-  JUMP_IF_TRUE,
-  OBJECT_COPY,
-  OBJECT_MERGE,
-  OBJECT_POP,
-  OBJECT_POP_OR_DEFAULT,
-  OBJECT_PUSH,
-  POP,
-  PUSH,
-  READ_LOCAL,
-  READ_UPVALUE,
-  RESERVE,
-  RETURN,
-  VALUE,
-  WRITE_LOCAL,
-} from "./instructions.js";
+import * as op from "./instructions.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 import validate, {
@@ -109,53 +61,56 @@ export class Vm {
     this.openUpvalues = [];
 
     this.instructionTable = [];
-    this.instructionTable[VALUE] = this.runValue;
-    this.instructionTable[ALIAS] = this.runAlias;
-    this.instructionTable[DISCARD] = this.runDiscard;
-    this.instructionTable[RESERVE] = this.runReserve;
-    this.instructionTable[WRITE_LOCAL] = this.runWriteLocal;
-    this.instructionTable[READ_LOCAL] = this.runReadLocal;
-    this.instructionTable[PUSH] = this.runPush;
-    this.instructionTable[POP] = this.runPop;
-    this.instructionTable[EMPTY_ARRAY] = this.runEmptyArray;
-    this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
-    this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
-    this.instructionTable[ARRAY_REVERSE] = this.runArrayReverse;
-    this.instructionTable[ARRAY_POP] = this.runArrayPop;
-    this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
-    this.instructionTable[ARRAY_CUT] = this.runArrayCut;
-    this.instructionTable[ARRAY_COPY] = this.runArrayCopy;
-    this.instructionTable[ARRAY_IS_EMPTY] = this.runArrayIsEmpty;
-    this.instructionTable[EMPTY_OBJECT] = this.runEmptyObject;
-    this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
-    this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
-    this.instructionTable[OBJECT_POP] = this.runObjectPop;
-    this.instructionTable[OBJECT_POP_OR_DEFAULT] = this.runObjectPopOrDefault;
-    this.instructionTable[OBJECT_COPY] = this.runObjectCopy;
-    this.instructionTable[JUMP] = this.runJump;
-    this.instructionTable[JUMP_IF_TRUE] = this.runJumpIfTrue;
-    this.instructionTable[JUMP_IF_FALSE] = this.runJumpIfFalse;
-    this.instructionTable[FUNCTION] = this.runFunction;
-    this.instructionTable[CLOSURE] = this.runClosure;
-    this.instructionTable[CALL] = this.runCall;
-    this.instructionTable[CAPTURE] = this.runCapture;
-    this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
-    this.instructionTable[RETURN] = this.runReturn;
-    this.instructionTable[CALL_BUILTIN] = this.runCallBuiltin;
-    this.instructionTable[INDEX] = this.runIndex;
-    this.instructionTable[CATCH] = this.runCatch;
-    this.instructionTable[IS_NULL] = this.runIsNull;
-    this.instructionTable[IS_BOOLEAN] = this.runIsBoolean;
-    this.instructionTable[IS_NUMBER] = this.runIsNumber;
-    this.instructionTable[IS_STRING] = this.runIsString;
-    this.instructionTable[IS_ARRAY] = this.runIsArray;
-    this.instructionTable[IS_OBJECT] = this.runIsObject;
-    this.instructionTable[IS_BUILTIN] = this.runIsBuiltin;
-    this.instructionTable[IS_GIVEN] = this.runIsGiven;
-    this.instructionTable[IS_ERROR] = this.runIsError;
-    this.instructionTable[IS_FUNCTION] = this.runIsFunction;
-    this.instructionTable[IS_SEQUENCE] = this.runIsSequence;
-    this.instructionTable[ERROR_IF_INVALID] = this.runErrorIfInvalid;
+    this.instructionTable[op.VALUE] = this.runValue;
+    this.instructionTable[op.ALIAS] = this.runAlias;
+    this.instructionTable[op.DISCARD] = this.runDiscard;
+    this.instructionTable[op.RESERVE] = this.runReserve;
+    this.instructionTable[op.WRITE_LOCAL] = this.runWriteLocal;
+    this.instructionTable[op.READ_LOCAL] = this.runReadLocal;
+    this.instructionTable[op.PUSH] = this.runPush;
+    this.instructionTable[op.POP] = this.runPop;
+    this.instructionTable[op.EMPTY_ARRAY] = this.runEmptyArray;
+    this.instructionTable[op.ARRAY_PUSH] = this.runArrayPush;
+    this.instructionTable[op.ARRAY_EXTEND] = this.runArrayExtend;
+    this.instructionTable[op.ARRAY_REVERSE] = this.runArrayReverse;
+    this.instructionTable[op.ARRAY_POP] = this.runArrayPop;
+    this.instructionTable[op.ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
+    this.instructionTable[op.ARRAY_CUT] = this.runArrayCut;
+    this.instructionTable[op.ARRAY_COPY] = this.runArrayCopy;
+    this.instructionTable[op.ARRAY_IS_EMPTY] = this.runArrayIsEmpty;
+    this.instructionTable[op.EMPTY_OBJECT] = this.runEmptyObject;
+    this.instructionTable[op.OBJECT_PUSH] = this.runObjectPush;
+    this.instructionTable[op.OBJECT_MERGE] = this.runObjectMerge;
+    this.instructionTable[op.OBJECT_POP] = this.runObjectPop;
+    this.instructionTable[op.OBJECT_POP_OR_DEFAULT] =
+      this.runObjectPopOrDefault;
+    this.instructionTable[op.OBJECT_COPY] = this.runObjectCopy;
+    this.instructionTable[op.JUMP] = this.runJump;
+    this.instructionTable[op.JUMP_IF_TRUE] = this.runJumpIfTrue;
+    this.instructionTable[op.JUMP_IF_FALSE] = this.runJumpIfFalse;
+    this.instructionTable[op.FUNCTION] = this.runFunction;
+    this.instructionTable[op.CLOSURE] = this.runClosure;
+    this.instructionTable[op.CALL] = this.runCall;
+    this.instructionTable[op.CAPTURE] = this.runCapture;
+    this.instructionTable[op.READ_UPVALUE] = this.runReadUpvalue;
+    this.instructionTable[op.RETURN] = this.runReturn;
+    this.instructionTable[op.CALL_BUILTIN] = this.runCallBuiltin;
+    this.instructionTable[op.INDEX] = this.runIndex;
+    this.instructionTable[op.THROW] = this.runThrow;
+    this.instructionTable[op.CATCH] = this.runCatch;
+    this.instructionTable[op.UNCATCH] = this.runUncatch;
+    this.instructionTable[op.IS_NULL] = this.runIsNull;
+    this.instructionTable[op.IS_BOOLEAN] = this.runIsBoolean;
+    this.instructionTable[op.IS_NUMBER] = this.runIsNumber;
+    this.instructionTable[op.IS_STRING] = this.runIsString;
+    this.instructionTable[op.IS_ARRAY] = this.runIsArray;
+    this.instructionTable[op.IS_OBJECT] = this.runIsObject;
+    this.instructionTable[op.IS_BUILTIN] = this.runIsBuiltin;
+    this.instructionTable[op.IS_GIVEN] = this.runIsGiven;
+    this.instructionTable[op.IS_ERROR] = this.runIsError;
+    this.instructionTable[op.IS_FUNCTION] = this.runIsFunction;
+    this.instructionTable[op.IS_SEQUENCE] = this.runIsSequence;
+    this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -749,12 +704,26 @@ export class Vm {
     }
   }
 
+  runThrow() {
+    if (this.trace) {
+      this.logInstruction("THROW");
+    }
+    this.throw_(this.stack.pop());
+  }
+
   runCatch() {
     const recoveryOffset = this.next();
     if (this.trace) {
       this.logInstruction(`CATCH ${recoveryOffset}`);
     }
-    this.scopeFrames.at(-1).setRecovery(this.cursor + recoveryOffset);
+    this.scopeFrames.at(-1).pushRecovery(this.cursor + recoveryOffset);
+  }
+
+  runUncatch() {
+    if (this.trace) {
+      this.logInstruction("UNCATCH");
+    }
+    this.scopeFrames.at(-1).popRecovery();
   }
 
   runIsNull() {
@@ -897,7 +866,7 @@ export class Vm {
     }
     while (
       this.scopeFrames.length > 0 &&
-      this.scopeFrames.at(-1).recoveryIndex === undefined
+      this.scopeFrames.at(-1).recoveryIndex() === undefined
     ) {
       const frame = this.scopeFrames.pop();
       this.stack.length = frame.stackIndex;
@@ -912,7 +881,7 @@ export class Vm {
       throw error;
     }
     this.stack.push(error);
-    this.cursor = this.scopeFrames.at(-1).recoveryIndex;
+    this.cursor = this.scopeFrames.at(-1).recoveryIndex();
   }
 }
 
@@ -939,10 +908,19 @@ class Upvalue {
 class ScopeFrame {
   constructor(stackIndex) {
     this.stackIndex = stackIndex;
+    this.recoveryStack = [];
   }
 
-  setRecovery(index) {
-    this.recoveryIndex = index;
+  pushRecovery(index) {
+    this.recoveryStack.push(index);
+  }
+
+  popRecovery() {
+    this.recoveryStack.pop();
+  }
+
+  recoveryIndex() {
+    return this.recoveryStack.at(-1);
   }
 }
 

@@ -1,6 +1,8 @@
 import test from "ava";
 import * as op from "../src/instructions.js";
+import kperror, { kpcatch } from "../src/kperror.js";
 import { Vm } from "../src/kpvm.js";
+import { assertIsError } from "./assertIsError.js";
 
 test("The VALUE instruction pushes its argument onto the stack", (t) => {
   const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97] });
@@ -113,4 +115,55 @@ test("With a negative argument, PUSH puts slot 0 below the current top of the st
   vm.run();
 
   t.deepEqual(vm.stack, [42, 216, 73, 42]);
+});
+
+// POP through INDEX
+
+test("The THROW instruction throws the value on the top of the stack", (t) => {
+  const vm = new Vm({
+    instructions: [
+      ...[op.VALUE, kperror("bad")],
+      ...[op.THROW],
+      ...[op.VALUE, 42],
+    ],
+  });
+
+  const error = kpcatch(() => vm.run());
+  assertIsError(t, error, "bad", {});
+  t.deepEqual(vm.stack, []);
+});
+
+test("The CATCH instruction causes the next error to jump to the specified offset", (t) => {
+  const vm = new Vm({
+    instructions: [
+      ...[op.CATCH, 5],
+      ...[op.VALUE, kperror("bad")],
+      ...[op.THROW],
+      ...[op.VALUE, 42],
+      ...[op.VALUE, 73],
+    ],
+  });
+
+  vm.run();
+
+  t.is(vm.stack.length, 2);
+  assertIsError(t, vm.stack[0], "bad", {});
+  t.is(vm.stack[1], 73);
+});
+
+test("The UNCATCH instruction cancels the last CATCH", (t) => {
+  const vm = new Vm({
+    instructions: [
+      ...[op.CATCH, 6],
+      ...[op.UNCATCH],
+      ...[op.VALUE, kperror("bad")],
+      ...[op.THROW],
+      ...[op.VALUE, 42],
+      ...[op.VALUE, 73],
+    ],
+  });
+
+  const error = kpcatch(() => vm.run());
+  assertIsError(t, error, "bad", {});
+  t.deepEqual(vm.stack, []);
 });

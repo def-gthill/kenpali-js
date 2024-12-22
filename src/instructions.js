@@ -35,7 +35,9 @@ export const READ_UPVALUE = 20;
 export const RETURN = 18;
 export const CALL_BUILTIN = 41;
 export const INDEX = 30;
+export const THROW = 49;
 export const CATCH = 23;
+export const UNCATCH = 50;
 export const IS_NULL = 48;
 export const IS_BOOLEAN = 31;
 export const IS_NUMBER = 32;
@@ -96,7 +98,9 @@ class Disassembler {
     this.instructionTable[RETURN] = this.disassembleReturn;
     this.instructionTable[CALL_BUILTIN] = this.disassembleCallBuiltin;
     this.instructionTable[INDEX] = this.disassembleIndex;
+    this.instructionTable[THROW] = this.disassembleThrow;
     this.instructionTable[CATCH] = this.disassembleCatch;
+    this.instructionTable[UNCATCH] = this.disassembleUncatch;
     this.instructionTable[IS_NULL] = this.disassembleIsNull;
     this.instructionTable[IS_BOOLEAN] = this.disassembleIsBoolean;
     this.instructionTable[IS_NUMBER] = this.disassembleIsNumber;
@@ -279,8 +283,16 @@ class Disassembler {
     return "INDEX";
   }
 
+  disassembleThrow() {
+    return "THROW";
+  }
+
   disassembleCatch() {
     return `CATCH ${this.next()}`;
+  }
+
+  disassembleUncatch() {
+    return "UNCATCH";
   }
 
   disassembleIsNull() {
