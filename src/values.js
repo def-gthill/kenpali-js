@@ -114,12 +114,16 @@ export function toString(value) {
   } else if (isGiven(value)) {
     return `function ${value.name}`;
   } else if (isBuiltin(value)) {
-    return `function ${value.builtinName ?? value.name ?? "<anonymous>"}`;
+    return `function ${functionName(value)}`;
   } else if (isError(value)) {
     return `error ${value.error} ${toString(value.details)}`;
   } else {
     return JSON.stringify(value);
   }
+}
+
+export function functionName(f) {
+  return f.builtinName ?? f.name ?? "<anonymous>";
 }
 
 function isValidName(string) {

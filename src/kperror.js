@@ -2,7 +2,7 @@ import kpobject, { kpoMerge } from "./kpobject.js";
 import { isError } from "./values.js";
 
 export default function kperror(type, ...details) {
-  return { error: type, details: kpobject(...details) };
+  return { error: type, details: kpobject(...details), calls: [] };
 }
 
 export function errorType(err) {
@@ -11,6 +11,7 @@ export function errorType(err) {
 
 export function withErrorType(err, newType, ...newDetails) {
   return {
+    ...err,
     error: newType,
     details: kpoMerge(err.details, kpobject(...newDetails)),
   };
@@ -18,6 +19,7 @@ export function withErrorType(err, newType, ...newDetails) {
 
 export function withDetails(err, ...newDetails) {
   return {
+    ...err,
     error: err.error,
     details: kpoMerge(err.details, kpobject(...newDetails)),
   };

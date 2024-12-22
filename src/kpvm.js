@@ -7,6 +7,7 @@ import validate, {
   either,
 } from "./validate.js";
 import {
+  functionName,
   isArray,
   isBoolean,
   isBuiltin,
@@ -124,6 +125,7 @@ export class Vm {
     this.scopeFrames.push(new ScopeFrame(frameIndex));
     this.callFrames.push(
       new CallFrame(
+        functionName(f),
         this.stack.length,
         this.instructions.length // Make run() return when this call finishes
       )
@@ -531,7 +533,11 @@ export class Vm {
 
   callGiven(callee) {
     this.callFrames.push(
-      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
+      new CallFrame(
+        callee.name,
+        this.scopeFrames.at(-1).stackIndex,
+        this.cursor
+      )
     );
     const target = callee.target;
     if (this.trace) {
@@ -542,10 +548,14 @@ export class Vm {
 
   callBuiltin(callee) {
     if (this.trace) {
-      console.log(`Call builtin "${callee.builtinName ?? "<anonymous>"}"`);
+      console.log(`Call builtin "${functionName(callee)}"`);
     }
     this.callFrames.push(
-      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
+      new CallFrame(
+        functionName(callee),
+        this.scopeFrames.at(-1).stackIndex,
+        this.cursor
+      )
     );
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
@@ -626,8 +636,10 @@ export class Vm {
       this.logInstruction("CALL_BUILTIN");
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
-    this.callFrames.push(new CallFrame(frameIndex, this.cursor));
     const callee = this.stack[frameIndex];
+    this.callFrames.push(
+      new CallFrame(functionName(callee), frameIndex, this.cursor)
+    );
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
     const kpcallback = (f, posArgs, namedArgs) => {
@@ -879,7 +891,11 @@ export class Vm {
         this.callFrames.length > 0 &&
         this.callFrames.at(-1).stackIndex >= frame.stackIndex
       ) {
-        this.callFrames.pop();
+        const callFrame = this.callFrames.pop();
+        if (!error.calls) {
+          throw new Error(`Trying to throw ${JSON.stringify(error)}`);
+        }
+        error.calls.push(kpobject(["function", callFrame.name]));
       }
     }
     if (this.scopeFrames.length === 0) {
@@ -930,7 +946,8 @@ class ScopeFrame {
 }
 
 class CallFrame {
-  constructor(stackIndex, returnIndex) {
+  constructor(name, stackIndex, returnIndex) {
+    this.name = name;
     this.stackIndex = stackIndex;
     this.returnIndex = returnIndex;
   }
