@@ -96,7 +96,9 @@ test("A time limit can be set on a kpcall", (t) => {
   const code = "() => 1 | repeat(while: () => true, next: (n) => n)";
   const kpf = kpeval(kpparse(code));
 
-  t.throws(() => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }));
+  const result = kpcatch(() => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }));
+
+  assertIsError(t, result, "timeLimitExceeded");
 });
 
 test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t) => {
@@ -183,5 +185,9 @@ test("A time kpcall time limit is enforced through nested callbacks", (t) => {
     kpcallback(callback, [], {})
   );
 
-  t.throws(() => kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 }));
+  const result = kpcatch(() =>
+    kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 })
+  );
+
+  assertIsError(t, result, "timeLimitExceeded");
 });

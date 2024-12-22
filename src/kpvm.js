@@ -166,7 +166,12 @@ export class Vm {
     const currentTime = Date.now();
     const elapsedTime = (currentTime - this.startTime) / 1000;
     if (elapsedTime > this.timeLimitSeconds) {
-      throw new Error(`Time limit of ${this.timeLimitSeconds} s exceeded`);
+      this.throw_(
+        kperror("timeLimitExceeded", [
+          "timeLimitSeconds",
+          this.timeLimitSeconds,
+        ])
+      );
     }
   }
 

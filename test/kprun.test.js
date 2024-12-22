@@ -69,7 +69,18 @@ test("Destructuring can reference other names in the same scope", (t) => {
 
 test("A time limit can be set on execution", (t) => {
   const code = `1 | repeat(while: () => true, next: (n) => n)`;
-  t.throws(() => kpeval(kpparse(code), { timeLimitSeconds: 0.1 }));
+  const result = kpcatch(() =>
+    kpeval(kpparse(code), { timeLimitSeconds: 0.1 })
+  );
+  assertIsError(t, result, "timeLimitExceeded");
+});
+
+test("The time limit can't be subverted just by catching the error", (t) => {
+  const code = `1 | repeat(while: () => true, next: (n) => n !)`;
+  const result = kpcatch(() =>
+    kpeval(kpparse(code), { timeLimitSeconds: 0.1 })
+  );
+  assertIsError(t, result, "timeLimitExceeded");
 });
 
 test("Debug logging can be configured", (t) => {
