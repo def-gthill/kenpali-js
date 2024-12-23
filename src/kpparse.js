@@ -363,10 +363,18 @@ function parsePositionalArgument(parser, start) {
 }
 
 function parseNamedArgument(parser, start) {
-  return parseAllOf(
+  return parseAnyOf(
     "namedArgument",
-    [parseName, consume("COLON", "expectedNamedArgument"), parseAssignable],
-    (name, value) => [name.name, value]
+    parseAllOf(
+      "namedArgumentEntry",
+      [parseName, consume("COLON", "expectedNamedArgument"), parseAssignable],
+      (name, value) => [name.name, value]
+    ),
+    parseAllOf(
+      "namedArgumentName",
+      [parseName, consume("COLON", "expectedNamedArgument")],
+      (name) => [name.name, name]
+    )
   )(parser, start);
 }
 
