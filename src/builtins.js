@@ -31,10 +31,27 @@ import {
 } from "./values.js";
 
 const rawBuiltins = [
-  builtin("debug", { params: ["value"] }, function ([value], _, { debugLog }) {
-    debugLog(toString(value));
-    return value;
-  }),
+  builtin(
+    "debug",
+    {
+      params: [
+        "value",
+        {
+          name: "name",
+          type: either("string", "null"),
+          defaultValue: literal(null),
+        },
+      ],
+    },
+    function ([value, name], _, { debugLog }) {
+      if (name) {
+        debugLog(`${name}: ${toString(value)}`);
+      } else {
+        debugLog(toString(value));
+      }
+      return value;
+    }
+  ),
   builtin(
     "plus",
     { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
