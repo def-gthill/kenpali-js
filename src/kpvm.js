@@ -1,5 +1,6 @@
+import { indexArray, indexMapping } from "./builtins.js";
 import * as op from "./instructions.js";
-import kperror, { transformError } from "./kperror.js";
+import kperror, { kpcatch, transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 import validate, {
   argumentError,
@@ -677,39 +678,27 @@ export class Vm {
         this.throw_(
           kperror("wrongType", ["value", index], ["expectedType", "number"])
         );
+        return;
       }
-      if (
-        index === 0 ||
-        index < -collection.length ||
-        index > collection.length
-      ) {
-        this.throw_(
-          kperror(
-            "indexOutOfBounds",
-            ["value", collection],
-            ["length", collection.length],
-            ["index", index]
-          )
-        );
+      const result = kpcatch(() => indexArray(collection, index));
+      if (isError(result)) {
+        this.throw_(result);
+        return;
       }
-      if (index > 0) {
-        this.stack.push(collection[index - 1]);
-      } else {
-        this.stack.push(collection.at(index));
-      }
+      this.stack.push(result);
     } else if (isObject(collection)) {
       if (!isString(index)) {
         this.throw_(
           kperror("wrongType", ["value", index], ["expectedType", "string"])
         );
+        return;
       }
-      if (collection.has(index)) {
-        this.stack.push(collection.get(index));
-      } else {
-        this.throw_(
-          kperror("missingProperty", ["value", collection], ["key", index])
-        );
+      const result = kpcatch(() => indexMapping(collection, index));
+      if (isError(result)) {
+        this.throw_(result);
+        return;
       }
+      this.stack.push(result);
     } else {
       this.throw_(
         kperror(

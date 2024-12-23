@@ -495,30 +495,27 @@ const rawBuiltins = [
         { name: "collection", type: either("sequence", "object") },
         { name: "index", type: either("number", "string") },
       ],
-      namedParams: ["default"],
+      namedParams: [optionalFunctionParameter("default")],
     },
-    function ([collection, index, default_]) {
+    function ([collection, index, default_], kpcallback) {
       if (isString(collection) || isArray(collection)) {
         if (!isNumber(index)) {
-          this.throw_(
-            kperror("wrongType", ["value", index], ["expectedType", "number"])
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "number"]
           );
         }
-        if (index < 1 || index > collection.length) {
-          return default_;
-        }
-        return collection[index - 1];
-      } else {
+        return indexArray(collection, index, default_, kpcallback);
+      } else if (isObject(collection)) {
         if (!isString(index)) {
-          this.throw_(
-            kperror("wrongType", ["value", index], ["expectedType", "string"])
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "string"]
           );
         }
-        if (collection.has(index)) {
-          return collection.get(index);
-        } else {
-          return default_;
-        }
+        return indexMapping(collection, index, default_, kpcallback);
       }
     }
   ),
@@ -570,7 +567,7 @@ const rawBuiltins = [
       const originalKeys = new Map(
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
-      return kpobject(
+      const object = kpobject(
         [
           "size",
           builtin("size", {}, function () {
@@ -610,19 +607,22 @@ const rawBuiltins = [
             "at",
             {
               params: ["key"],
-              namedParams: [{ name: "default", defaultValue: literal(null) }],
+              namedParams: [optionalFunctionParameter("default")],
             },
-            function ([key], namedArgs) {
+            function ([key], namedArgs, kpcallback) {
               const realKey = toKey(key);
-              if (map.has(realKey)) {
-                return map.get(realKey);
-              } else {
-                return namedArgs.get("default");
-              }
+              return indexMapping(
+                map,
+                realKey,
+                namedArgs.get("default"),
+                kpcallback,
+                object
+              );
             }
           ),
         ]
       );
+      return object;
     }
   ),
   builtin("variable", { params: ["initialValue"] }, function ([initialValue]) {
@@ -650,6 +650,23 @@ const rawBuiltins = [
     },
     function ([elements]) {
       const array = [...elements];
+
+      function set(index, element) {
+        if (index > 0 && index <= array.length) {
+          array[index - 1] = element;
+        } else if (index < 0 && index >= -array.length) {
+          array[array.length - index] = element;
+        } else {
+          throw kperror(
+            "indexOutOfBounds",
+            ["value", object],
+            ["length", array.length],
+            ["index", index]
+          );
+        }
+        return object;
+      }
+
       const object = kpobject(
         [
           "size",
@@ -678,8 +695,7 @@ const rawBuiltins = [
               params: [{ name: "index", type: "number" }, "element"],
             },
             function ([index, element]) {
-              array[index - 1] = element;
-              return object;
+              return set(index, element);
             }
           ),
         ],
@@ -691,8 +707,7 @@ const rawBuiltins = [
               params: ["element", { name: "index", type: "number" }],
             },
             function ([element, index]) {
-              array[index - 1] = element;
-              return object;
+              return set(index, element);
             }
           ),
         ],
@@ -700,21 +715,40 @@ const rawBuiltins = [
           "at",
           builtin(
             "at",
-            { params: [{ name: "index", type: "number" }] },
-            function ([index]) {
-              if (index > 0) {
-                return array[index - 1];
-              } else {
-                return array.at(index);
-              }
+            {
+              params: [{ name: "index", type: "number" }],
+              namedParams: [optionalFunctionParameter("default")],
+            },
+            function ([index], namedParams, kpcallback) {
+              return indexArray(
+                array,
+                index,
+                namedParams.get("default"),
+                kpcallback,
+                object
+              );
             }
           ),
         ],
         [
           "pop",
-          builtin("pop", {}, function () {
-            return array.pop();
-          }),
+          builtin(
+            "pop",
+            {
+              namedParams: [optionalFunctionParameter("default")],
+            },
+            function (_, namedParams, kpcallback) {
+              const result = indexArray(
+                array,
+                -1,
+                namedParams.get("default"),
+                kpcallback,
+                object
+              );
+              array.pop();
+              return result;
+            }
+          ),
         ],
         [
           "clear",
@@ -873,15 +907,17 @@ const rawBuiltins = [
             "at",
             {
               params: ["key"],
-              namedParams: [{ name: "default", defaultValue: literal(null) }],
+              namedParams: [optionalFunctionParameter("default")],
             },
-            function ([key], namedArgs) {
+            function ([key], namedArgs, kpcallback) {
               const realKey = toKey(key);
-              if (map.has(realKey)) {
-                return map.get(realKey);
-              } else {
-                return namedArgs.get("default");
-              }
+              return indexMapping(
+                map,
+                realKey,
+                namedArgs.get("default"),
+                kpcallback,
+                object
+              );
             }
           ),
         ],
@@ -1014,6 +1050,14 @@ export function builtin(name, paramSpec, f) {
   return f;
 }
 
+function optionalFunctionParameter(name) {
+  return {
+    name,
+    type: either("function", "null"),
+    defaultValue: literal(null),
+  };
+}
+
 function compare(a, b) {
   if (isArray(a)) {
     for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -1048,6 +1092,45 @@ export function toFunction(value) {
     return value;
   } else {
     return builtin("constant", {}, () => value);
+  }
+}
+
+export function indexArray(
+  array,
+  index,
+  default_,
+  kpcallback,
+  valueForError = array
+) {
+  if (index > 0 && index <= array.length) {
+    return array[index - 1];
+  } else if (index < 0 && index >= -array.length) {
+    return array.at(index);
+  } else if (default_) {
+    return kpcallback(default_, [], kpobject());
+  } else {
+    throw kperror(
+      "indexOutOfBounds",
+      ["value", valueForError],
+      ["length", array.length],
+      ["index", index]
+    );
+  }
+}
+
+export function indexMapping(
+  mapping,
+  index,
+  default_,
+  kpcallback,
+  valueForError = mapping
+) {
+  if (mapping.has(index)) {
+    return mapping.get(index);
+  } else if (default_) {
+    return kpcallback(default_, [], kpobject());
+  } else {
+    throw kperror("missingProperty", ["value", valueForError], ["key", index]);
   }
 }
 
