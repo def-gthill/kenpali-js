@@ -475,7 +475,7 @@ const rawBuiltins = [
         return withSortKey.map(([element, _]) => element);
       } else {
         const result = [...array];
-        result.sort();
+        result.sort(compare);
         return result;
       }
     }
