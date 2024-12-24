@@ -206,27 +206,21 @@ function parseAssignable(parser, start) {
   return parseAnyOf(
     "assignable",
     parseArrowFunction,
-    parsePipeline
+    parsePipeline,
+    parsePointFreePipeline
+  )(parser, start);
+}
+
+function parsePointFreePipeline(parser, start) {
+  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
+    given({ params: ["pipelineArg"] }, pipeline(name("pipelineArg"), ...calls))
   )(parser, start);
 }
 
 function parsePipeline(parser, start) {
   return parseAllOf(
     "pipeline",
-    [
-      parseAtomic,
-      parseZeroOrMore(
-        "pipelineSteps",
-        parseAnyOf(
-          "pipelineStep",
-          parseCall,
-          parsePipeCall,
-          parsePipe,
-          parseAt,
-          parseBang
-        )
-      ),
-    ],
+    [parseAtomic, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
     (expression, calls) => {
       if (calls.length > 0) {
         return pipeline(expression, ...calls);
@@ -234,6 +228,17 @@ function parsePipeline(parser, start) {
         return expression;
       }
     }
+  )(parser, start);
+}
+
+function parsePipelineStep(parser, start) {
+  return parseAnyOf(
+    "pipelineStep",
+    parseCall,
+    parsePipeCall,
+    parsePipe,
+    parseAt,
+    parseBang
   )(parser, start);
 }
 
@@ -670,6 +675,23 @@ function parseZeroOrMore(
     terminator,
     errorIfTerminatorMissing,
     minimumCount: 0,
+    finalTerminatorMandatory,
+  });
+}
+
+function parseOneOrMore(
+  nodeName,
+  parser,
+  {
+    terminator,
+    errorIfTerminatorMissing,
+    finalTerminatorMandatory = false,
+  } = {}
+) {
+  return parseRepeatedly(nodeName, parser, {
+    terminator,
+    errorIfTerminatorMissing,
+    minimumCount: 1,
     finalTerminatorMandatory,
   });
 }
