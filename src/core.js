@@ -77,17 +77,21 @@ transform = (array, f) => array | rebuild((element) => [f(element)]);
 where = (array, condition) => array | rebuild(
     (element) => if(condition(element), then: () => [element], else: () => [])
 );
-zip = (*arrays) => (
-    1 | build(
-        while: (i) => arrays | forAll((array) => (i | isAtMost(length(array)))),
-        next: increment,
-        out: (i) => [arrays | transform((array) => (array @ i))]
-    )
-);
-unzip = (array) => (
-    1 | to(array @ 1 | length) | transform(
-        (i) => array | transform((entry) => entry @ i)
-    )
+zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
+transpose = (arrays, fillWith: = null) => (
+    numElements = if(
+        fillWith | isNull,
+        then: () => arrays | transform(| length) | least,
+        else: () => arrays | transform(| length) | most,
+    );
+    1 | to(numElements) | transform((elementNumber) => (
+        1 | to(arrays | length) | transform((arrayNumber) => (
+            arrays @ arrayNumber | at(
+                elementNumber,
+                default: () => fillWith(arrayNumber:, elementNumber:),
+            )
+        ))
+    ))
 );
 count = (array, condition) => (array | where(condition) | length);
 forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
