@@ -308,7 +308,8 @@ export class Vm {
     if (this.trace) {
       this.logInstruction("ARRAY_POP");
     }
-    const value = this.stack.at(-1).pop();
+    const array = this.stack.at(-1);
+    const value = array.pop();
     if (value === undefined) {
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
@@ -319,7 +320,7 @@ export class Vm {
           this.throw_(
             kperror(
               "missingElement",
-              ["value", value],
+              ["value", array],
               ["name", diagnostic.name]
             )
           );
