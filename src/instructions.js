@@ -43,6 +43,7 @@ export const IS_BOOLEAN = 31;
 export const IS_NUMBER = 32;
 export const IS_STRING = 33;
 export const IS_ARRAY = 34;
+export const IS_STREAM = 51;
 export const IS_OBJECT = 35;
 export const IS_BUILTIN = 36;
 export const IS_GIVEN = 37;
@@ -313,6 +314,10 @@ class Disassembler {
 
   disassembleIsArray() {
     return "IS_ARRAY";
+  }
+
+  disassembleIsStream() {
+    return "IS_STREAM";
   }
 
   disassembleIsObject() {

@@ -589,6 +589,7 @@ class Compiler {
     number: op.IS_NUMBER,
     string: op.IS_STRING,
     array: op.IS_ARRAY,
+    stream: op.IS_STREAM,
     object: op.IS_OBJECT,
     builtin: op.IS_BUILTIN,
     given: op.IS_GIVEN,

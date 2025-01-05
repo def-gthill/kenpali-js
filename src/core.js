@@ -1,12 +1,9 @@
 export const core = String.raw`
-sum = (numbers) => plus(*numbers);
+sum = (numbers) => plus(*toArray(numbers));
 isDivisibleBy = (a, b) => (
     divideWithRemainder(a, b) @ remainder: | equals(0)
 );
 absolute = (n) => n | butIf(n | isLessThan(0), () => negative(n));
-characters = (string) => (
-    1 | to(length(string)) | transform((i) => (string @ i))
-);
 splitLines = (string) => (string | split(on: "\n"));
 joinLines = (strings) => (strings | join(on: "\n"));
 butIf = (value, condition, ifTrue) => (
@@ -15,7 +12,8 @@ butIf = (value, condition, ifTrue) => (
 isBetween = (n, lower, upper) => (
     n | isAtLeast(lower) | and(() => n | isAtMost(upper))
 );
-least = (array) => (
+least = (sequence) => (
+    array = sequence | toArray;
     [1, null] | repeat(
         next: ([i, leastSoFar]) => [
             i | increment,
@@ -30,7 +28,8 @@ least = (array) => (
         continueIf: ([i, leastSoFar]) => i | isAtMost(array | length),
     ) @ 2
 );
-most = (array) => (
+most = (sequence) => (
+    array = sequence | toArray;
     [1, null] | repeat(
         next: ([i, mostSoFar]) => [
             i | increment,
@@ -50,8 +49,9 @@ dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
 dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
 slice = (coll, indices) => (
     result = indices
-        | where((index) => index | isBetween(1, coll | length))
-        | transform((index) => (coll @ index));
+    | where(| isBetween(1, coll | length))
+    | transform((index) => coll @ index)
+    | toArray;
     result | butIf(isString(coll), () => join(result))
 );
 to = (start, end, by: = 1) => (
@@ -66,7 +66,8 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-rebuild = (array, f) => (
+rebuild = (sequence, f) => (
+    array = sequence | toArray;
     1 | build(
         while: (i) => i | isAtMost(length(array)),
         next: increment,
@@ -78,7 +79,8 @@ where = (array, condition) => array | rebuild(
     (element) => if(condition(element), then: () => [element], else: () => [])
 );
 zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
-transpose = (arrays, fillWith: = null) => (
+transpose = (sequences, fillWith: = null) => (
+    arrays = sequences | transform(| toArray) | toArray;
     numElements = if(
         fillWith | isNull,
         then: () => arrays | transform(| length) | least,
@@ -91,21 +93,26 @@ transpose = (arrays, fillWith: = null) => (
                 default: () => fillWith(arrayNumber:, elementNumber:),
             )
         ))
+        | toArray
     ))
+    | toArray
 );
-count = (array, condition) => (array | where(condition) | length);
+count = (sequence, condition) => (sequence | where(condition) | toArray | length);
 forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
 forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
 flatten = (array) => array | rebuild((element) => element);
-chunk = (array, size) => (
+chunk = (sequence, size) => (
+    array = sequence | toArray;
     starts = 1 | to(length(array), by: size);
     starts | transform((start) => (array | slice(start | toSize(size))))
 );
 reverse = (array) => (
-    array | length | to(1, by: -1) | transform((i) => array @ i)
+    array | length | to(1, by: -1)
+    | transform((i) => array @ i)
+    | toArray
 );
 properties = (object) => (
-    object | keys | transform((key) => [key, object @ key])
+    object | keys | transform((key) => [key, object @ key]) | toArray
 );
 merge = (objects) => (
     objects | transform(properties) | flatten | toObject
@@ -113,7 +120,7 @@ merge = (objects) => (
 group = (pairs, onGroup: = (x) => x) => (
     result = mutableMap();
     pairs
-    | transform(([key, value]) => (
+    | forEach(([key, value]) => (
         if(
             result @ has:(key),
             then: () => result @ at:(key) @ append:(value),
@@ -124,6 +131,7 @@ group = (pairs, onGroup: = (x) => x) => (
     | transform(([key, value]) => (
         [key, value @ elements:() | onGroup]
     ))
+    | toArray
 );
 groupBy = (array, by, onGroup: = (x) => x) => (
     array

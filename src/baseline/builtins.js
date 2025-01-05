@@ -304,6 +304,9 @@ const rawBuiltins = [
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
   }),
+  builtin("toArray", { params: ["value"] }, function ([value]) {
+    return value;
+  }),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
   }),

@@ -140,7 +140,13 @@ export function transformTree(expression, handlers) {
       return {
         ...node,
         calling: recurse(node.calling),
-        args: (node.args ?? []).map(recurse),
+        args: (node.args ?? []).map((element) => {
+          if ("spread" in element) {
+            return { spread: recurse(element.spread) };
+          } else {
+            return recurse(element);
+          }
+        }),
         namedArgs: (node.namedArgs ?? []).map((element) => {
           if ("spread" in element) {
             return { spread: recurse(element.spread) };

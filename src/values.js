@@ -1,4 +1,4 @@
-import { kpoEntries } from "./kpobject.js";
+import kpobject, { kpoEntries } from "./kpobject.js";
 
 //#region Identifying types
 
@@ -7,6 +7,8 @@ export function typeOf(value) {
     return "null";
   } else if (isArray(value)) {
     return "array";
+  } else if (isStream(value)) {
+    return "stream";
   } else if (isObject(value)) {
     return "object";
   } else if (isBuiltin(value)) {
@@ -40,27 +42,23 @@ export function isArray(value) {
   return Array.isArray(value);
 }
 
+export function isStream(value) {
+  return isJsObjectWithProperty(value, "next");
+}
+
 export function isBuiltin(value) {
   return (
     typeof value === "function" ||
-    (value !== null &&
-      typeof value === "object" &&
-      "target" in value &&
-      value.isBuiltin)
+    (isJsObjectWithProperty(value, "target") && value.isBuiltin)
   );
 }
 
 export function isGiven(value) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "target" in value &&
-    !value.isBuiltin
-  );
+  return isJsObjectWithProperty(value, "target") && !value.isBuiltin;
 }
 
 export function isError(value) {
-  return value !== null && typeof value === "object" && "error" in value;
+  return isJsObjectWithProperty(value, "error");
 }
 
 export function isObject(value) {
@@ -72,7 +70,11 @@ export function isFunction(value) {
 }
 
 export function isSequence(value) {
-  return isString(value) || isArray(value);
+  return isString(value) || isArray(value) || isStream(value);
+}
+
+function isJsObjectWithProperty(value, property) {
+  return value !== null && typeof value === "object" && property in value;
 }
 
 //#endregion
@@ -100,14 +102,37 @@ export function equals(a, b) {
   }
 }
 
-export function toString(value) {
+export function toString(value, kpcallback) {
   if (isArray(value)) {
-    return "[" + value.map(toString).join(", ") + "]";
+    return (
+      "[" +
+      value.map((element) => toString(element, kpcallback)).join(", ") +
+      "]"
+    );
+  } else if (isStream(value)) {
+    let current = value;
+    const elements = [];
+    if (kpcallback) {
+      while (current.next !== null && elements.length < 3) {
+        const [getValue, next] = current.next;
+        elements.push(getValue());
+        current = kpcallback(next, [], kpobject());
+      }
+    }
+    const result = `stream [${elements.join(", ")}`;
+    if (current.next === null) {
+      return result + "]";
+    } else {
+      return result + "...]";
+    }
   } else if (isObject(value)) {
     return (
       "{" +
       kpoEntries(value)
-        .map(([k, v]) => `${isValidName(k) ? k : `"${k}"`}: ${toString(v)}`)
+        .map(
+          ([k, v]) =>
+            `${isValidName(k) ? k : `"${k}"`}: ${toString(v, kpcallback)}`
+        )
         .join(", ") +
       "}"
     );
@@ -117,7 +142,7 @@ export function toString(value) {
     return `function ${functionName(value)}`;
   } else if (isError(value)) {
     return [
-      `error ${value.error} ${toString(value.details)}`,
+      `error ${value.error} ${toString(value.details, kpcallback)}`,
       ...(value.calls ?? []).map((call) => `in ${call.get("function")}`),
     ].join("\n");
   } else {

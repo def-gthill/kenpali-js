@@ -12,16 +12,20 @@ const hello = `1 | to(100)
   | transform((n) => join(["Hello, ", n | toString, "!"]))
   | joinLines`;
 const primePairs = `primesUpTo = (max) => (
-  {numbers: 2 | to(max), index: 1} | repeat(
+  {numbers: 2 | to(max) | toArray, index: 1} | repeat(
     while: (state) => state @ index: | isAtMost(state @ numbers: | length),
     next: (state) => (
       {numbers:, index:} = state;
       {
-        numbers: numbers | where(
-          (n) => or(
-            n | equals(numbers @ index),
-            () => n | isDivisibleBy(numbers @ index) | not
+        numbers: (
+          numbers
+          | where(
+            (n) => or(
+              n | equals(numbers @ index),
+              () => n | isDivisibleBy(numbers @ index) | not
+            )
           )
+          | toArray
         ),
         index: increment(index),
       }

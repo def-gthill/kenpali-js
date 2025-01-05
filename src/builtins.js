@@ -25,6 +25,7 @@ import {
   isNumber,
   isObject,
   isSequence,
+  isStream,
   isString,
   toString,
   typeOf,
@@ -136,7 +137,7 @@ const rawBuiltins = [
   builtin(
     "join",
     {
-      params: [{ name: "strings", type: arrayOf("string") }],
+      params: [{ name: "strings", type: either("array", "stream") }],
       namedParams: [
         {
           name: "on",
@@ -145,8 +146,10 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([strings, on]) {
-      return strings.join(on);
+    function ([strings, on], kpcallback) {
+      const array = toArray(strings, kpcallback);
+      validateArgument(array, arrayOf("string"));
+      return array.join(on);
     }
   ),
   builtin(
@@ -319,11 +322,21 @@ const rawBuiltins = [
   builtin("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
-  builtin("toString", { params: ["value"] }, function ([value]) {
-    return toString(value);
+  builtin("toString", { params: ["value"] }, function ([value], kpcallback) {
+    return toString(value, kpcallback);
   }),
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
+  }),
+  builtin(
+    "toArray",
+    { params: [{ name: "value", type: "sequence" }] },
+    function ([value], kpcallback) {
+      return toArray(value, kpcallback);
+    }
+  ),
+  builtin("isStream", { params: ["value"] }, function ([value]) {
+    return isStream(value);
   }),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
@@ -399,9 +412,25 @@ const rawBuiltins = [
   ),
   builtin(
     "length",
-    { params: [{ name: "sequence", type: "sequence" }] },
+    { params: [{ name: "sequence", type: either("string", "array") }] },
     function ([sequence]) {
       return sequence.length;
+    }
+  ),
+  builtin(
+    "forEach",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "action", type: "function" },
+      ],
+    },
+    function ([sequence, action], kpcallback) {
+      const array = toArray(sequence, kpcallback);
+      for (const element of array) {
+        kpcallback(action, [element], kpobject());
+      }
+      return array;
     }
   ),
   builtin(
@@ -428,29 +457,87 @@ const rawBuiltins = [
       ],
     },
     function ([start, while_, next, out, continueIf], kpcallback) {
-      const result = [];
-      loop(
-        "build",
-        start,
-        while_,
-        next,
-        continueIf,
-        (current) => {
-          const outElements = out
-            ? kpcallback(out, [current], kpobject())
-            : [current];
-          if (!isArray(outElements)) {
+      function streamFrom(state, outStream) {
+        let currentOutStream = outStream;
+        let currentState = state;
+        let continuing = true;
+        while (currentOutStream.next === null) {
+          if (while_) {
+            const whileCondition = kpcallback(
+              while_,
+              [currentState],
+              kpobject()
+            );
+            if (!isBoolean(whileCondition)) {
+              throw kperror(
+                "wrongReturnType",
+                ["value", whileCondition],
+                ["expectedType", "boolean"]
+              );
+            }
+            if (!whileCondition) {
+              return { next: null };
+            }
+          }
+          const nextOut = out
+            ? kpcallback(out, [currentState], kpobject())
+            : [currentState];
+          if (!(isArray(nextOut) || isStream(nextOut))) {
             throw kperror(
               "wrongReturnType",
-              ["value", outElements],
-              ["expectedType", "array"]
+              ["value", nextOut],
+              ["expectedType", either("array", "stream")]
             );
           }
-          result.push(...outElements);
-        },
-        kpcallback
-      );
-      return result;
+          if (continueIf) {
+            const continueIfCondition = kpcallback(
+              continueIf,
+              [currentState],
+              kpobject()
+            );
+            if (!isBoolean(continueIfCondition)) {
+              throw kperror(
+                "wrongReturnType",
+                ["value", continueIfCondition],
+                ["expectedType", "boolean"]
+              );
+            }
+            if (continueIfCondition) {
+              currentState = kpcallback(next, [currentState], kpobject());
+            } else {
+              currentState = null;
+              continuing = false;
+            }
+          } else {
+            currentState = kpcallback(next, [currentState], kpobject());
+          }
+          currentOutStream = toStream(nextOut);
+          if (!continuing) {
+            break;
+          }
+        }
+        if (currentOutStream === null) {
+          return { next: null };
+        }
+        const [currentOut, nextOutStream] = currentOutStream.next;
+        return {
+          next: [
+            currentOut,
+            builtin("next", {}, function () {
+              if (continuing) {
+                return streamFrom(
+                  currentState,
+                  kpcallback(nextOutStream, [], kpobject())
+                );
+              } else {
+                return { next: null };
+              }
+            }),
+          ],
+        };
+      }
+
+      return streamFrom(start, { next: null });
     }
   ),
   builtin(
@@ -493,16 +580,17 @@ const rawBuiltins = [
       params: [
         {
           name: "value",
-          type: either(arrayOf(tupleLike(["string", "any"])), "error"),
+          type: either("array", "stream", "error"),
         },
       ],
     },
-    function ([value]) {
-      if (isArray(value)) {
-        return kpobject(...value);
-      } else {
+    function ([value], kpcallback) {
+      if (isError(value)) {
         return toKpobject(value);
       }
+      const array = toArray(value, kpcallback);
+      validateArgument(array, arrayOf(tupleLike(["string", "any"])));
+      return kpobject(...array);
     }
   ),
   builtin(
@@ -1101,6 +1189,48 @@ function compare(a, b) {
     } else {
       return 0;
     }
+  }
+}
+
+export function toArray(value, kpcallback) {
+  if (isArray(value)) {
+    return value;
+  } else if (isString(value)) {
+    return [...value];
+  } else {
+    let current = value;
+    const result = [];
+    while (current.next !== null) {
+      const [getValue, next] = current.next;
+      result.push(getValue());
+      current = kpcallback(next, [], kpobject());
+    }
+    return result;
+  }
+}
+
+export function toStream(value) {
+  if (isArray(value)) {
+    function streamFrom(i) {
+      if (i >= value.length) {
+        return { next: null };
+      }
+      return {
+        next: [
+          builtin("value", {}, function () {
+            return value[i];
+          }),
+          builtin("next", {}, function () {
+            return streamFrom(i + 1);
+          }),
+        ],
+      };
+    }
+    return streamFrom(0);
+  } else if (isString(value)) {
+    return toStream(toArray(value));
+  } else {
+    return value;
   }
 }
 

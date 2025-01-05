@@ -19,40 +19,64 @@ import {
   isNumber,
   isObject,
   isSequence,
+  isStream,
   isString,
   toString,
 } from "./values.js";
 
 export default function kpvm(
   program,
-  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
+  {
+    trace = false,
+    timeLimitSeconds = 0,
+    stepLimit = 0,
+    debugLog = console.error,
+  } = {}
 ) {
-  return new Vm(program, { trace, timeLimitSeconds, debugLog }).run();
+  return new Vm(program, {
+    trace,
+    timeLimitSeconds,
+    stepLimit,
+    debugLog,
+  }).run();
 }
 
 export function kpvmCall(
   kpf,
   posArgs,
   namedArgs,
-  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
+  {
+    trace = false,
+    timeLimitSeconds = 0,
+    stepLimit = 0,
+    debugLog = console.error,
+  } = {}
 ) {
-  return new Vm(kpf.program, { trace, timeLimitSeconds, debugLog }).callback(
-    kpf,
-    posArgs,
-    namedArgs
-  );
+  return new Vm(kpf.program, {
+    trace,
+    timeLimitSeconds,
+    stepLimit,
+    debugLog,
+  }).callback(kpf, posArgs, namedArgs);
 }
 
 export class Vm {
   constructor(
     { instructions, diagnostics = [] },
-    { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
+    {
+      trace = false,
+      timeLimitSeconds = 0,
+      stepLimit = 0,
+      debugLog = console.error,
+    } = {}
   ) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
     this.trace = trace;
+    this.stepLimit = stepLimit;
     this.timeLimitSeconds = timeLimitSeconds;
     this.startTime = Date.now();
+    this.stepNumber = 0;
     this.debugLog = debugLog;
 
     this.cursor = 0;
@@ -106,6 +130,7 @@ export class Vm {
     this.instructionTable[op.IS_NUMBER] = this.runIsNumber;
     this.instructionTable[op.IS_STRING] = this.runIsString;
     this.instructionTable[op.IS_ARRAY] = this.runIsArray;
+    this.instructionTable[op.IS_STREAM] = this.runIsStream;
     this.instructionTable[op.IS_OBJECT] = this.runIsObject;
     this.instructionTable[op.IS_BUILTIN] = this.runIsBuiltin;
     this.instructionTable[op.IS_GIVEN] = this.runIsGiven;
@@ -148,6 +173,10 @@ export class Vm {
 
   run() {
     while (this.cursor < this.instructions.length) {
+      this.stepNumber += 1;
+      if (this.stepLimit > 0 && this.stepNumber >= this.stepLimit) {
+        this.throw_("stepLimitExceeded", ["stepLimit", this.stepLimit]);
+      }
       this.runInstruction();
       if (this.trace) {
         const cutoff = this.callFrames.at(-1)?.stackIndex ?? 0;
@@ -771,6 +800,14 @@ export class Vm {
     }
     const value = this.stack.pop();
     this.stack.push(isArray(value));
+  }
+
+  runIsStream() {
+    if (this.trace) {
+      this.logInstruction("IS_STREAM");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isStream(value));
   }
 
   runIsObject() {

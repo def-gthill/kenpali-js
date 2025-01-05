@@ -84,7 +84,7 @@ test("The time limit can't be subverted just by catching the error", (t) => {
 });
 
 test("Debug logging can be configured", (t) => {
-  const code = `1 | build(while: (n) => n | debug | isLessThan(100), next: (n) => n | times(2))`;
+  const code = `1 | build(while: (n) => n | debug | isLessThan(100), next: (n) => n | times(2)) | toArray`;
   const debugLog = [];
   const result = kpeval(kpparse(code), { debugLog: (s) => debugLog.push(s) });
   t.deepEqual(result, [1, 2, 4, 8, 16, 32, 64]);
