@@ -38,7 +38,9 @@ rows | rebuild((row) => (
   cols | transform((col) => (
     [row, col]
   ))
+  | toArray
 ))
+| toArray
 `;
 const naiveFib = `
 fib = (n) => if(
@@ -53,6 +55,7 @@ parseCsv = (text) => (
   text | splitLines | transform(
     (line) => (line | split(on: ","))
   )
+  | toArray
 );
 parseCsv("one, two, three\nuno, dos, tres\neins, zwei, drei")
 `;
