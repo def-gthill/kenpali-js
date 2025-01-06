@@ -563,13 +563,7 @@ export class Vm {
   }
 
   callGiven(callee) {
-    this.callFrames.push(
-      new CallFrame(
-        callee.name,
-        this.scopeFrames.at(-1).stackIndex,
-        this.cursor
-      )
-    );
+    this.pushCallFrame(callee.name);
     const target = callee.target;
     if (this.trace) {
       console.log(`Jump to ${target}`);
@@ -581,13 +575,7 @@ export class Vm {
     if (this.trace) {
       console.log(`Call builtin "${functionName(callee)}"`);
     }
-    this.callFrames.push(
-      new CallFrame(
-        functionName(callee),
-        this.scopeFrames.at(-1).stackIndex,
-        this.cursor
-      )
-    );
+    this.pushCallFrame(functionName(callee));
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
     const kpcallback = this.kpcallback.bind(this);
@@ -597,8 +585,7 @@ export class Vm {
       });
       this.stack.pop(); // Discard called function
       this.stack.push(result);
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
       if (this.trace) {
         console.log(`Return to ${this.cursor}`);
       }
@@ -648,8 +635,7 @@ export class Vm {
     if (this.callFrames.length === 0) {
       this.cursor = this.instructions.length;
     } else {
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
     }
     if (this.trace) {
       console.log(`Return to ${this.cursor}`);
@@ -662,17 +648,14 @@ export class Vm {
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
-    this.callFrames.push(
-      new CallFrame(functionName(callee), frameIndex, this.cursor)
-    );
+    this.pushCallFrame(functionName(callee));
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
     const kpcallback = this.kpcallback.bind(this);
     try {
       const result = callee(args, kpcallback, { debugLog: this.debugLog });
       this.stack.push(result);
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
       if (this.trace) {
         console.log(`Return to ${this.cursor}`);
       }
@@ -683,6 +666,16 @@ export class Vm {
         throw error;
       }
     }
+  }
+
+  pushCallFrame(name) {
+    const frameIndex = this.scopeFrames.at(-1).stackIndex;
+    this.callFrames.push(new CallFrame(name, frameIndex, this.cursor));
+  }
+
+  popCallFrame() {
+    const callFrame = this.callFrames.pop();
+    this.cursor = callFrame.returnIndex;
   }
 
   kpcallback(f, posArgs, namedArgs) {
@@ -750,8 +743,7 @@ export class Vm {
             );
           }
         }
-        const callFrame = this.callFrames.pop();
-        this.cursor = callFrame.returnIndex;
+        this.popCallFrame();
         if (this.trace) {
           console.log(`Return to ${this.cursor} from stream indexing`);
         }
