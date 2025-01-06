@@ -732,13 +732,13 @@ export class Vm {
           let last;
           let current = collection;
           let j = 0;
-          while (current.next !== null && j < index) {
+          while (!current.isEmpty() && j < index) {
             last = current;
-            current = current.next.next();
+            current = current.next();
             j += 1;
           }
           if (j === index) {
-            this.stack.push(last.next.value());
+            this.stack.push(last.value());
           } else {
             this.throw_(
               kperror(

@@ -2,6 +2,7 @@ import { literal } from "./kpast.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
+import { emptyStream, stream } from "./stream.js";
 import validate, {
   argumentError,
   arrayOf,
@@ -322,8 +323,8 @@ const rawBuiltins = [
   builtin("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
-  builtin("toString", { params: ["value"] }, function ([value], kpcallback) {
-    return toString(value, kpcallback);
+  builtin("toString", { params: ["value"] }, function ([value]) {
+    return toString(value);
   }),
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
@@ -461,7 +462,7 @@ const rawBuiltins = [
         let currentOutStream = outStream;
         let currentState = state;
         let continuing = true;
-        while (currentOutStream.next === null) {
+        while (currentOutStream.isEmpty()) {
           if (while_) {
             const whileCondition = kpcallback(
               while_,
@@ -476,7 +477,7 @@ const rawBuiltins = [
               );
             }
             if (!whileCondition) {
-              return { next: null };
+              return emptyStream();
             }
           }
           const nextOut = out
@@ -516,26 +517,24 @@ const rawBuiltins = [
             break;
           }
         }
-        if (currentOutStream === null) {
-          return { next: null };
+        if (currentOutStream.isEmpty()) {
+          return emptyStream();
         }
-        return {
-          next: {
-            value() {
-              return currentOutStream.next.value();
-            },
-            next() {
-              if (continuing) {
-                return streamFrom(currentState, currentOutStream.next.next());
-              } else {
-                return { next: null };
-              }
-            },
+        return stream({
+          value() {
+            return currentOutStream.value();
           },
-        };
+          next() {
+            if (continuing) {
+              return streamFrom(currentState, currentOutStream.next());
+            } else {
+              return emptyStream();
+            }
+          },
+        });
       }
 
-      return streamFrom(start, { next: null });
+      return streamFrom(start, emptyStream());
     }
   ),
   builtin(
@@ -1198,9 +1197,9 @@ export function toArray(value) {
   } else {
     let current = value;
     const result = [];
-    while (current.next !== null) {
-      result.push(current.next.value());
-      current = current.next.next();
+    while (!current.isEmpty()) {
+      result.push(current.value());
+      current = current.next();
     }
     return result;
   }
@@ -1210,18 +1209,16 @@ export function toStream(value) {
   if (isArray(value)) {
     function streamFrom(i) {
       if (i >= value.length) {
-        return { next: null };
+        return emptyStream();
       }
-      return {
-        next: {
-          value() {
-            return value[i];
-          },
-          next() {
-            return streamFrom(i + 1);
-          },
+      return stream({
+        value() {
+          return value[i];
         },
-      };
+        next() {
+          return streamFrom(i + 1);
+        },
+      });
     }
     return streamFrom(0);
   } else if (isString(value)) {

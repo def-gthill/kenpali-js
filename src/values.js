@@ -1,4 +1,5 @@
 import { kpoEntries } from "./kpobject.js";
+import { Stream } from "./stream.js";
 
 //#region Identifying types
 
@@ -43,7 +44,7 @@ export function isArray(value) {
 }
 
 export function isStream(value) {
-  return isJsObjectWithProperty(value, "next");
+  return value instanceof Stream;
 }
 
 export function isBuiltin(value) {
@@ -102,24 +103,18 @@ export function equals(a, b) {
   }
 }
 
-export function toString(value, kpcallback) {
+export function toString(value) {
   if (isArray(value)) {
-    return (
-      "[" +
-      value.map((element) => toString(element, kpcallback)).join(", ") +
-      "]"
-    );
+    return "[" + value.map((element) => toString(element)).join(", ") + "]";
   } else if (isStream(value)) {
     let current = value;
     const elements = [];
-    if (kpcallback) {
-      while (current.next !== null && elements.length < 3) {
-        elements.push(current.next.value());
-        current = current.next.next();
-      }
+    while (!current.isEmpty() && elements.length < 3) {
+      elements.push(current.value());
+      current = current.next();
     }
     const result = `stream [${elements.join(", ")}`;
-    if (current.next === null) {
+    if (current.isEmpty()) {
       return result + "]";
     } else {
       return result + "...]";
@@ -128,10 +123,7 @@ export function toString(value, kpcallback) {
     return (
       "{" +
       kpoEntries(value)
-        .map(
-          ([k, v]) =>
-            `${isValidName(k) ? k : `"${k}"`}: ${toString(v, kpcallback)}`
-        )
+        .map(([k, v]) => `${isValidName(k) ? k : `"${k}"`}: ${toString(v)}`)
         .join(", ") +
       "}"
     );
@@ -141,7 +133,7 @@ export function toString(value, kpcallback) {
     return `function ${functionName(value)}`;
   } else if (isError(value)) {
     return [
-      `error ${value.error} ${toString(value.details, kpcallback)}`,
+      `error ${value.error} ${toString(value.details)}`,
       ...(value.calls ?? []).map((call) => `in ${call.get("function")}`),
     ].join("\n");
   } else {
