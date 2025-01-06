@@ -146,8 +146,8 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([strings, on], kpcallback) {
-      const array = toArray(strings, kpcallback);
+    function ([strings, on]) {
+      const array = toArray(strings);
       validateArgument(array, arrayOf("string"));
       return array.join(on);
     }
@@ -331,8 +331,8 @@ const rawBuiltins = [
   builtin(
     "toArray",
     { params: [{ name: "value", type: "sequence" }] },
-    function ([value], kpcallback) {
-      return toArray(value, kpcallback);
+    function ([value]) {
+      return toArray(value);
     }
   ),
   builtin("isStream", { params: ["value"] }, function ([value]) {
@@ -426,7 +426,7 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, action], kpcallback) {
-      const array = toArray(sequence, kpcallback);
+      const array = toArray(sequence);
       for (const element of array) {
         kpcallback(action, [element], kpobject());
       }
@@ -519,21 +519,19 @@ const rawBuiltins = [
         if (currentOutStream === null) {
           return { next: null };
         }
-        const [currentOut, nextOutStream] = currentOutStream.next;
         return {
-          next: [
-            currentOut,
-            builtin("next", {}, function () {
+          next: {
+            value() {
+              return currentOutStream.next.value();
+            },
+            next() {
               if (continuing) {
-                return streamFrom(
-                  currentState,
-                  kpcallback(nextOutStream, [], kpobject())
-                );
+                return streamFrom(currentState, currentOutStream.next.next());
               } else {
                 return { next: null };
               }
-            }),
-          ],
+            },
+          },
         };
       }
 
@@ -584,11 +582,11 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([value], kpcallback) {
+    function ([value]) {
       if (isError(value)) {
         return toKpobject(value);
       }
-      const array = toArray(value, kpcallback);
+      const array = toArray(value);
       validateArgument(array, arrayOf(tupleLike(["string", "any"])));
       return kpobject(...array);
     }
@@ -1192,7 +1190,7 @@ function compare(a, b) {
   }
 }
 
-export function toArray(value, kpcallback) {
+export function toArray(value) {
   if (isArray(value)) {
     return value;
   } else if (isString(value)) {
@@ -1201,9 +1199,8 @@ export function toArray(value, kpcallback) {
     let current = value;
     const result = [];
     while (current.next !== null) {
-      const [getValue, next] = current.next;
-      result.push(getValue());
-      current = kpcallback(next, [], kpobject());
+      result.push(current.next.value());
+      current = current.next.next();
     }
     return result;
   }
@@ -1216,14 +1213,14 @@ export function toStream(value) {
         return { next: null };
       }
       return {
-        next: [
-          builtin("value", {}, function () {
+        next: {
+          value() {
             return value[i];
-          }),
-          builtin("next", {}, function () {
+          },
+          next() {
             return streamFrom(i + 1);
-          }),
-        ],
+          },
+        },
       };
     }
     return streamFrom(0);

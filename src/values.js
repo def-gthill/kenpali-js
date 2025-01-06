@@ -1,4 +1,4 @@
-import kpobject, { kpoEntries } from "./kpobject.js";
+import { kpoEntries } from "./kpobject.js";
 
 //#region Identifying types
 
@@ -114,9 +114,8 @@ export function toString(value, kpcallback) {
     const elements = [];
     if (kpcallback) {
       while (current.next !== null && elements.length < 3) {
-        const [getValue, next] = current.next;
-        elements.push(getValue());
-        current = kpcallback(next, [], kpobject());
+        elements.push(current.next.value());
+        current = current.next.next();
       }
     }
     const result = `stream [${elements.join(", ")}`;

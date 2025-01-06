@@ -590,13 +590,7 @@ export class Vm {
     );
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
-    const kpcallback = (f, posArgs, namedArgs) => {
-      if (isBuiltin(f)) {
-        return f(posArgs, namedArgs, kpcallback, { debugLog: this.debugLog });
-      } else {
-        return this.callback(f, posArgs, namedArgs);
-      }
-    };
+    const kpcallback = this.kpcallback.bind(this);
     try {
       const result = callee(posArgs, namedArgs, kpcallback, {
         debugLog: this.debugLog,
@@ -673,13 +667,7 @@ export class Vm {
     );
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
-    const kpcallback = (f, posArgs, namedArgs) => {
-      if (typeof f === "function") {
-        return f(posArgs, namedArgs, kpcallback, { debugLog: this.debugLog });
-      } else {
-        return this.callback(f, posArgs, namedArgs);
-      }
-    };
+    const kpcallback = this.kpcallback.bind(this);
     try {
       const result = callee(args, kpcallback, { debugLog: this.debugLog });
       this.stack.push(result);
@@ -694,6 +682,16 @@ export class Vm {
       } else {
         throw error;
       }
+    }
+  }
+
+  kpcallback(f, posArgs, namedArgs) {
+    if (typeof f === "function") {
+      return f(posArgs, namedArgs, this.kpcallback.bind(this), {
+        debugLog: this.debugLog,
+      });
+    } else {
+      return this.callback(f, posArgs, namedArgs);
     }
   }
 
@@ -716,6 +714,52 @@ export class Vm {
         return;
       }
       this.stack.push(result);
+    } else if (isStream(collection)) {
+      if (isNumber(index)) {
+        if (this.trace) {
+          console.log(`Indexing a stream with ${index}`);
+        }
+        const frameIndex = this.scopeFrames.at(-1).stackIndex;
+        this.callFrames.push(
+          new CallFrame("$indexStream", frameIndex, this.cursor)
+        );
+        if (index <= 0) {
+          const result = kpcatch(() => indexArray(toArray(index), index));
+          if (isError(result)) {
+            this.throw_(result);
+          }
+        } else {
+          let last;
+          let current = collection;
+          let j = 0;
+          while (current.next !== null && j < index) {
+            last = current;
+            current = current.next.next();
+            j += 1;
+          }
+          if (j === index) {
+            this.stack.push(last.next.value());
+          } else {
+            this.throw_(
+              kperror(
+                "indexOutOfBounds",
+                ["value", collection],
+                ["length", j],
+                ["index", index]
+              )
+            );
+          }
+        }
+        const callFrame = this.callFrames.pop();
+        this.cursor = callFrame.returnIndex;
+        if (this.trace) {
+          console.log(`Return to ${this.cursor} from stream indexing`);
+        }
+      } else {
+        this.throw_(
+          kperror("wrongType", ["value", index], ["expectedType", "number"])
+        );
+      }
     } else if (isObject(collection)) {
       if (!isString(index)) {
         this.throw_(
@@ -868,8 +912,7 @@ export class Vm {
     const isValid = this.stack.pop();
     const value = this.stack.at(-1);
     if (!isValid) {
-      const kpcallback = (f, posArgs, namedArgs) =>
-        this.callback(f, posArgs, namedArgs);
+      const kpcallback = this.kpcallback.bind(this);
       try {
         if (this.getDiagnostic().isArgument) {
           transformError(
