@@ -66,7 +66,7 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-rebuild = (sequence, f) => (
+transform = (sequence, f) => (
     array = sequence | toArray;
     1
     | build(
@@ -74,16 +74,15 @@ rebuild = (sequence, f) => (
         next: increment,
         out: (i) => f(array @ i),
     )
-    | flatten
 );
-transform = (array, f) => array | rebuild((element) => [f(element)]);
 where = (array, condition) => (
     array
-    | rebuild((element) => if(
+    | transform((element) => if(
         condition(element),
         then: () => [element],
         else: () => [],
     ))
+    | flatten
 );
 zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
 transpose = (sequences, fillWith: = null) => (
