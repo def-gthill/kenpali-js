@@ -45,8 +45,8 @@ most = (sequence) => (
     ) @ 2
 );
 isEmpty = (coll) => (length(coll) | equals(0));
-dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
-dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
+keepLast = (coll, n) => coll | slice(length(coll) | minus(n) | increment | to(length(coll)));
+dropLast = (coll, n = 1) => coll | slice(1 | to(length(coll) | minus(n)));
 slice = (coll, indices) => (
     result = indices
     | where(| isBetween(1, coll | length))
@@ -68,15 +68,22 @@ to = (start, end, by: = 1) => (
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
 rebuild = (sequence, f) => (
     array = sequence | toArray;
-    1 | build(
+    1
+    | build(
         while: (i) => i | isAtMost(length(array)),
         next: increment,
         out: (i) => f(array @ i),
     )
+    | flatten
 );
 transform = (array, f) => array | rebuild((element) => [f(element)]);
-where = (array, condition) => array | rebuild(
-    (element) => if(condition(element), then: () => [element], else: () => [])
+where = (array, condition) => (
+    array
+    | rebuild((element) => if(
+        condition(element),
+        then: () => [element],
+        else: () => [],
+    ))
 );
 zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
 transpose = (sequences, fillWith: = null) => (
@@ -100,7 +107,6 @@ transpose = (sequences, fillWith: = null) => (
 count = (sequence, condition) => (sequence | where(condition) | toArray | length);
 forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
 forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
-flatten = (array) => array | rebuild((element) => element);
 chunk = (sequence, size) => (
     array = sequence | toArray;
     starts = 1 | to(length(array), by: size);

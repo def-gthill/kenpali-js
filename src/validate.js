@@ -281,15 +281,25 @@ function withReason(err, reason) {
 }
 
 export function argumentError(err) {
-  let updatedErr = err;
-  if (errorType(updatedErr) === "badElement") {
-    updatedErr = withErrorType(updatedErr, "badArgumentValue");
-  } else if (errorType(updatedErr) === "wrongType") {
-    updatedErr = withErrorType(updatedErr, "wrongArgumentType");
-  } else if (errorType(updatedErr) === "badValue") {
-    updatedErr = withErrorType(updatedErr, "badArgumentValue");
+  if (errorType(err) === "badElement") {
+    return withErrorType(err, "badArgumentValue");
+  } else if (errorType(err) === "wrongType") {
+    return withErrorType(err, "wrongArgumentType");
+  } else if (errorType(err) === "badValue") {
+    return withErrorType(err, "badArgumentValue");
+  } else {
+    return err;
   }
-  return updatedErr;
+}
+
+export function returnError(err) {
+  if (errorType(err) === "wrongType") {
+    return withErrorType(err, "wrongReturnType");
+  } else if (errorType(err) === "badValue") {
+    return withErrorType(err, "badReturnValue");
+  } else {
+    return err;
+  }
 }
 
 export function argumentPatternError(err) {

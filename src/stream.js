@@ -4,7 +4,13 @@ class FullStream extends Stream {
   constructor(value, next) {
     super();
     this.value = value;
-    this.next = next;
+    this.next = () => {
+      if (this.nextRef === null) {
+        this.nextRef = next();
+      }
+      return this.nextRef;
+    };
+    this.nextRef = null;
   }
 
   isEmpty() {

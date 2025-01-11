@@ -13,6 +13,7 @@ import validate, {
   oneOf,
   optional,
   recordLike,
+  returnError,
   tupleLike,
 } from "./validate.js";
 import {
@@ -250,13 +251,7 @@ const rawBuiltins = [
       }
       for (const f of rest) {
         const condition = kpcallback(f, [], kpobject());
-        if (!isBoolean(condition)) {
-          throw kperror(
-            "wrongReturnType",
-            ["value", condition],
-            ["expectedType", "boolean"]
-          );
-        }
+        validateReturn(condition, "boolean");
         if (!condition) {
           return false;
         }
@@ -278,13 +273,7 @@ const rawBuiltins = [
       }
       for (const f of rest) {
         const condition = kpcallback(f, [], kpobject());
-        if (!isBoolean(condition)) {
-          throw kperror(
-            "wrongReturnType",
-            ["value", condition],
-            ["expectedType", "boolean"]
-          );
-        }
+        validateReturn(condition, "boolean");
         if (condition) {
           return true;
         }
@@ -339,6 +328,13 @@ const rawBuiltins = [
   builtin("isStream", { params: ["value"] }, function ([value]) {
     return isStream(value);
   }),
+  builtin(
+    "toStream",
+    { params: [{ name: "value", type: "sequence" }] },
+    function ([value]) {
+      return toStream(value);
+    }
+  ),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
   }),
@@ -397,25 +393,43 @@ const rawBuiltins = [
     },
     function ([start, while_, next, continueIf], kpcallback) {
       let result = start;
-      loop(
-        "repeat",
-        start,
-        while_,
-        next,
-        continueIf,
-        (current) => {
-          result = current;
-        },
-        kpcallback
-      );
+      let current = start;
+
+      while (true) {
+        if (while_) {
+          const whileCondition = kpcallback(while_, [current], kpobject());
+          validateReturn(whileCondition, "boolean");
+          if (!whileCondition) {
+            break;
+          }
+        }
+        result = current;
+        if (continueIf) {
+          const continueIfCondition = kpcallback(
+            continueIf,
+            [current],
+            kpobject()
+          );
+          validateReturn(continueIfCondition, "boolean");
+          if (!continueIfCondition) {
+            break;
+          }
+        }
+        current = kpcallback(next, [current], kpobject());
+      }
+
       return result;
     }
   ),
   builtin(
     "length",
-    { params: [{ name: "sequence", type: either("string", "array") }] },
+    { params: [{ name: "sequence", type: "sequence" }] },
     function ([sequence]) {
-      return sequence.length;
+      if (isStream(sequence)) {
+        return toArray(sequence).length;
+      } else {
+        return sequence.length;
+      }
     }
   ),
   builtin(
@@ -458,75 +472,42 @@ const rawBuiltins = [
       ],
     },
     function ([start, while_, next, out, continueIf], kpcallback) {
-      function streamFrom(state, outStream) {
-        let currentOutStream = outStream;
+      function streamFrom(state) {
         let currentState = state;
         let continuing = true;
-        while (currentOutStream.isEmpty()) {
-          if (while_) {
-            const whileCondition = kpcallback(
-              while_,
-              [currentState],
-              kpobject()
-            );
-            if (!isBoolean(whileCondition)) {
-              throw kperror(
-                "wrongReturnType",
-                ["value", whileCondition],
-                ["expectedType", "boolean"]
-              );
-            }
-            if (!whileCondition) {
-              return emptyStream();
-            }
-          }
-          const nextOut = out
-            ? kpcallback(out, [currentState], kpobject())
-            : [currentState];
-          if (!(isArray(nextOut) || isStream(nextOut))) {
-            throw kperror(
-              "wrongReturnType",
-              ["value", nextOut],
-              ["expectedType", either("array", "stream")]
-            );
-          }
-          if (continueIf) {
-            const continueIfCondition = kpcallback(
-              continueIf,
-              [currentState],
-              kpobject()
-            );
-            if (!isBoolean(continueIfCondition)) {
-              throw kperror(
-                "wrongReturnType",
-                ["value", continueIfCondition],
-                ["expectedType", "boolean"]
-              );
-            }
-            if (continueIfCondition) {
-              currentState = kpcallback(next, [currentState], kpobject());
-            } else {
-              currentState = null;
-              continuing = false;
-            }
-          } else {
-            currentState = kpcallback(next, [currentState], kpobject());
-          }
-          currentOutStream = toStream(nextOut);
-          if (!continuing) {
-            break;
+        if (while_) {
+          const whileCondition = kpcallback(while_, [currentState], kpobject());
+          validateReturn(whileCondition, "boolean");
+          if (!whileCondition) {
+            return emptyStream();
           }
         }
-        if (currentOutStream.isEmpty()) {
-          return emptyStream();
+        const nextOut = out
+          ? kpcallback(out, [currentState], kpobject())
+          : currentState;
+        if (continueIf) {
+          const continueIfCondition = kpcallback(
+            continueIf,
+            [currentState],
+            kpobject()
+          );
+          validateReturn(continueIfCondition, "boolean");
+          if (continueIfCondition) {
+            currentState = kpcallback(next, [currentState], kpobject());
+          } else {
+            currentState = null;
+            continuing = false;
+          }
+        } else {
+          currentState = kpcallback(next, [currentState], kpobject());
         }
         return stream({
           value() {
-            return currentOutStream.value();
+            return nextOut;
           },
           next() {
             if (continuing) {
-              return streamFrom(currentState, currentOutStream.next());
+              return streamFrom(currentState);
             } else {
               return emptyStream();
             }
@@ -534,7 +515,148 @@ const rawBuiltins = [
         });
       }
 
-      return streamFrom(start, emptyStream());
+      return streamFrom(start);
+    }
+  ),
+  builtin(
+    "collapse",
+    {
+      params: [{ name: "in", type: "sequence" }],
+      namedParams: [
+        "start",
+        {
+          name: "while",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+        { name: "next", type: "function" },
+        {
+          name: "continueIf",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+      ],
+    },
+    function ([in_, start, while_, next, continueIf], kpcallback) {
+      let current = toStream(in_);
+      let state = start;
+      while (!current.isEmpty()) {
+        const nextState = kpcallback(next, [state, current.value()]);
+        current = current.next();
+
+        if (while_ && !current.isEmpty()) {
+          const whileCondition = kpcallback(
+            while_,
+            [nextState, current.value()],
+            kpobject()
+          );
+          validateReturn(whileCondition, "boolean");
+          if (!whileCondition) {
+            break;
+          }
+        }
+
+        state = nextState;
+
+        if (continueIf && !current.isEmpty()) {
+          const continueIfCondition = kpcallback(
+            continueIf,
+            [nextState, current.value()],
+            kpobject()
+          );
+          if (!isBoolean(continueIfCondition)) {
+            validateReturn(continueIfCondition, "boolean");
+          }
+          if (!continueIfCondition) {
+            break;
+          }
+        }
+      }
+      return state;
+    }
+  ),
+  builtin(
+    "keepFirst",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "n", type: "number" },
+      ],
+    },
+    function ([sequence, n]) {
+      const start = toStream(sequence);
+
+      function streamFrom(current, i) {
+        if (current.isEmpty() || i > n) {
+          return emptyStream();
+        } else {
+          return stream({
+            value() {
+              return current.value();
+            },
+            next() {
+              return streamFrom(current.next(), i + 1);
+            },
+          });
+        }
+      }
+
+      return streamFrom(start, 1);
+    }
+  ),
+  builtin(
+    "dropFirst",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "n", type: "number", defaultValue: literal(1) },
+      ],
+    },
+    function ([sequence, n]) {
+      if (isString(sequence)) {
+        return sequence.slice(n);
+      }
+      let start = toStream(sequence);
+
+      for (let i = 1; i <= n; i++) {
+        if (start.isEmpty()) {
+          return emptyStream();
+        }
+        start = start.next();
+      }
+
+      return start;
+    }
+  ),
+  builtin(
+    "flatten",
+    { params: [{ name: "sequences", type: "sequence" }] },
+    function ([sequences]) {
+      const outer = toStream(sequences);
+
+      function streamFrom(startOuter, startInner) {
+        let outer = startOuter;
+        let inner = startInner;
+        while (inner.isEmpty()) {
+          if (outer.isEmpty()) {
+            return emptyStream();
+          }
+          const innerResult = outer.value();
+          validateReturn(innerResult, either("array", "stream"));
+          inner = toStream(innerResult);
+          outer = outer.next();
+        }
+        return stream({
+          value() {
+            return inner.value();
+          },
+          next() {
+            return streamFrom(outer, inner.next());
+          },
+        });
+      }
+
+      return streamFrom(outer, emptyStream());
     }
   ),
   builtin(
@@ -1275,48 +1397,6 @@ export function indexMapping(
   }
 }
 
-function loop(
-  functionName,
-  start,
-  while_,
-  next,
-  continueIf,
-  callback,
-  kpcallback
-) {
-  let current = start;
-  while (true) {
-    if (while_) {
-      const whileCondition = kpcallback(while_, [current], kpobject());
-      if (!isBoolean(whileCondition)) {
-        throw kperror(
-          "wrongReturnType",
-          ["value", whileCondition],
-          ["expectedType", "boolean"]
-        );
-      }
-      if (!whileCondition) {
-        return current;
-      }
-    }
-    callback(current);
-    if (continueIf) {
-      const continueIfCondition = kpcallback(continueIf, [current], kpobject());
-      if (!isBoolean(continueIfCondition)) {
-        throw kperror(
-          "wrongReturnType",
-          ["value", continueIfCondition],
-          ["expectedType", "boolean"]
-        );
-      }
-      if (!continueIfCondition) {
-        return current;
-      }
-    }
-    current = kpcallback(next, [current], kpobject());
-  }
-}
-
 export function fromString(string) {
   return toValue(kpparse(string));
 }
@@ -1349,6 +1429,10 @@ function toKey(value) {
 
 function validateArgument(value, schema) {
   transformError(() => validate(value, schema), argumentError);
+}
+
+function validateReturn(value, schema) {
+  transformError(() => validate(value, schema), returnError);
 }
 
 export function loadBuiltins() {
