@@ -695,78 +695,11 @@ export class Vm {
     const index = this.stack.pop();
     const collection = this.stack.pop();
     if (isString(collection) || isArray(collection)) {
-      if (!isNumber(index)) {
-        this.throw_(
-          kperror("wrongType", ["value", index], ["expectedType", "number"])
-        );
-        return;
-      }
-      const result = kpcatch(() => indexArray(collection, index));
-      if (isError(result)) {
-        this.throw_(result);
-        return;
-      }
-      this.stack.push(result);
+      this.indexArray(collection, index);
     } else if (isStream(collection)) {
-      if (isNumber(index)) {
-        if (this.trace) {
-          console.log(`Indexing a stream with ${index}`);
-        }
-        const frameIndex = this.scopeFrames.at(-1).stackIndex;
-        this.callFrames.push(
-          new CallFrame("$indexStream", frameIndex, this.cursor)
-        );
-        if (index <= 0) {
-          const result = kpcatch(() => indexArray(toArray(collection), index));
-          if (isError(result)) {
-            this.throw_(result);
-          } else {
-            this.stack.push(result);
-          }
-        } else {
-          let last;
-          let current = collection;
-          let j = 0;
-          while (!current.isEmpty() && j < index) {
-            last = current;
-            current = current.get().next;
-            j += 1;
-          }
-          if (j === index) {
-            this.stack.push(last.get().value);
-          } else {
-            this.throw_(
-              kperror(
-                "indexOutOfBounds",
-                ["value", collection],
-                ["length", j],
-                ["index", index]
-              )
-            );
-          }
-        }
-        this.popCallFrame();
-        if (this.trace) {
-          console.log(`Return to ${this.cursor} from stream indexing`);
-        }
-      } else {
-        this.throw_(
-          kperror("wrongType", ["value", index], ["expectedType", "number"])
-        );
-      }
+      this.indexStream(collection, index);
     } else if (isObject(collection)) {
-      if (!isString(index)) {
-        this.throw_(
-          kperror("wrongType", ["value", index], ["expectedType", "string"])
-        );
-        return;
-      }
-      const result = kpcatch(() => indexMapping(collection, index));
-      if (isError(result)) {
-        this.throw_(result);
-        return;
-      }
-      this.stack.push(result);
+      this.indexObject(collection, index);
     } else {
       this.throw_(
         kperror(
@@ -776,6 +709,85 @@ export class Vm {
         )
       );
     }
+  }
+
+  indexArray(array, index) {
+    if (!isNumber(index)) {
+      this.throw_(
+        kperror("wrongType", ["value", index], ["expectedType", "number"])
+      );
+      return;
+    }
+    const result = kpcatch(() => indexArray(array, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
+  }
+
+  indexStream(stream, index) {
+    if (isNumber(index)) {
+      if (this.trace) {
+        console.log(`Indexing a stream with ${index}`);
+      }
+      const frameIndex = this.scopeFrames.at(-1).stackIndex;
+      this.callFrames.push(
+        new CallFrame("$indexStream", frameIndex, this.cursor)
+      );
+      if (index <= 0) {
+        const result = kpcatch(() => indexArray(toArray(stream), index));
+        if (isError(result)) {
+          this.throw_(result);
+        } else {
+          this.stack.push(result);
+        }
+      } else {
+        let last;
+        let current = stream;
+        let j = 0;
+        while (!current.isEmpty() && j < index) {
+          last = current;
+          current = current.get().next;
+          j += 1;
+        }
+        if (j === index) {
+          this.stack.push(last.get().value);
+        } else {
+          this.throw_(
+            kperror(
+              "indexOutOfBounds",
+              ["value", stream],
+              ["length", j],
+              ["index", index]
+            )
+          );
+        }
+      }
+      this.popCallFrame();
+      if (this.trace) {
+        console.log(`Return to ${this.cursor} from stream indexing`);
+      }
+    } else {
+      this.throw_(
+        kperror("wrongType", ["value", index], ["expectedType", "number"])
+      );
+    }
+  }
+
+  indexObject(object, index) {
+    if (!isString(index)) {
+      this.throw_(
+        kperror("wrongType", ["value", index], ["expectedType", "string"])
+      );
+      return;
+    }
+    const result = kpcatch(() => indexMapping(object, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
   }
 
   runThrow() {
