@@ -45,6 +45,7 @@ most = (sequence) => (
     ) @ 2
 );
 isEmpty = (coll) => (length(coll) | equals(0));
+last = @ -1;
 keepLast = (coll, n) => coll | slice(length(coll) | minus(n) | increment | to(length(coll)));
 dropLast = (coll, n = 1) => coll | slice(1 | to(length(coll) | minus(n)));
 slice = (coll, indices) => (

@@ -1,4 +1,4 @@
-import { indexArray, indexMapping } from "./builtins.js";
+import { indexArray, indexMapping, toArray } from "./builtins.js";
 import * as op from "./instructions.js";
 import kperror, { kpcatch, transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
@@ -717,9 +717,11 @@ export class Vm {
           new CallFrame("$indexStream", frameIndex, this.cursor)
         );
         if (index <= 0) {
-          const result = kpcatch(() => indexArray(toArray(index), index));
+          const result = kpcatch(() => indexArray(toArray(collection), index));
           if (isError(result)) {
             this.throw_(result);
+          } else {
+            this.stack.push(result);
           }
         } else {
           let last;
