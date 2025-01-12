@@ -469,63 +469,6 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "collapse",
-    {
-      params: [{ name: "in", type: "sequence" }],
-      namedParams: [
-        "start",
-        {
-          name: "while",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-        { name: "next", type: "function" },
-        {
-          name: "continueIf",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-      ],
-    },
-    function ([in_, start, while_, next, continueIf], kpcallback) {
-      let current = toStream(in_);
-      let state = start;
-      while (!current.isEmpty()) {
-        const nextState = kpcallback(next, [state, current.get().value]);
-        current = current.get().next;
-
-        if (while_ && !current.isEmpty()) {
-          const whileCondition = kpcallback(
-            while_,
-            [nextState, current.get().value],
-            kpobject()
-          );
-          validateReturn(whileCondition, "boolean");
-          if (!whileCondition) {
-            break;
-          }
-        }
-
-        state = nextState;
-
-        if (continueIf && !current.isEmpty()) {
-          const continueIfCondition = kpcallback(
-            continueIf,
-            [nextState, current.get().value],
-            kpobject()
-          );
-          if (!isBoolean(continueIfCondition)) {
-            validateReturn(continueIfCondition, "boolean");
-          }
-          if (!continueIfCondition) {
-            break;
-          }
-        }
-      }
-      return state;
-    }
-  ),
-  builtin(
     "transform",
     {
       params: [
