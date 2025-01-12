@@ -451,59 +451,17 @@ const rawBuiltins = [
   builtin(
     "build",
     {
-      params: ["start"],
-      namedParams: [
-        {
-          name: "while",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-        { name: "next", type: "function" },
-        {
-          name: "out",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-        {
-          name: "continueIf",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-      ],
+      params: ["start", { name: "next", type: "function" }],
     },
-    function ([start, while_, next, out, continueIf], kpcallback) {
+    function ([start, next], kpcallback) {
       function streamFrom(state) {
         let currentState = state;
-        let continuing = true;
-        if (while_) {
-          const whileCondition = kpcallback(while_, [currentState], kpobject());
-          validateReturn(whileCondition, "boolean");
-          if (!whileCondition) {
-            return emptyStream();
-          }
-        }
-        const nextOut = out
-          ? kpcallback(out, [currentState], kpobject())
-          : currentState;
-        if (continueIf) {
-          const continueIfCondition = kpcallback(
-            continueIf,
-            [currentState],
-            kpobject()
-          );
-          validateReturn(continueIfCondition, "boolean");
-          if (continueIfCondition) {
-            currentState = kpcallback(next, [currentState], kpobject());
-          } else {
-            currentState = null;
-            continuing = false;
-          }
-        } else {
-          currentState = kpcallback(next, [currentState], kpobject());
-        }
+        const nextOut = currentState;
+        currentState = kpcallback(next, [currentState], kpobject());
+
         return stream(() => ({
           value: nextOut,
-          next: continuing ? streamFrom(currentState) : emptyStream(),
+          next: streamFrom(currentState),
         }));
       }
 
@@ -684,6 +642,71 @@ const rawBuiltins = [
       }
 
       return start;
+    }
+  ),
+  builtin(
+    "while",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "condition", type: "function" },
+      ],
+    },
+    function ([sequence, condition], kpcallback) {
+      const start = toStream(sequence);
+
+      function streamFrom(current) {
+        if (current.isEmpty()) {
+          return emptyStream();
+        }
+        const conditionSatisfied = kpcallback(
+          condition,
+          [current.get().value],
+          kpobject()
+        );
+        validateReturn(conditionSatisfied, "boolean");
+        if (!conditionSatisfied) {
+          return emptyStream();
+        }
+        return stream(() => ({
+          value: current.get().value,
+          next: streamFrom(current.get().next),
+        }));
+      }
+
+      return streamFrom(start);
+    }
+  ),
+  builtin(
+    "continueIf",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "condition", type: "function" },
+      ],
+    },
+    function ([sequence, condition], kpcallback) {
+      const start = toStream(sequence);
+
+      function streamFrom(current) {
+        if (current.isEmpty()) {
+          return emptyStream();
+        }
+        const conditionSatisfied = kpcallback(
+          condition,
+          [current.get().value],
+          kpobject()
+        );
+        validateReturn(conditionSatisfied, "boolean");
+        return stream(() => ({
+          value: current.get().value,
+          next: conditionSatisfied
+            ? streamFrom(current.get().next)
+            : emptyStream(),
+        }));
+      }
+
+      return streamFrom(start);
     }
   ),
   builtin(

@@ -60,10 +60,9 @@ to = (start, end, by: = 1) => (
         then: () => isAtMost,
         else: () => isAtLeast,
     );
-    start | build(
-        while: (i) => i | isNoFurtherThan(end),
-        next: (i) => i | plus(by),
-    )
+    start
+    | build(| plus(by))
+    | while(| isNoFurtherThan(end))
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
 where = (array, condition) => (
