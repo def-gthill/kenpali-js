@@ -1,16 +1,17 @@
 export class Stream {}
 
 class FullStream extends Stream {
-  constructor(value, next) {
+  constructor(get) {
     super();
-    this.value = value;
-    this.next = () => {
-      if (this.nextRef === null) {
-        this.nextRef = next();
+    this.get = (back) => {
+      if (this.getRef === null) {
+        this.getRef = get(back);
+      } else if (back !== undefined) {
+        throw kperror("duplicateStreamBack", ["value", back]);
       }
-      return this.nextRef;
+      return this.getRef;
     };
-    this.nextRef = null;
+    this.getRef = null;
   }
 
   isEmpty() {
@@ -18,8 +19,8 @@ class FullStream extends Stream {
   }
 }
 
-export function stream({ value, next }) {
-  return new FullStream(value, next);
+export function stream(get) {
+  return new FullStream(get);
 }
 
 class EmptyStream extends Stream {

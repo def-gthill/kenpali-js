@@ -110,8 +110,8 @@ export function toString(value) {
     let current = value;
     const elements = [];
     while (!current.isEmpty() && elements.length < 3) {
-      elements.push(current.value());
-      current = current.next();
+      elements.push(current.get().value);
+      current = current.get().next;
     }
     const result = `stream [${elements.join(", ")}`;
     if (current.isEmpty()) {

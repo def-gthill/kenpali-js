@@ -66,15 +66,6 @@ to = (start, end, by: = 1) => (
     )
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-transform = (sequence, f) => (
-    array = sequence | toArray;
-    1
-    | build(
-        while: (i) => i | isAtMost(length(array)),
-        next: increment,
-        out: (i) => f(array @ i),
-    )
-);
 where = (array, condition) => (
     array
     | transform((element) => if(
