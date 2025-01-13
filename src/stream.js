@@ -1,17 +1,49 @@
+import kperror from "./kperror.js";
+
 export class Stream {}
 
 class FullStream extends Stream {
-  constructor(get) {
+  constructor(value, next) {
     super();
     this.get = (back) => {
-      if (this.getRef === null) {
-        this.getRef = get(back);
-      } else if (back !== undefined) {
-        throw kperror("duplicateStreamBack", ["value", back]);
-      }
-      return this.getRef;
+      const thisStream = this;
+      const realBack = back === undefined ? this.savedBack : back;
+      return {
+        value: thisStream.value(realBack),
+        next: thisStream.next(realBack),
+      };
     };
-    this.getRef = null;
+    this.called = false;
+    this.value = (back) => {
+      if (this.called && back !== this.savedBack) {
+        throw kperror(
+          "conflictingBack",
+          ["old", wrapBackForError(this.savedBack)],
+          ["new", wrapBackForError(back)]
+        );
+      }
+      if (this.savedValue === undefined) {
+        this.called = true;
+        this.savedBack = back;
+        this.savedValue = value(back);
+      }
+      return this.savedValue;
+    };
+    this.next = (back) => {
+      if (this.called && back !== this.savedBack) {
+        throw kperror(
+          "conflictingBack",
+          ["old", wrapBackForError(this.savedBack)],
+          ["new", wrapBackForError(back)]
+        );
+      }
+      if (this.savedNext === undefined) {
+        this.called = true;
+        this.savedBack = back;
+        this.savedNext = next(back);
+      }
+      return this.savedNext;
+    };
   }
 
   isEmpty() {
@@ -19,8 +51,16 @@ class FullStream extends Stream {
   }
 }
 
-export function stream(get) {
-  return new FullStream(get);
+function wrapBackForError(back) {
+  if (back === undefined) {
+    return "<missing>";
+  } else {
+    return back;
+  }
+}
+
+export function stream({ value, next }) {
+  return new FullStream(value, next);
 }
 
 class EmptyStream extends Stream {

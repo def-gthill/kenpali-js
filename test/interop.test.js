@@ -93,7 +93,7 @@ test("Errors thrown in Kenpali are thrown from kpcall", (t) => {
 });
 
 test("A time limit can be set on a kpcall", (t) => {
-  const code = "() => 1 | repeat(while: () => true, next: (n) => n)";
+  const code = "() => 1 | build(| increment) | toArray";
   const kpf = kpeval(kpparse(code));
 
   const result = kpcatch(() => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }));
@@ -178,8 +178,7 @@ test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) =
 });
 
 test("A time kpcall time limit is enforced through nested callbacks", (t) => {
-  const code =
-    "(callback) => callback(() => 1 | repeat(while: () => true, next: (n) => n))";
+  const code = "(callback) => callback(() => 1 | build(| increment) | toArray)";
   const kpf = kpeval(kpparse(code));
   const callback = toKpFunction(([callback], _, kpcallback) =>
     kpcallback(callback, [], {})

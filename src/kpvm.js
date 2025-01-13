@@ -748,11 +748,11 @@ export class Vm {
         let j = 0;
         while (!current.isEmpty() && j < index) {
           last = current;
-          current = current.get().next;
+          current = current.next();
           j += 1;
         }
         if (j === index) {
-          this.stack.push(last.get().value);
+          this.stack.push(last.value());
         } else {
           this.throw_(
             kperror(

@@ -13,36 +13,32 @@ isBetween = (n, lower, upper) => (
     n | isAtLeast(lower) | and(() => n | isAtMost(upper))
 );
 least = (sequence) => (
-    array = sequence | toArray;
-    [1, null] | repeat(
-        next: ([i, leastSoFar]) => [
-            i | increment,
-            if(
-                leastSoFar | isNull | or(
-                    () => array @ i | isLessThan(leastSoFar)
-                ),
-                then: () => array @ i,
-                else: () => leastSoFar,
-            )
-        ],
-        continueIf: ([i, leastSoFar]) => i | isAtMost(array | length),
-    ) @ 2
+    sequence
+    | running(
+        start: null,
+        next: (element, state: leastSoFar) => if(
+            leastSoFar | isNull | or(
+                () => element | isLessThan(leastSoFar)
+            ),
+            then: () => element,
+            else: () => leastSoFar,
+        )
+    )
+    | last
 );
 most = (sequence) => (
-    array = sequence | toArray;
-    [1, null] | repeat(
-        next: ([i, mostSoFar]) => [
-            i | increment,
-            if(
-                mostSoFar | isNull | or(
-                    () => array @ i | isMoreThan(mostSoFar)
-                ),
-                then: () => array @ i,
-                else: () => mostSoFar,
-            )
-        ],
-        continueIf: ([i, mostSoFar]) => i | isAtMost(array | length),
-    ) @ 2
+    sequence
+    | running(
+        start: null,
+        next: (element, state: mostSoFar) => if(
+            mostSoFar | isNull | or(
+                () => element | isMoreThan(mostSoFar)
+            ),
+            then: () => element,
+            else: () => mostSoFar,
+        )
+    )
+    | last
 );
 isEmpty = (coll) => (length(coll) | equals(0));
 last = @ -1;
@@ -74,6 +70,11 @@ where = (array, condition) => (
         else: () => [],
     ))
     | flatten
+);
+running = (sequence, start:, next:) => (
+    sequence
+    | toStream
+    | withRunning(start:, next:)
 );
 zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
 transpose = (sequences, fillWith: = null) => (
