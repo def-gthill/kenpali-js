@@ -770,7 +770,7 @@ const rawBuiltins = [
   builtin(
     "sort",
     {
-      params: [{ name: "array", type: "array" }],
+      params: [{ name: "sequence", type: "sequence" }],
       namedParams: [
         {
           name: "by",
@@ -779,7 +779,8 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([array, by], kpcallback) {
+    function ([sequence, by], kpcallback) {
+      const array = toArray(sequence);
       if (by) {
         const withSortKey = array.map((element) => [
           element,
