@@ -705,7 +705,7 @@ export class Vm {
         kperror(
           "wrongType",
           ["value", collection],
-          ["expectedType", either("string", "array", "object")]
+          ["expectedType", either("sequence", "object")]
         )
       );
     }
@@ -735,14 +735,15 @@ export class Vm {
       this.callFrames.push(
         new CallFrame("$indexStream", frameIndex, this.cursor)
       );
-      if (index <= 0) {
+      if (index < 0) {
         const result = kpcatch(() => indexArray(toArray(stream), index));
         if (isError(result)) {
           this.throw_(result);
+          return;
         } else {
           this.stack.push(result);
         }
-      } else {
+      } else if (index > 0) {
         let last;
         let current = stream;
         let j = 0;
@@ -762,7 +763,13 @@ export class Vm {
               ["index", index]
             )
           );
+          return;
         }
+      } else {
+        this.throw_(
+          kperror("indexOutOfBounds", ["value", stream], ["index", 0])
+        );
+        return;
       }
       this.popCallFrame();
       if (this.trace) {

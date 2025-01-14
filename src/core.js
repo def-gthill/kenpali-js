@@ -71,12 +71,6 @@ where = (array, condition) => (
     ))
     | flatten
 );
-running = (sequence, start:, next:) => (
-    sequence
-    | toStream
-    | withRunning(start:, next:)
-);
-zip = (*arrays, fillWith: = null) => arrays | transpose(fillWith:);
 transpose = (sequences, fillWith: = null) => (
     arrays = sequences | transform(| toArray) | toArray;
     numElements = if(

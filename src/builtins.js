@@ -480,19 +480,13 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "withRunning",
+    "running",
     {
-      params: [{ name: "stream", type: "stream" }],
-      namedParams: [
-        "start",
-        {
-          name: "next",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-      ],
+      params: [{ name: "sequence", type: "sequence" }],
+      namedParams: ["start", { name: "next", type: "function" }],
     },
     function ([in_, start, next], kpcallback) {
+      const inStream = toStream(in_);
       function streamFrom(current, state) {
         return stream({
           value() {
@@ -503,19 +497,17 @@ const rawBuiltins = [
               ? emptyStream()
               : streamFrom(
                   current.next(state),
-                  next
-                    ? kpcallback(
-                        next,
-                        [current.value(state)],
-                        kpobject(["state", state])
-                      )
-                    : current.value(state)
+                  kpcallback(
+                    next,
+                    [current.value(state)],
+                    kpobject(["state", state])
+                  )
                 );
           },
         });
       }
 
-      return streamFrom(in_, start);
+      return streamFrom(inStream, start);
     }
   ),
   builtin(
@@ -642,6 +634,61 @@ const rawBuiltins = [
       }
 
       return streamFrom(start);
+    }
+  ),
+  builtin(
+    "zip",
+    {
+      params: [{ rest: { name: "sequences", type: "sequence" } }],
+    },
+    function ([sequences]) {
+      const streams = sequences.map(toStream);
+
+      function streamFrom(currents) {
+        if (currents.some((current) => current.isEmpty())) {
+          return emptyStream();
+        } else {
+          return stream({
+            value(back) {
+              return currents.map((current) => current.value(back));
+            },
+            next(back) {
+              return streamFrom(currents.map((current) => current.next(back)));
+            },
+          });
+        }
+      }
+
+      return streamFrom(streams);
+    }
+  ),
+  builtin(
+    "unzip",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "numStreams", type: "number", defaultValue: literal(2) },
+      ],
+    },
+    function ([sequence, numStreams]) {
+      const inStream = toStream(sequence);
+
+      function streamFrom(current, i) {
+        if (current.isEmpty()) {
+          return emptyStream();
+        } else {
+          return stream({
+            value(back) {
+              return indexCollection(current.value(back), i);
+            },
+            next(back) {
+              return streamFrom(current.next(back), i);
+            },
+          });
+        }
+      }
+
+      return [...Array(numStreams)].map((_, i) => streamFrom(inStream, i + 1));
     }
   ),
   builtin(
@@ -1374,6 +1421,28 @@ export function toFunction(value) {
   }
 }
 
+export function indexCollection(
+  collection,
+  index,
+  default_,
+  kpcallback,
+  valueForError = collection
+) {
+  if (isString(collection) || isArray(collection)) {
+    return indexArray(collection, index, default_, kpcallback, valueForError);
+  } else if (isStream(collection)) {
+    return indexStream(collection, index, default_, kpcallback, valueForError);
+  } else if (isObject(collection)) {
+    return indexMapping(collection, index, default_, kpcallback, valueForError);
+  } else {
+    throw kperror(
+      "wrongType",
+      ["value", collection],
+      ["expectedType", either("sequence", "object")]
+    );
+  }
+}
+
 export function indexArray(
   array,
   index,
@@ -1394,6 +1463,43 @@ export function indexArray(
       ["length", array.length],
       ["index", index]
     );
+  }
+}
+
+export function indexStream(
+  stream,
+  index,
+  default_,
+  kpcallback,
+  valueForError = stream
+) {
+  if (index < 0) {
+    return indexArray(toArray(stream));
+  } else if (index > 0) {
+    let last;
+    let current = stream;
+    let j = 0;
+    while (!current.isEmpty() && j < index) {
+      last = current;
+      current = current.next();
+      j += 1;
+    }
+    if (j === index) {
+      return last.value();
+    } else if (default_) {
+      return kpcallback(default_, [], kpobject());
+    } else {
+      throw kperror(
+        "indexOutOfBounds",
+        ["value", valueForError],
+        ["length", j],
+        ["index", index]
+      );
+    }
+  } else if (default_) {
+    return kpcallback(default_, [], kpobject());
+  } else {
+    throw kperror("indexOutOfBounds", ["value", valueForError], ["index", 0]);
   }
 }
 
