@@ -637,6 +637,51 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "where",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "condition", type: "function" },
+      ],
+    },
+    function ([sequence, condition], kpcallback) {
+      const inStream = toStream(sequence);
+
+      function streamFrom(start) {
+        let current = start;
+
+        function satisfied() {
+          const conditionSatisfied = kpcallback(
+            condition,
+            [current.value()],
+            kpobject()
+          );
+          validateReturn(conditionSatisfied, "boolean");
+          return conditionSatisfied;
+        }
+
+        while (!current.isEmpty() && !satisfied()) {
+          current = current.next();
+        }
+
+        if (current.isEmpty()) {
+          return emptyStream();
+        }
+
+        return stream({
+          value() {
+            return current.value();
+          },
+          next() {
+            return streamFrom(current.next());
+          },
+        });
+      }
+
+      return streamFrom(inStream);
+    }
+  ),
+  builtin(
     "zip",
     {
       params: [{ rest: { name: "sequences", type: "sequence" } }],

@@ -62,15 +62,6 @@ to = (start, end, by: = 1) => (
     | while(| isNoFurtherThan(end))
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-where = (array, condition) => (
-    array
-    | transform((element) => if(
-        condition(element),
-        then: () => [element],
-        else: () => [],
-    ))
-    | flatten
-);
 transpose = (sequences, fillWith: = null) => (
     arrays = sequences | transform(| toArray) | toArray;
     numElements = if(
