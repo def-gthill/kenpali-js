@@ -5,6 +5,7 @@ import { defining, transformTree } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
+import { either } from "./validate.js";
 import { isObject, isString } from "./values.js";
 
 export function kpcompileJson(
@@ -359,7 +360,7 @@ class Compiler {
   }
 
   assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
-    this.validate("array");
+    this.validate(either("array", "stream"));
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
     for (let i = 0; i < pattern.arrayPattern.length; i++) {

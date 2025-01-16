@@ -330,7 +330,9 @@ export class Vm {
     if (this.trace) {
       this.logInstruction("ARRAY_REVERSE");
     }
-    this.stack.at(-1).reverse();
+    if (isArray(this.stack.at(-1))) {
+      this.stack.at(-1).reverse();
+    }
   }
 
   runArrayPop() {
@@ -338,7 +340,18 @@ export class Vm {
       this.logInstruction("ARRAY_POP");
     }
     const array = this.stack.at(-1);
-    const value = array.pop();
+    let value;
+    if (isArray(array)) {
+      value = array.pop();
+    } else {
+      const stream = this.stack.pop();
+      if (!stream.isEmpty()) {
+        this.pushCallFrame("$popStream");
+        value = stream.value();
+        this.stack.push(stream.next());
+        this.popCallFrame();
+      }
+    }
     if (value === undefined) {
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
@@ -363,6 +376,8 @@ export class Vm {
     this.stack.push(value);
   }
 
+  popStream(stream) {}
+
   runArrayPopOrDefault() {
     if (this.trace) {
       this.logInstruction("ARRAY_POP_OR_DEFAULT");
@@ -378,9 +393,22 @@ export class Vm {
     if (this.trace) {
       this.logInstruction(`ARRAY_CUT ${position}`);
     }
-    const array = this.stack.pop();
-    this.stack.push(array.slice(0, position));
-    this.stack.push(array.slice(position));
+    const sequence = this.stack.pop();
+    if (position === 0) {
+      this.stack.push([]);
+      this.stack.push(sequence);
+    } else {
+      let array;
+      if (isArray(sequence)) {
+        array = sequence;
+      } else {
+        this.pushCallFrame("$cutStream");
+        array = toArray(sequence).reverse();
+        this.popCallFrame();
+      }
+      this.stack.push(array.slice(0, position));
+      this.stack.push(array.slice(position));
+    }
   }
 
   runArrayCopy() {
@@ -388,7 +416,11 @@ export class Vm {
       this.logInstruction("ARRAY_COPY");
     }
     const array = this.stack.pop();
-    this.stack.push([...array]);
+    if (isArray(array)) {
+      this.stack.push([...array]);
+    } else {
+      this.stack.push(array);
+    }
   }
 
   runArrayIsEmpty() {
@@ -731,10 +763,7 @@ export class Vm {
       if (this.trace) {
         console.log(`Indexing a stream with ${index}`);
       }
-      const frameIndex = this.scopeFrames.at(-1).stackIndex;
-      this.callFrames.push(
-        new CallFrame("$indexStream", frameIndex, this.cursor)
-      );
+      this.pushCallFrame("$indexStream");
       if (index < 0) {
         const result = kpcatch(() => indexArray(toArray(stream), index));
         if (isError(result)) {

@@ -109,9 +109,13 @@ export function toString(value) {
   } else if (isStream(value)) {
     let current = value;
     const elements = [];
-    while (!current.isEmpty() && elements.length < 3) {
-      elements.push(current.value());
-      current = current.next();
+    while (current.savedValue !== undefined) {
+      elements.push(toString(current.savedValue));
+      if (current.savedNext === undefined) {
+        break;
+      } else {
+        current = current.savedNext;
+      }
     }
     const result = `stream [${elements.join(", ")}`;
     if (current.isEmpty()) {

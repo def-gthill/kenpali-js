@@ -5,14 +5,6 @@ export class Stream {}
 class FullStream extends Stream {
   constructor(value, next) {
     super();
-    this.get = (back) => {
-      const thisStream = this;
-      const realBack = back === undefined ? this.savedBack : back;
-      return {
-        value: thisStream.value(realBack),
-        next: thisStream.next(realBack),
-      };
-    };
     this.called = false;
     this.value = (back) => {
       if (this.called && back !== this.savedBack) {
