@@ -62,6 +62,9 @@ to = (start, end, by: = 1) => (
     | while(| isNoFurtherThan(end))
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
+repeat = (values) => (
+    values | build((x) => x) | flatten
+);
 transpose = (sequences, fillWith: = null) => (
     arrays = sequences | transform(| toArray) | toArray;
     numElements = if(
@@ -83,6 +86,14 @@ transpose = (sequences, fillWith: = null) => (
 count = (sequence, condition) => (sequence | where(condition) | toArray | length);
 forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
 forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
+sliding = (sequence, size) => (
+    sequence
+    | running(
+        start: [null] | repeat | keepFirst(size) | toArray,
+        next: (element, state: [first, *rest]) => [*rest, element]
+    )
+    | dropFirst(size)
+);
 chunk = (sequence, size) => (
     array = sequence | toArray;
     starts = 1 | to(length(array), by: size);
