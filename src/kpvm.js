@@ -322,8 +322,16 @@ export class Vm {
     if (this.trace) {
       this.logInstruction("ARRAY_EXTEND");
     }
-    const value = this.stack.pop();
-    this.stack.at(-1).push(...value);
+    const sequence = this.stack.pop();
+    let array;
+    if (isArray(sequence)) {
+      array = sequence;
+    } else {
+      this.pushCallFrame("$extendStream");
+      array = toArray(sequence);
+      this.popCallFrame();
+    }
+    this.stack.at(-1).push(...array);
   }
 
   runArrayReverse() {
