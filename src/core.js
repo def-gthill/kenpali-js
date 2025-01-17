@@ -1,8 +1,8 @@
 export const core = String.raw`
 sum = (numbers) => plus(*toArray(numbers));
-isDivisibleBy = (a, b) => (
-    divideWithRemainder(a, b) @ remainder: | equals(0)
-);
+quotientBy = (a, b) => a | divideWithRemainder(b) @ quotient:;
+remainderBy = (a, b) => a | divideWithRemainder(b) @ remainder:;
+isDivisibleBy = (a, b) => a | remainderBy(b) | equals(0);
 absolute = (n) => n | butIf(n | isLessThan(0), () => negative(n));
 splitLines = (string) => (string | split(on: "\n"));
 joinLines = (strings) => (strings | join(on: "\n"));
@@ -43,14 +43,24 @@ most = (sequence) => (
 isEmpty = (coll) => (length(coll) | equals(0));
 first = @ 1;
 last = @ -1;
-keepLast = (coll, n) => coll | slice(length(coll) | minus(n) | increment | to(length(coll)));
-dropLast = (coll, n = 1) => coll | slice(1 | to(length(coll) | minus(n)));
-slice = (coll, indices) => (
-    result = indices
-    | where(| isBetween(1, coll | length))
-    | transform((index) => coll @ index)
-    | toArray;
-    result | butIf(isString(coll), () => join(result))
+keepLast = (coll, n) => (
+    result = coll | dropFirst(length(coll) | minus(n));
+    if(
+        result | isString,
+        then: () => result,
+        else: () => result | toArray,
+    )
+);
+dropLast = (coll, n = 1) => (
+    result = coll | keepFirst(length(coll) | minus(n));
+    if(
+        result | isString,
+        then: () => result,
+        else: () => result | toArray,
+    )
+);
+slice = (coll, from:, to:) => (
+    coll | keepFirst(to) | dropFirst(from | decrement)
 );
 to = (start, end, by: = 1) => (
     isNoFurtherThan = if(
@@ -85,8 +95,8 @@ transpose = (sequences, fillWith: = null) => (
     | toArray
 );
 count = (sequence, condition) => (sequence | where(condition) | toArray | length);
-forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
-forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
+forAll = (sequence, condition) => (sequence | count((element) => (element | condition | not)) | equals(0));
+forSome = (sequence, condition) => (sequence | count(condition) | isMoreThan(0));
 sliding = (sequence, size) => (
     sequence
     | running(
@@ -96,11 +106,13 @@ sliding = (sequence, size) => (
     | dropFirst(size)
 );
 chunk = (sequence, size) => (
-    array = sequence | toArray;
-    starts = 1 | to(length(array), by: size);
-    starts | transform((start) => (array | slice(start | toSize(size))))
+    sequence
+    | zip(1 | to(size) | repeat)
+    | dissect(([element, i]) => i | equals(size))
+    | transform(| transform(([element]) => element) | toArray)
 );
-reverse = (array) => (
+reverse = (sequence) => (
+    array = sequence | toArray;
     array | length | to(1, by: -1)
     | transform((i) => array @ i)
     | toArray
@@ -127,8 +139,8 @@ group = (pairs, onGroup: = (x) => x) => (
     ))
     | toArray
 );
-groupBy = (array, by, onGroup: = (x) => x) => (
-    array
+groupBy = (sequence, by, onGroup: = (x) => x) => (
+    sequence
     | transform((element) => [by(element), element])
     | group(onGroup: onGroup)
 );

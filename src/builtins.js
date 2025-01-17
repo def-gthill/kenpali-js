@@ -519,6 +519,9 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, n]) {
+      if (isString(sequence)) {
+        return sequence.slice(0, n);
+      }
       const start = toStream(sequence);
 
       function streamFrom(current, i) {
@@ -549,7 +552,11 @@ const rawBuiltins = [
     },
     function ([sequence, n]) {
       if (isString(sequence)) {
-        return sequence.slice(n);
+        if (n > 0) {
+          return sequence.slice(n);
+        } else {
+          return sequence;
+        }
       }
       let start = toStream(sequence);
 
@@ -765,6 +772,56 @@ const rawBuiltins = [
       }
 
       return streamFrom(outer, emptyStream());
+    }
+  ),
+  builtin(
+    "dissect",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "condition", type: "function" },
+      ],
+    },
+    function ([sequence, condition], kpcallback) {
+      const start = toStream(sequence);
+      function streamFrom(start) {
+        let current = start;
+        const out = [];
+
+        function satisfied() {
+          const conditionSatisfied = kpcallback(
+            condition,
+            [current.value()],
+            kpobject()
+          );
+          validateReturn(conditionSatisfied, "boolean");
+          return conditionSatisfied;
+        }
+
+        while (!current.isEmpty() && !satisfied()) {
+          out.push(current.value());
+          current = current.next();
+        }
+
+        if (!current.isEmpty()) {
+          out.push(current.value());
+          current = current.next();
+        }
+
+        if (out.length > 0) {
+          return stream({
+            value() {
+              return out;
+            },
+            next() {
+              return streamFrom(current);
+            },
+          });
+        } else {
+          return emptyStream();
+        }
+      }
+      return streamFrom(start);
     }
   ),
   builtin(
