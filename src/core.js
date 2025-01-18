@@ -1,14 +1,9 @@
 export const core = String.raw`
 sum = (numbers) => plus(*toArray(numbers));
-quotientBy = (a, b) => a | divideWithRemainder(b) @ quotient:;
-remainderBy = (a, b) => a | divideWithRemainder(b) @ remainder:;
-isDivisibleBy = (a, b) => a | remainderBy(b) | equals(0);
 absolute = (n) => n | butIf(n | isLessThan(0), () => negative(n));
-splitLines = (string) => (string | split(on: "\n"));
+isDivisibleBy = (a, b) => a | remainderBy(b) | equals(0);
 joinLines = (strings) => (strings | join(on: "\n"));
-butIf = (value, condition, ifTrue) => (
-    if(toFunction(condition)(value), then: () => ifTrue(value), else: () => value)
-);
+splitLines = (string) => (string | split(on: "\n"));
 isBetween = (n, lower, upper) => (
     n | isAtLeast(lower) | and(() => n | isAtMost(upper))
 );
@@ -40,8 +35,23 @@ most = (sequence) => (
     )
     | last
 );
-isEmpty = (coll) => (length(coll) | equals(0));
-first = @ 1;
+butIf = (value, condition, ifTrue) => (
+    if(toFunction(condition)(value), then: () => ifTrue(value), else: () => value)
+);
+to = (start, end, by: = 1) => (
+    isNoFurtherThan = if(
+        by | isMoreThan(0),
+        then: () => isAtMost,
+        else: () => isAtLeast,
+    );
+    start
+    | build(| plus(by))
+    | while(| isNoFurtherThan(end))
+);
+toSize = (start, size) => (start | to(start | plus(decrement(size))));
+repeat = (values) => (
+    values | build((x) => x) | flatten
+);
 last = @ -1;
 keepLast = (coll, n) => (
     result = coll | dropFirst(length(coll) | minus(n));
@@ -59,44 +69,28 @@ dropLast = (coll, n = 1) => (
         else: () => result | toArray,
     )
 );
+count = (sequence, condition) => sequence | where(condition) | toArray | length;
+forAll = (sequence, condition) => (
+    sequence
+    | count((element) => (element | condition | not))
+    | equals(0)
+);
+forSome = (sequence, condition) => (
+    sequence
+    | count(condition)
+    | isMoreThan(0)
+);
+reverse = (sequence) => (
+    array = sequence | toArray;
+    array | length | to(1, by: -1)
+    | transform((i) => array @ i)
+    | toArray
+);
+isEmpty = (coll) => coll | keepFirst(1) | length | equals(0);
+first = @ 1;
 slice = (coll, from:, to:) => (
     coll | keepFirst(to) | dropFirst(from | decrement)
 );
-to = (start, end, by: = 1) => (
-    isNoFurtherThan = if(
-        by | isMoreThan(0),
-        then: () => isAtMost,
-        else: () => isAtLeast,
-    );
-    start
-    | build(| plus(by))
-    | while(| isNoFurtherThan(end))
-);
-toSize = (start, size) => (start | to(start | plus(decrement(size))));
-repeat = (values) => (
-    values | build((x) => x) | flatten
-);
-transpose = (sequences, fillWith: = null) => (
-    arrays = sequences | transform(| toArray) | toArray;
-    numElements = if(
-        fillWith | isNull,
-        then: () => arrays | transform(| length) | least,
-        else: () => arrays | transform(| length) | most,
-    );
-    1 | to(numElements) | transform((elementNumber) => (
-        1 | to(arrays | length) | transform((arrayNumber) => (
-            arrays @ arrayNumber | at(
-                elementNumber,
-                default: () => fillWith(arrayNumber:, elementNumber:),
-            )
-        ))
-        | toArray
-    ))
-    | toArray
-);
-count = (sequence, condition) => (sequence | where(condition) | toArray | length);
-forAll = (sequence, condition) => (sequence | count((element) => (element | condition | not)) | equals(0));
-forSome = (sequence, condition) => (sequence | count(condition) | isMoreThan(0));
 sliding = (sequence, size) => (
     sequence
     | running(
@@ -110,12 +104,6 @@ chunk = (sequence, size) => (
     | zip(1 | to(size) | repeat)
     | dissect(([element, i]) => i | equals(size))
     | transform(| transform(([element]) => element) | toArray)
-);
-reverse = (sequence) => (
-    array = sequence | toArray;
-    array | length | to(1, by: -1)
-    | transform((i) => array @ i)
-    | toArray
 );
 properties = (object) => (
     object | keys | transform((key) => [key, object @ key]) | toArray

@@ -122,7 +122,7 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "divideWithRemainder",
+    "quotientBy",
     {
       params: [
         { name: "a", type: "number" },
@@ -130,10 +130,37 @@ const rawBuiltins = [
       ],
     },
     function ([a, b]) {
-      return kpobject(
-        ["quotient", Math.floor(a / b)],
-        ["remainder", ((a % b) + b) % b]
-      );
+      return Math.floor(a / b);
+    }
+  ),
+  builtin(
+    "remainderBy",
+    {
+      params: [
+        { name: "a", type: "number" },
+        { name: "b", type: "number" },
+      ],
+    },
+    function ([a, b]) {
+      return ((a % b) + b) % b;
+    }
+  ),
+  builtin(
+    "toCodePoints",
+    {
+      params: [{ name: "string", type: "string" }],
+    },
+    function ([string]) {
+      return [...string].map((char) => char.codePointAt(0));
+    }
+  ),
+  builtin(
+    "fromCodePoints",
+    {
+      params: [{ name: "codePoints", type: arrayOf("number") }],
+    },
+    function ([codePoints]) {
+      return String.fromCodePoint(...codePoints);
     }
   ),
   builtin(
@@ -162,24 +189,6 @@ const rawBuiltins = [
     },
     function ([string, on]) {
       return string.split(on);
-    }
-  ),
-  builtin(
-    "toCodePoints",
-    {
-      params: [{ name: "string", type: "string" }],
-    },
-    function ([string]) {
-      return [...string].map((char) => char.codePointAt(0));
-    }
-  ),
-  builtin(
-    "fromCodePoints",
-    {
-      params: [{ name: "codePoints", type: arrayOf("number") }],
-    },
-    function ([codePoints]) {
-      return String.fromCodePoint(...codePoints);
     }
   ),
   builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
@@ -335,6 +344,9 @@ const rawBuiltins = [
       return toStream(value);
     }
   ),
+  builtin("isObject", { params: ["value"] }, function ([value]) {
+    return isObject(value);
+  }),
   builtin("isBuiltin", { params: ["value"] }, function ([value]) {
     return isBuiltin(value);
   }),
@@ -343,9 +355,6 @@ const rawBuiltins = [
   }),
   builtin("isError", { params: ["value"] }, function ([value]) {
     return isError(value);
-  }),
-  builtin("isObject", { params: ["value"] }, function ([value]) {
-    return isObject(value);
   }),
   builtin("isFunction", { params: ["value"] }, function ([value]) {
     return isFunction(value);
@@ -374,33 +383,6 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "length",
-    { params: [{ name: "sequence", type: "sequence" }] },
-    function ([sequence]) {
-      if (isStream(sequence)) {
-        return toArray(sequence).length;
-      } else {
-        return sequence.length;
-      }
-    }
-  ),
-  builtin(
-    "forEach",
-    {
-      params: [
-        { name: "sequence", type: "sequence" },
-        { name: "action", type: "function" },
-      ],
-    },
-    function ([sequence, action], kpcallback) {
-      const array = toArray(sequence);
-      for (const element of array) {
-        kpcallback(action, [element], kpobject());
-      }
-      return array;
-    }
-  ),
-  builtin(
     "build",
     {
       params: ["start", { name: "next", type: "function" }],
@@ -418,6 +400,101 @@ const rawBuiltins = [
       }
 
       return streamFrom(start);
+    }
+  ),
+  builtin(
+    "at",
+    {
+      params: [
+        { name: "collection", type: either("sequence", "object") },
+        { name: "index", type: either("number", "string") },
+      ],
+      namedParams: [optionalFunctionParameter("default")],
+    },
+    function ([collection, index, default_], kpcallback) {
+      if (isString(collection) || isArray(collection)) {
+        if (!isNumber(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "number"]
+          );
+        }
+        return indexArray(collection, index, default_, kpcallback);
+      } else if (isStream(collection)) {
+        if (!isNumber(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "number"]
+          );
+        }
+        return indexStream(collection, index, default_, kpcallback);
+      } else {
+        if (!isString(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "string"]
+          );
+        }
+        return indexMapping(collection, index, default_, kpcallback);
+      }
+    }
+  ),
+  builtin(
+    "length",
+    { params: [{ name: "sequence", type: "sequence" }] },
+    function ([sequence]) {
+      if (isStream(sequence)) {
+        return toArray(sequence).length;
+      } else {
+        return sequence.length;
+      }
+    }
+  ),
+  builtin(
+    "sort",
+    {
+      params: [{ name: "sequence", type: "sequence" }],
+      namedParams: [
+        {
+          name: "by",
+          type: either("function", "null"),
+          defaultValue: literal(null),
+        },
+      ],
+    },
+    function ([sequence, by], kpcallback) {
+      const array = toArray(sequence);
+      if (by) {
+        const withSortKey = array.map((element) => [
+          element,
+          kpcallback(by, [element], kpobject()),
+        ]);
+        withSortKey.sort(([_a, aKey], [_b, bKey]) => compare(aKey, bKey));
+        return withSortKey.map(([element, _]) => element);
+      } else {
+        const result = [...array];
+        result.sort(compare);
+        return result;
+      }
+    }
+  ),
+  builtin(
+    "forEach",
+    {
+      params: [
+        { name: "sequence", type: "sequence" },
+        { name: "action", type: "function" },
+      ],
+    },
+    function ([sequence, action], kpcallback) {
+      const array = toArray(sequence);
+      for (const element of array) {
+        kpcallback(action, [element], kpobject());
+      }
+      return array;
     }
   ),
   builtin(
@@ -825,34 +902,6 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "sort",
-    {
-      params: [{ name: "sequence", type: "sequence" }],
-      namedParams: [
-        {
-          name: "by",
-          type: either("function", "null"),
-          defaultValue: literal(null),
-        },
-      ],
-    },
-    function ([sequence, by], kpcallback) {
-      const array = toArray(sequence);
-      if (by) {
-        const withSortKey = array.map((element) => [
-          element,
-          kpcallback(by, [element], kpobject()),
-        ]);
-        withSortKey.sort(([_a, aKey], [_b, bKey]) => compare(aKey, bKey));
-        return withSortKey.map(([element, _]) => element);
-      } else {
-        const result = [...array];
-        result.sort(compare);
-        return result;
-      }
-    }
-  ),
-  builtin(
     "keys",
     { params: [{ name: "object", type: "object" }] },
     function ([object]) {
@@ -876,37 +925,6 @@ const rawBuiltins = [
       const array = toArray(value);
       validateArgument(array, arrayOf(tupleLike(["string", "any"])));
       return kpobject(...array);
-    }
-  ),
-  builtin(
-    "at",
-    {
-      params: [
-        { name: "collection", type: either("sequence", "object") },
-        { name: "index", type: either("number", "string") },
-      ],
-      namedParams: [optionalFunctionParameter("default")],
-    },
-    function ([collection, index, default_], kpcallback) {
-      if (isString(collection) || isArray(collection)) {
-        if (!isNumber(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "number"]
-          );
-        }
-        return indexArray(collection, index, default_, kpcallback);
-      } else if (isObject(collection)) {
-        if (!isString(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "string"]
-          );
-        }
-        return indexMapping(collection, index, default_, kpcallback);
-      }
     }
   ),
   builtin(
@@ -1577,7 +1595,7 @@ export function indexStream(
   valueForError = stream
 ) {
   if (index < 0) {
-    return indexArray(toArray(stream));
+    return indexArray(toArray(stream), index, default_, kpcallback, stream);
   } else if (index > 0) {
     let last;
     let current = stream;
