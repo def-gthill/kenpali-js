@@ -49,9 +49,7 @@ to = (start, end, by: = 1) => (
     | while(| isNoFurtherThan(end))
 );
 toSize = (start, size) => (start | to(start | plus(decrement(size))));
-repeat = (values) => (
-    values | build((x) => x) | flatten
-);
+repeat = (value) => value | build((x) => x);
 last = @ -1;
 keepLast = (coll, n) => (
     result = coll | dropFirst(length(coll) | minus(n));
@@ -91,6 +89,7 @@ first = @ 1;
 slice = (coll, from:, to:) => (
     coll | keepFirst(to) | dropFirst(from | decrement)
 );
+thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
 sliding = (sequence, size) => (
     sequence
     | running(
@@ -101,7 +100,7 @@ sliding = (sequence, size) => (
 );
 chunk = (sequence, size) => (
     sequence
-    | zip(1 | to(size) | repeat)
+    | zip(1 | to(size) | repeat | flatten)
     | dissect(([element, i]) => i | equals(size))
     | transform(| transform(([element]) => element) | toArray)
 );

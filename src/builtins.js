@@ -902,6 +902,51 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "interleave",
+    {
+      params: [
+        { name: "sequences", type: "sequence" },
+        { name: "selector", type: "function" },
+      ],
+    },
+    function ([sequences, selector], kpcallback) {
+      const sequenceArray = toArray(sequences);
+      validateArgument(sequenceArray, arrayOf("sequence"));
+
+      function streamFrom(currents) {
+        if (currents.some((current) => current.isEmpty())) {
+          return emptyStream();
+        } else {
+          function callSelector() {
+            const selectorResult = kpcallback(
+              selector,
+              currents.map((current) => current.value()),
+              kpobject()
+            );
+            validateReturn(selectorResult, "number");
+            return selectorResult;
+          }
+
+          return stream({
+            value() {
+              return indexArray(currents, callSelector()).value();
+            },
+            next() {
+              const selectorResult = callSelector();
+              return streamFrom([
+                ...currents.slice(0, selectorResult - 1),
+                indexArray(currents, selectorResult).next(),
+                ...currents.slice(selectorResult),
+              ]);
+            },
+          });
+        }
+      }
+
+      return streamFrom(sequenceArray);
+    }
+  ),
+  builtin(
     "keys",
     { params: [{ name: "object", type: "object" }] },
     function ([object]) {
