@@ -512,12 +512,8 @@ const rawBuiltins = [
           return emptyStream();
         } else {
           return stream({
-            value(back) {
-              return kpcallback(
-                f,
-                [current.value()],
-                back === undefined ? kpobject() : kpobject(["back", back])
-              );
+            value() {
+              return kpcallback(f, [current.value()], kpobject());
             },
             next() {
               return streamFrom(current.next());
@@ -778,11 +774,11 @@ const rawBuiltins = [
           return emptyStream();
         } else {
           return stream({
-            value(back) {
-              return currents.map((current) => current.value(back));
+            value() {
+              return currents.map((current) => current.value());
             },
-            next(back) {
-              return streamFrom(currents.map((current) => current.next(back)));
+            next() {
+              return streamFrom(currents.map((current) => current.next()));
             },
           });
         }
@@ -807,11 +803,11 @@ const rawBuiltins = [
           return emptyStream();
         } else {
           return stream({
-            value(back) {
-              return indexCollection(current.value(back), i);
+            value() {
+              return indexCollection(current.value(), i);
             },
-            next(back) {
-              return streamFrom(current.next(back), i);
+            next() {
+              return streamFrom(current.next(), i);
             },
           });
         }
