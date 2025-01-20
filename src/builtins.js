@@ -540,34 +540,6 @@ const rawBuiltins = [
     }
   ),
   builtin(
-    "withState",
-    {
-      params: [{ name: "stream", type: "stream" }],
-      namedParams: ["start", { name: "next", type: "function" }],
-    },
-    function ([in_, start, next], kpcallback) {
-      function streamFrom(current, state) {
-        if (current.isEmpty()) {
-          return emptyStream();
-        } else {
-          return stream({
-            value() {
-              return current.value(state);
-            },
-            next() {
-              return streamFrom(
-                current.next(state),
-                kpcallback(next, [state], kpobject())
-              );
-            },
-          });
-        }
-      }
-
-      return streamFrom(in_, start);
-    }
-  ),
-  builtin(
     "running",
     {
       params: [{ name: "sequence", type: "sequence" }],
