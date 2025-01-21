@@ -48,7 +48,7 @@ to = (start, end, by: = 1) => (
     | build(| plus(by))
     | while(| isNoFurtherThan(end))
 );
-toSize = (start, size) => (start | to(start | plus(decrement(size))));
+toSize = (start, size) => (start | to(start | plus(size | down)));
 repeat = (value) => value | build((x) => x);
 last = @ -1;
 keepLast = (coll, n) => (
@@ -87,7 +87,7 @@ reverse = (sequence) => (
 isEmpty = (coll) => coll | keepFirst(1) | length | equals(0);
 first = @ 1;
 slice = (coll, from:, to:) => (
-    coll | keepFirst(to) | dropFirst(from | decrement)
+    coll | keepFirst(to) | dropFirst(from | down)
 );
 thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
 sliding = (sequence, size) => (

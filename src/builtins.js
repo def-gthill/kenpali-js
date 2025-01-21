@@ -81,20 +81,12 @@ const rawBuiltins = [
       return -x;
     }
   ),
-  builtin(
-    "increment",
-    { params: [{ name: "x", type: "number" }] },
-    function ([x]) {
-      return x + 1;
-    }
-  ),
-  builtin(
-    "decrement",
-    { params: [{ name: "x", type: "number" }] },
-    function ([x]) {
-      return x - 1;
-    }
-  ),
+  builtin("up", { params: [{ name: "x", type: "number" }] }, function ([x]) {
+    return x + 1;
+  }),
+  builtin("down", { params: [{ name: "x", type: "number" }] }, function ([x]) {
+    return x - 1;
+  }),
   builtin(
     "times",
     { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
