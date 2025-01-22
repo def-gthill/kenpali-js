@@ -207,13 +207,22 @@ function parseAssignable(parser, start) {
     "assignable",
     parseArrowFunction,
     parsePipeline,
-    parsePointFreePipeline
+    parsePointFreePipeline,
+    parseConstantFunction
   )(parser, start);
 }
 
 function parsePointFreePipeline(parser, start) {
   return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
     given({ params: ["pipelineArg"] }, pipeline(name("pipelineArg"), ...calls))
+  )(parser, start);
+}
+
+function parseConstantFunction(parser, start) {
+  return parseAllOf(
+    "constantFunction",
+    [consume("DOLLAR", "expectedConstantFunction"), parseAssignable],
+    (result) => given({}, result)
   )(parser, start);
 }
 

@@ -27,6 +27,7 @@ const tokenSpec = [
   ["AT", "@"],
   ["DOT", r`\.`],
   ["BANG", "!"],
+  ["DOLLAR", r`\$`],
   ["DOUBLE_STAR", r`\*\*`],
   ["STAR", r`\*`],
   // Other
