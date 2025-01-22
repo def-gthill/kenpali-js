@@ -38,6 +38,7 @@ most = (sequence) => (
 butIf = (value, condition, ifTrue) => (
     if(toFunction(condition)(value), then: () => ifTrue(value), else: () => value)
 );
+ifs = (*conditions, else:) => null | switch(*conditions, else:);
 to = (start, end, by: = 1) => (
     isNoFurtherThan = if(
         by | isMoreThan(0),
@@ -53,11 +54,7 @@ repeat = (value) => value | build((x) => x);
 last = @ -1;
 keepLast = (coll, n) => (
     result = coll | dropFirst(length(coll) | minus(n));
-    if(
-        result | isString,
-        then: () => result,
-        else: () => result | toArray,
-    )
+    result | butIf(result | isString | not, () => result | toArray)
 );
 dropLast = (coll, n = 1) => (
     result = coll | keepFirst(length(coll) | minus(n));

@@ -375,6 +375,31 @@ const rawBuiltins = [
     }
   ),
   builtin(
+    "switch",
+    {
+      params: [
+        "value",
+        {
+          rest: {
+            name: "conditions",
+            type: arrayOf(tupleLike(["function", "function"])),
+          },
+        },
+      ],
+      namedParams: [{ name: "else", type: "function" }],
+    },
+    function ([value, conditions, else_], kpcallback) {
+      for (const [condition, result] of conditions) {
+        const conditionResult = kpcallback(condition, [value], kpobject());
+        validateReturn(conditionResult, "boolean");
+        if (conditionResult) {
+          return kpcallback(result, [value], kpobject());
+        }
+      }
+      return kpcallback(else_, [value], kpobject());
+    }
+  ),
+  builtin(
     "build",
     {
       params: ["start", { name: "next", type: "function" }],
@@ -743,7 +768,7 @@ const rawBuiltins = [
   builtin(
     "zip",
     {
-      params: [{ rest: { name: "sequences", type: "sequence" } }],
+      params: [{ rest: { name: "sequences", type: arrayOf("sequence") } }],
     },
     function ([sequences]) {
       const streams = sequences.map(toStream);
