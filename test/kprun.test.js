@@ -37,7 +37,7 @@ test("A function can be called with spread named arguments", (t) => {
 });
 
 test("A function can be defined with a named rest parameter", (t) => {
-  const code = "foo = (**namedArgs) => namedArgs @ bar:; foo(bar: 42)";
+  const code = "foo = (**namedArgs) => namedArgs.bar; foo(bar: 42)";
   const result = kpeval(kpparse(code));
   t.is(result, 42);
 });

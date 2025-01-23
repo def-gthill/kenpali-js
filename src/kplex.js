@@ -23,6 +23,7 @@ const tokenSpec = [
   ["COLON", ":"],
   ["ARROW", "=>"],
   ["EQUALS", "="],
+  ["PIPE_DOT", r`\|\.`],
   ["PIPE", r`\|`],
   ["AT", "@"],
   ["DOT", r`\.`],

@@ -38,12 +38,6 @@ test("An expression in parentheses parses to a group node", (t) => {
   t.deepEqual(result, group(literal(42)));
 });
 
-test("Module access parses to a module-scoped name node", (t) => {
-  const code = "a.b";
-  const result = kpparseSugared(code);
-  t.deepEqual(result, name("b", "a"));
-});
-
 test("A pipeline parses to a pipeline node", (t) => {
   const code = "a | b ! @ c !";
   const result = kpparseSugared(code);

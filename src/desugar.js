@@ -159,6 +159,9 @@ function desugarPipeline(expression) {
         [axis, ...desugarPosArgs(args)],
         desugarNamedArgs(namedArgs)
       );
+    } else if (op === "PIPEDOT") {
+      const [propertyName] = target;
+      axis = indexing(axis, propertyName);
     } else if (op === "PIPE") {
       const [callee] = target;
       axis = calling(desugar(callee), [axis]);

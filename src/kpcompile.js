@@ -204,30 +204,16 @@ class Compiler {
   }
 
   compileName(expression) {
-    if ("from" in expression) {
-      this.resolveNameInModule(expression);
-    } else {
-      this.resolvePlainName(expression);
+    if (this.resolveLocal(expression)) {
+      return;
     }
+    if (this.resolveGlobal(expression)) {
+      return;
+    }
+    throw kperror("nameNotDefined", ["name", expression.name]);
   }
 
-  resolveNameInModule(expression) {
-    const module = this.modules.get(expression.from);
-    if (!module) {
-      throw kperror("unknownModule", ["name", expression.from]);
-    }
-    const global = module.get(expression.name);
-    if (global === undefined) {
-      throw kperror(
-        "nameNotDefined",
-        ["name", expression.name],
-        ["module", expression.from]
-      );
-    }
-    this.addInstruction(op.VALUE, global);
-  }
-
-  resolvePlainName(expression) {
+  resolveLocal(expression) {
     const functionsTraversed = [];
     for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
       const scope = this.activeScopes.at(-numLayers - 1);
@@ -261,7 +247,7 @@ class Compiler {
           this.addInstruction(op.READ_LOCAL, numLayers, slot);
         }
         this.addDiagnostic({ name: expression.name });
-        return;
+        return true;
       }
       if (scope.functionStackIndex !== null) {
         functionsTraversed.push({
@@ -272,15 +258,16 @@ class Compiler {
         functionsTraversed.at(-1).numLayers += 1;
       }
     }
-    this.resolveGlobal(expression);
+    return false;
   }
 
   resolveGlobal(expression) {
     const global = this.names.get(expression.name);
     if (global === undefined) {
-      throw kperror("nameNotDefined", ["name", expression.name]);
+      return false;
     }
     this.addInstruction(op.VALUE, global);
+    return true;
   }
 
   compileDefining(expression) {
@@ -538,9 +525,53 @@ class Compiler {
   }
 
   compileIndexing(expression) {
+    if (this.tryCompilingModuleAccess(expression.indexing, expression.at)) {
+      return;
+    }
     this.compileExpression(expression.indexing);
     this.compileExpression(expression.at);
     this.addInstruction(op.INDEX);
+  }
+
+  tryCompilingModuleAccess(moduleName, name) {
+    if (
+      moduleName === null ||
+      typeof moduleName !== "object" ||
+      !("name" in moduleName)
+    ) {
+      return false;
+    }
+    if (name === null || typeof name !== "object" || !("name" in name)) {
+      return false;
+    }
+
+    // Is the "module" actually a local?
+    for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
+      const scope = this.activeScopes.at(-numLayers - 1);
+      const slot = scope.getSlot(moduleName.name);
+      if (slot !== undefined) {
+        return false;
+      }
+    }
+    // Is the "module" actually a global?
+    if (this.names.get(name.name) !== undefined) {
+      return false;
+    }
+
+    const module = this.modules.get(moduleName.name);
+    if (!module) {
+      throw kperror("unknownModule", ["name", moduleName.name]);
+    }
+    const global = module.get(name.name);
+    if (global === undefined) {
+      throw kperror(
+        "nameNotDefined",
+        ["name", name.name],
+        ["module", moduleName.name]
+      );
+    }
+    this.addInstruction(op.VALUE, global);
+    return true;
   }
 
   compileCatching(expression) {

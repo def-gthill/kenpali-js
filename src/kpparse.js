@@ -6,6 +6,7 @@ import {
   defining,
   given,
   group,
+  indexing,
   literal,
   name,
   object,
@@ -56,11 +57,18 @@ export function parseAll(parser, start) {
 }
 
 export function parseModule(parser, start) {
-  return parseZeroOrMore("module", parseStatement, {
-    terminator: consume("SEMICOLON"),
-    errorIfTerminatorMissing: "missingDefinitionSeparator",
-    finalTerminatorMandatory: true,
-  })(parser, start);
+  return parseAllOf(
+    "module",
+    [
+      parseZeroOrMore("definitions", parseStatement, {
+        terminator: consume("SEMICOLON"),
+        errorIfTerminatorMissing: "missingDefinitionSeparator",
+        finalTerminatorMandatory: true,
+      }),
+      consume("EOF", "unparsedInput"),
+    ],
+    (definitions) => definitions
+  )(parser, start);
 }
 
 function parseExpression(parser, start) {
@@ -229,7 +237,7 @@ function parseConstantFunction(parser, start) {
 function parsePipeline(parser, start) {
   return parseAllOf(
     "pipeline",
-    [parseAtomic, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
+    [parseTightPipeline, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
     (expression, calls) => {
       if (calls.length > 0) {
         return pipeline(expression, ...calls);
@@ -245,6 +253,7 @@ function parsePipelineStep(parser, start) {
     "pipelineStep",
     parseCall,
     parsePipeCall,
+    parsePipeDot,
     parsePipe,
     parseAt,
     parseBang
@@ -258,31 +267,30 @@ function parseCall(parser, start) {
 function parsePipeCall(parser, start) {
   return parseAllOf("pipeCall", [
     parseSingle("PIPE", () => "PIPECALL"),
-    parseAtomic,
+    parseTightPipeline,
     parseArgumentList,
   ])(parser, start);
 }
 
-function parsePipe(parser, start) {
-  return parseAllOf("pipe", [parseSingle("PIPE", () => "PIPE"), parseAtomic])(
-    parser,
-    start
-  );
-}
-
-function parseAt(parser, start) {
-  return parseAllOf("at", [
-    parseSingle("AT", () => "AT"),
-    parseAnyOf("atTarget", parsePropertyIndex, parseAtomic),
+function parsePipeDot(parser, start) {
+  return parseAllOf("pipeDot", [
+    parseSingle("PIPE_DOT", () => "PIPEDOT"),
+    convert(parseName, (name) => literal(name.name)),
   ])(parser, start);
 }
 
-function parsePropertyIndex(parser, start) {
-  return parseAllOf(
-    "propertyIndex",
-    [parseName, consume("COLON", "expectedPropertyIndex")],
-    (name) => literal(name.name)
-  )(parser, start);
+function parsePipe(parser, start) {
+  return parseAllOf("pipe", [
+    parseSingle("PIPE", () => "PIPE"),
+    parseTightPipeline,
+  ])(parser, start);
+}
+
+function parseAt(parser, start) {
+  return parseAllOf("at", [parseSingle("AT", () => "AT"), parseTightPipeline])(
+    parser,
+    start
+  );
 }
 
 function parseBang(parser, start) {
@@ -392,6 +400,28 @@ function parseNamedArgument(parser, start) {
   )(parser, start);
 }
 
+function parseTightPipeline(parser, start) {
+  return parseAllOf(
+    "tightPipeline",
+    [parseAtomic, parseZeroOrMore("propertyIndexes", parsePropertyIndex)],
+    (expression, indexes) => {
+      let axis = expression;
+      for (const index of indexes) {
+        axis = indexing(axis, index);
+      }
+      return axis;
+    }
+  )(parser, start);
+}
+
+function parsePropertyIndex(parser, start) {
+  return parseAllOf(
+    "propertyIndex",
+    [consume("DOT", "expectedPropertyIndex"), parseName],
+    (name) => literal(name.name)
+  )(parser, start);
+}
+
 function parseAtomic(parser, start) {
   return parseAnyOf(
     "atomic",
@@ -399,7 +429,7 @@ function parseAtomic(parser, start) {
     parseArray,
     parseObject,
     parseLiteral,
-    parseNameFromModule,
+    // parsePropertyIndex,
     parseName
   )(parser, start);
 }
@@ -493,14 +523,6 @@ function parseLiteral(parser, start) {
 
 function parseName(parser, start) {
   return parseSingle("NAME", (token) => name(token.text))(parser, start);
-}
-
-function parseNameFromModule(parser, start) {
-  return parseAllOf(
-    "nameFromModule",
-    [parseName, consume("DOT", "expectedModuleAccess"), parseName],
-    (module, unqualifiedName) => name(unqualifiedName.name, module.name)
-  )(parser, start);
 }
 
 function parseSingle(tokenType, converter) {
