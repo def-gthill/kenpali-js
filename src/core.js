@@ -109,6 +109,7 @@ properties = (object) => (
 merge = (objects) => (
     objects | transform(properties) | flatten | toObject
 );
+itself = (x) => x;
 group = (pairs, onGroup: = (x) => x) => (
     result = mutableMap();
     pairs
