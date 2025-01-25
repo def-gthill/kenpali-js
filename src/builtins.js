@@ -434,6 +434,9 @@ const rawBuiltins = [
       });
     }
   ),
+  builtin("emptyStream", {}, function () {
+    return emptyStream();
+  }),
   builtin(
     "at",
     {
