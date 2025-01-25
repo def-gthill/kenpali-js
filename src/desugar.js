@@ -6,7 +6,6 @@ import {
   given,
   indexing,
   literal,
-  name,
   object,
 } from "./kpast.js";
 import { kpoEntries } from "./kpobject.js";
@@ -20,10 +19,10 @@ export default function desugar(expression) {
     return desugarDefining(expression);
   } else if ("given" in expression) {
     return desugarGiven(expression);
+  } else if ("indexing" in expression) {
+    return desugarIndexing(expression);
   } else if ("group" in expression) {
     return desugarGroup(expression);
-  } else if ("access" in expression) {
-    return desugarAccess(expression);
   } else if ("calls" in expression) {
     return desugarPipeline(expression);
   } else {
@@ -125,15 +124,12 @@ function desugarGiven(expression) {
   return given(params, desugar(expression.result));
 }
 
-function desugarGroup(expression) {
-  return desugar(expression.group);
+function desugarIndexing(expression) {
+  return indexing(desugar(expression.indexing), desugar(expression.at));
 }
 
-function desugarAccess(expression) {
-  return calling(name("at"), [
-    desugar(expression.on),
-    desugar(desugarProperty(expression.access)),
-  ]);
+function desugarGroup(expression) {
+  return desugar(expression.group);
 }
 
 function desugarProperty(expression) {
