@@ -65,7 +65,9 @@ test("Function arguments can reference names", (t) => {
 });
 
 test("Names in modules can be accessed", (t) => {
-  const ast = calling(indexing(name("foo"), name("bar")), [literal("world")]);
+  const ast = calling(indexing(name("foo"), literal("bar")), [
+    literal("world"),
+  ]);
   const fooModule = kpobject([
     "bar",
     builtin(
@@ -80,7 +82,7 @@ test("Names in modules can be accessed", (t) => {
 
 test("Local names don't shadow names in modules", (t) => {
   const ast = defining(
-    ["bar", indexing(name("foo"), name("bar"))],
+    ["bar", indexing(name("foo"), literal("bar"))],
     calling(name("bar"), [literal("world")])
   );
   const fooModule = kpobject([

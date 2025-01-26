@@ -541,7 +541,7 @@ class Compiler {
     ) {
       return false;
     }
-    if (name === null || typeof name !== "object" || !("name" in name)) {
+    if (name === null || typeof name !== "object" || !("literal" in name)) {
       return false;
     }
 
@@ -554,7 +554,7 @@ class Compiler {
       }
     }
     // Is the "module" actually a global?
-    if (this.names.get(name.name) !== undefined) {
+    if (this.names.get(moduleName.name) !== undefined) {
       return false;
     }
 
@@ -562,11 +562,11 @@ class Compiler {
     if (!module) {
       throw kperror("unknownModule", ["name", moduleName.name]);
     }
-    const global = module.get(name.name);
+    const global = module.get(name.literal);
     if (global === undefined) {
       throw kperror(
         "nameNotDefined",
-        ["name", name.name],
+        ["name", name.literal],
         ["module", moduleName.name]
       );
     }
