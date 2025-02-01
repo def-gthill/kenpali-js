@@ -137,7 +137,7 @@ function parseArrayPatternElement(parser, start) {
       [
         parseDefiningPattern,
         consume("EQUALS", "expectedDefault"),
-        parseExpression,
+        parseAssignable,
       ],
       (name, defaultValue) => ({ name, defaultValue })
     ),
@@ -173,7 +173,7 @@ function parseObjectPatternElement(parser, start) {
       [
         parseObjectPatternSimple,
         consume("EQUALS", "expectedDefault"),
-        parseExpression,
+        parseAssignable,
       ],
       (name, defaultValue) => ({ name, defaultValue })
     ),
@@ -220,12 +220,6 @@ function parseAssignable(parser, start) {
   )(parser, start);
 }
 
-function parsePointFreePipeline(parser, start) {
-  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
-    given({ params: ["pipelineArg"] }, pipeline(name("pipelineArg"), ...calls))
-  )(parser, start);
-}
-
 function parseConstantFunction(parser, start) {
   return parseAllOf(
     "constantFunction",
@@ -245,6 +239,12 @@ function parsePipeline(parser, start) {
         return expression;
       }
     }
+  )(parser, start);
+}
+
+function parsePointFreePipeline(parser, start) {
+  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
+    given({ params: ["pipelineArg"] }, pipeline(name("pipelineArg"), ...calls))
   )(parser, start);
 }
 
@@ -429,7 +429,6 @@ function parseAtomic(parser, start) {
     parseArray,
     parseObject,
     parseLiteral,
-    // parsePropertyIndex,
     parseName
   )(parser, start);
 }
@@ -472,7 +471,7 @@ function parseArrayElement(parser, start) {
 function parseArraySpread(parser, start) {
   return parseAllOfFlat(
     "arraySpread",
-    [consume("STAR", "expectedSpread"), parseExpression],
+    [consume("STAR", "expectedSpread"), parseAssignable],
     arraySpread
   )(parser, start);
 }
