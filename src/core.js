@@ -53,13 +53,13 @@ to = (start, end, by: = 1) => (
 );
 toSize = (start, size) => (start | to(start | plus(size | down)));
 repeat = (value) => value | build((x) => x);
-last = @ -1;
-keepLast = (coll, n) => (
-    result = coll | dropFirst(length(coll) | minus(n));
+last = (sequence) => sequence @ -1;
+keepLast = (sequence, n) => (
+    result = sequence | dropFirst(length(sequence) | minus(n));
     result | butIf(result | isString | not, $ result | toArray)
 );
-dropLast = (coll, n = 1) => (
-    result = coll | keepFirst(length(coll) | minus(n));
+dropLast = (sequence, n = 1) => (
+    result = sequence | keepFirst(length(sequence) | minus(n));
     if(
         result | isString,
         then: $ result,
@@ -83,10 +83,31 @@ reverse = (sequence) => (
     | transform((i) => array @ i)
     | toArray
 );
-isEmpty = (coll) => coll | keepFirst(1) | length | equals(0);
-first = @ 1;
-slice = (coll, from:, to:) => (
-    coll | keepFirst(to) | dropFirst(from | down)
+group = (pairs, onGroup: = (x) => x) => (
+    result = mutableMap();
+    pairs
+    | forEach(([key, value]) => (
+        if(
+            result.has(key),
+            then: $ result.at(key) |.append(value),
+            else: $ result.set(key, mutableArray([value])),
+        )
+    ));
+    result.entries()
+    | transform(([key, value]) => (
+        [key, value.elements() | onGroup]
+    ))
+    | toArray
+);
+groupBy = (sequence, by, onGroup: = (x) => x) => (
+    sequence
+    | transform((element) => [by(element), element])
+    | group(onGroup: onGroup)
+);
+isEmpty = (sequence) => sequence | keepFirst(1) | length | equals(0);
+first = (sequence) => sequence @ 1;
+slice = (sequence, from:, to:) => (
+    sequence | keepFirst(to) | dropFirst(from | down)
 );
 thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
 sliding = (sequence, size) => (
@@ -110,26 +131,5 @@ merge = (objects) => (
     objects | transform(properties) | flatten | toObject
 );
 itself = (x) => x;
-group = (pairs, onGroup: = (x) => x) => (
-    result = mutableMap();
-    pairs
-    | forEach(([key, value]) => (
-        if(
-            result.has(key),
-            then: $ result.at(key) |.append(value),
-            else: $ result.set(key, mutableArray([value])),
-        )
-    ));
-    result.entries()
-    | transform(([key, value]) => (
-        [key, value.elements() | onGroup]
-    ))
-    | toArray
-);
-groupBy = (sequence, by, onGroup: = (x) => x) => (
-    sequence
-    | transform((element) => [by(element), element])
-    | group(onGroup: onGroup)
-);
-also = (value, f) => (f(value); value);
+also = (value, action) => (action(value); value);
 `;

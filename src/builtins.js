@@ -76,16 +76,16 @@ const rawBuiltins = [
   ),
   builtin(
     "negative",
-    { params: [{ name: "x", type: "number" }] },
-    function ([x]) {
-      return -x;
+    { params: [{ name: "n", type: "number" }] },
+    function ([n]) {
+      return -n;
     }
   ),
-  builtin("up", { params: [{ name: "x", type: "number" }] }, function ([x]) {
-    return x + 1;
+  builtin("up", { params: [{ name: "n", type: "number" }] }, function ([n]) {
+    return n + 1;
   }),
-  builtin("down", { params: [{ name: "x", type: "number" }] }, function ([x]) {
-    return x - 1;
+  builtin("down", { params: [{ name: "n", type: "number" }] }, function ([n]) {
+    return n - 1;
   }),
   builtin(
     "times",
