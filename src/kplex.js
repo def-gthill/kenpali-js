@@ -6,16 +6,12 @@ const tokenSpec = [
   ["STRING", r`"(\\"|[^"])*"`],
   ["RAW_STRING", "`[^`]*`"],
   // Groupers
-  ["OPEN_QUOTE_PAREN", r`'\(`],
-  ["CLOSE_QUOTE_PAREN", r`\)'`],
   ["OPEN_PAREN", r`\(`],
   ["CLOSE_PAREN", r`\)`],
   ["OPEN_BRACKET", r`\[`],
   ["CLOSE_BRACKET", r`\]`],
   ["OPEN_BRACE", "{"],
   ["CLOSE_BRACE", "}"],
-  ["OPEN_ANGLES", "<<"],
-  ["CLOSE_ANGLES", ">>"],
   // Terminators
   ["COMMA", ","],
   ["SEMICOLON", ";"],
