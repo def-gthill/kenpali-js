@@ -939,27 +939,32 @@ const rawBuiltins = [
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      return kpobject(
+      return instance("newSet", [
         [
           "size",
-          builtin("size", {}, function () {
+          boundMethod("newSet", "size", function () {
             return set.size;
           }),
         ],
         [
           "elements",
-          builtin("elements", {}, function () {
+          boundMethod("newSet", "elements", function () {
             return [...set.keys()].map((key) => originalKeys.get(key));
           }),
         ],
         [
           "has",
-          builtin("has", { params: ["element"] }, function ([element]) {
+          boundMethod("newSet", "has", function ([element]) {
             return set.has(toKey(element));
           }),
-        ]
-      );
-    }
+        ],
+      ]);
+    },
+    [
+      methodSpec("size"),
+      methodSpec("elements"),
+      methodSpec("has", { params: ["element"] }),
+    ]
   ),
   builtin(
     "newMap",
@@ -1078,99 +1083,81 @@ const rawBuiltins = [
         return object;
       }
 
-      const object = kpobject(
+      const object = instance("mutableArray", [
         [
           "size",
-          builtin("size", {}, function () {
+          function () {
             return array.length;
-          }),
+          },
         ],
         [
           "elements",
-          builtin("elements", {}, function () {
+          function () {
             return [...array];
-          }),
+          },
         ],
         [
           "append",
-          builtin("append", { params: ["element"] }, function ([element]) {
+          function ([element]) {
             array.push(element);
             return object;
-          }),
+          },
         ],
         [
           "set",
-          builtin(
-            "set",
-            {
-              params: [{ name: "index", type: "number" }, "element"],
-            },
-            function ([index, element]) {
-              return set(index, element);
-            }
-          ),
+          function ([index, element]) {
+            return set(index, element);
+          },
         ],
         [
           "storeAt",
-          builtin(
-            "storeAt",
-            {
-              params: ["element", { name: "index", type: "number" }],
-            },
-            function ([element, index]) {
-              return set(index, element);
-            }
-          ),
+          function ([element, index]) {
+            return set(index, element);
+          },
         ],
         [
           "at",
-          builtin(
-            "at",
-            {
-              params: [{ name: "index", type: "number" }],
-              namedParams: [optionalFunctionParameter("default")],
-            },
-            function ([index], namedParams, kpcallback) {
-              return indexArray(
-                array,
-                index,
-                namedParams.get("default"),
-                kpcallback,
-                object
-              );
-            }
-          ),
+          function ([index, default_], kpcallback) {
+            return indexArray(array, index, default_, kpcallback, object);
+          },
         ],
         [
           "pop",
-          builtin(
-            "pop",
-            {
-              namedParams: [optionalFunctionParameter("default")],
-            },
-            function (_, namedParams, kpcallback) {
-              const result = indexArray(
-                array,
-                -1,
-                namedParams.get("default"),
-                kpcallback,
-                object
-              );
-              array.pop();
-              return result;
-            }
-          ),
+          function ([default_], kpcallback) {
+            const result = indexArray(array, -1, default_, kpcallback, object);
+            array.pop();
+            return result;
+          },
         ],
         [
           "clear",
-          builtin("clear", {}, function () {
+          function () {
             array.length = 0;
             return object;
-          }),
-        ]
-      );
+          },
+        ],
+      ]);
       return object;
-    }
+    },
+    [
+      methodSpec("size"),
+      methodSpec("elements"),
+      methodSpec("append", { params: ["element"] }),
+      methodSpec("set", {
+        params: [{ name: "index", type: "number" }, "element"],
+      }),
+      methodSpec("storeAt", {
+        params: ["element", { name: "index", type: "number" }],
+      }),
+      methodSpec("at", {
+        params: [{ name: "index", type: "number" }],
+        namedParams: [optionalFunctionParameter("default")],
+      }),
+      methodSpec("pop", {
+        namedParams: [optionalFunctionParameter("default")],
+      }),
+      methodSpec("clear"),
+    ]
   ),
   builtin(
     "mutableSet",
@@ -1453,11 +1440,31 @@ const rawBuiltins = [
   ),
 ];
 
-export function builtin(name, paramSpec, f) {
+export function builtin(name, paramSpec, f, methodSpecs = []) {
   f.builtinName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
+  f.methodSpecs = methodSpecs;
+  return f;
+}
+
+export function methodSpec(name, paramSpec = {}) {
+  return {
+    name,
+    paramSpec,
+  };
+}
+
+export function instance(constructorName, methods) {
+  return kpobject(
+    ...methods.map(([name, f]) => [name, boundMethod(constructorName, name, f)])
+  );
+}
+
+export function boundMethod(constructorName, methodName, f) {
+  f.constructorName = constructorName;
+  f.methodName = methodName;
   return f;
 }
 

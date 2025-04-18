@@ -1,6 +1,7 @@
 import { toKpobject } from "./kpobject.js";
 import { toString } from "./values.js";
 
+export const BEGIN = 0;
 export const VALUE = 1;
 export const ALIAS = 43;
 export const DISCARD = 10;
@@ -57,12 +58,14 @@ export function disassemble(program) {
 }
 
 class Disassembler {
-  constructor({ instructions, diagnostics }) {
+  constructor({ instructions, diagnostics, functions }) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
+    this.functions = functions;
     this.cursor = 0;
 
     this.instructionTable = [];
+    this.instructionTable[BEGIN] = this.disassembleBegin;
     this.instructionTable[VALUE] = this.disassembleValue;
     this.instructionTable[ALIAS] = this.disassembleAlias;
     this.instructionTable[DISCARD] = this.disassembleDiscard;
@@ -107,6 +110,7 @@ class Disassembler {
     this.instructionTable[IS_NUMBER] = this.disassembleIsNumber;
     this.instructionTable[IS_STRING] = this.disassembleIsString;
     this.instructionTable[IS_ARRAY] = this.disassembleIsArray;
+    this.instructionTable[IS_STREAM] = this.disassembleIsStream;
     this.instructionTable[IS_OBJECT] = this.disassembleIsObject;
     this.instructionTable[IS_BUILTIN] = this.disassembleIsBuiltin;
     this.instructionTable[IS_GIVEN] = this.disassembleIsGiven;
@@ -124,6 +128,9 @@ class Disassembler {
 
   disassemble() {
     const instructionStrings = [];
+    for (const { name, offset } of this.functions) {
+      instructionStrings.push(`Function ${name} at ${offset}`);
+    }
     while (this.cursor < this.instructions.length) {
       const instructionStart = this.cursor;
       let instructionString = this.disassembleInstruction();
@@ -146,6 +153,10 @@ class Disassembler {
       return `!! UNKNOWN INSTRUCTION ${instructionType}`;
     }
     return this.instructionTable[instructionType]();
+  }
+
+  disassembleBegin() {
+    return "BEGIN";
   }
 
   disassembleValue() {

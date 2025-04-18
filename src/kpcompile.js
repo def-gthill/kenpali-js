@@ -50,30 +50,32 @@ class Compiler {
     }
   ) {
     const filteredLibrary = new LibraryFilter(library, expression).filter();
-    if (trace) {
+    if (trace && filteredLibrary.size > 0) {
       this.log(
         `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
       );
     }
     this.expression = defining(...filteredLibrary, expression);
     this.names = names;
+    this.builtins = filteredLibrary;
     this.modules = modules;
     this.trace = trace;
     this.traceLevel = 0;
 
-    this.activeFunctions = [new CompiledFunction()];
+    this.activeFunctions = [];
     this.activeScopes = [];
     this.finishedFunctions = [];
   }
 
   compile() {
+    this.beginFunction("$main");
     this.compileExpression(this.expression);
-    this.finishedFunctions.push(this.currentFunction());
+    this.compileMethods();
     const program = this.combineFunctions();
     if (this.trace) {
-      console.log("--- Instructions ---");
-      console.log(op.disassemble(program));
-      console.log("--------------------");
+      this.log("--- Instructions ---");
+      this.log(op.disassemble(program));
+      this.log("--------------------");
     }
     return program;
   }
@@ -92,6 +94,60 @@ class Compiler {
     this.log(message);
   }
 
+  compileMethods() {
+    for (const [name, builtin] of this.builtins) {
+      if (builtin.methodSpecs) {
+        for (const { name: methodName, paramSpec } of builtin.methodSpecs) {
+          this.compileMethod(name, methodName, paramSpec);
+        }
+      }
+    }
+  }
+
+  compileMethod(constructorName, methodName, paramSpec) {
+    if (this.trace) {
+      this.log(`Compiling method ${constructorName}.${methodName}`);
+    }
+    this.pushScope({
+      reservedSlots: 3,
+      functionStackIndex: this.activeFunctions.length,
+    });
+    this.beginFunction(`${constructorName}.${methodName}`);
+    const paramPattern = { arrayPattern: paramSpec.params ?? [] };
+    const namedParamPattern = {
+      objectPattern: paramSpec.namedParams ?? [],
+    };
+    if (paramPattern.arrayPattern.length > 0) {
+      this.declareNames(paramPattern);
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.declareNames(namedParamPattern);
+    }
+    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
+    this.reserveSlots(numDeclaredNames);
+    if (paramPattern.arrayPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addDiagnostic({ name: "<posArgs>" });
+      this.assignNames(paramPattern, { isArgumentPattern: true });
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addDiagnostic({ name: "<namedArgs>" });
+      this.assignNames(namedParamPattern, { isArgumentPattern: true });
+    }
+    this.addInstruction(op.READ_LOCAL, 0, 0);
+    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addDiagnostic({ name: "<method>" });
+    this.addInstruction(op.PUSH, -numDeclaredNames);
+    this.addInstruction(op.CALL_BUILTIN);
+    this.addInstruction(op.POP);
+    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.addInstruction(op.DISCARD); // The positional arguments handoff
+    // (The named arguments slot already got trampled by the result)
+    this.popScope();
+  }
+
   combineFunctions() {
     for (const finishedFunction of this.finishedFunctions) {
       finishedFunction.instructions.push(op.RETURN);
@@ -100,12 +156,16 @@ class Compiler {
         finishedFunction.instructions.length;
     }
     const functionOffsets = [];
+    const functionOffsetsByName = [];
     let totalLength = 0;
-    for (let i = this.finishedFunctions.length - 1; i >= 0; i--) {
+    for (let i = 0; i < this.finishedFunctions.length; i++) {
       functionOffsets[i] = totalLength;
+      functionOffsetsByName.push({
+        name: this.finishedFunctions[i].name,
+        offset: totalLength,
+      });
       totalLength += this.finishedFunctions[i].instructions.length;
     }
-    this.finishedFunctions.reverse();
     const instructions = [].concat(
       ...this.finishedFunctions.map((f) => f.instructions)
     );
@@ -114,11 +174,17 @@ class Compiler {
       ...this.finishedFunctions.map((f) => f.diagnostics)
     );
     for (let i = 0; i < instructions.length; i++) {
-      if (marks[i] && "functionNumber" in marks[i]) {
-        instructions[i] = functionOffsets[marks[i].functionNumber];
+      if (marks[i + 1] && "functionNumber" in marks[i + 1]) {
+        const functionNumber = marks[i + 1].functionNumber;
+        if (this.trace) {
+          this.log(
+            `Injecting offset ${functionOffsets[functionNumber]} for function ${functionNumber}`
+          );
+        }
+        instructions[i + 1] = functionOffsets[functionNumber];
       }
     }
-    return { instructions, diagnostics };
+    return { instructions, diagnostics, functions: functionOffsetsByName };
   }
 
   compileExpression(expression, name) {
@@ -140,7 +206,7 @@ class Compiler {
       const enclosingFunctionName = this.activeFunctions.at(-1).name;
       let givenName =
         name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-      if (enclosingFunctionName) {
+      if (enclosingFunctionName !== "$main") {
         givenName = `${enclosingFunctionName}/${givenName}`;
       }
       this.compileGiven(expression, givenName);
@@ -271,7 +337,7 @@ class Compiler {
   }
 
   compileDefining(expression) {
-    this.addInstruction(op.RESERVE, 1);
+    this.reserveSlots(1); // For the result
     this.pushScope();
     this.addInstruction(op.PUSH, 0);
     this.defineNames(expression.defining);
@@ -288,10 +354,7 @@ class Compiler {
       const [pattern, _] = statement;
       this.declareNames(pattern);
     }
-    this.addInstruction(
-      op.RESERVE,
-      this.activeScopes.at(-1).numDeclaredNames()
-    );
+    this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames());
     for (const statement of statements) {
       const [pattern, expression] = statement;
       const name = typeof pattern === "string" ? pattern : undefined;
@@ -409,7 +472,7 @@ class Compiler {
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.activeFunctions.push(new CompiledFunction(name));
+    this.beginFunction(name);
     const paramPattern = { arrayPattern: expression.given.params ?? [] };
     const namedParamPattern = {
       objectPattern: expression.given.namedParams ?? [],
@@ -420,10 +483,7 @@ class Compiler {
     if (namedParamPattern.objectPattern.length > 0) {
       this.declareNames(namedParamPattern);
     }
-    this.addInstruction(
-      op.RESERVE,
-      this.activeScopes.at(-1).numDeclaredNames() - 2
-    );
+    this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames() - 2);
     if (paramPattern.arrayPattern.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
@@ -444,9 +504,12 @@ class Compiler {
     }
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(op.FUNCTION, 0);
-    this.addMark({ functionNumber: this.finishedFunctions.length });
-    this.addDiagnostic({ name, isBuiltin: false });
-    this.finishedFunctions.push(finishedFunction);
+    this.addMark({ functionNumber: finishedFunction.number });
+    this.addDiagnostic({
+      name,
+      number: finishedFunction.number,
+      isBuiltin: false,
+    });
     for (const upvalue of finishedFunction.upvalues) {
       this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
     }
@@ -471,7 +534,7 @@ class Compiler {
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.activeFunctions.push(new CompiledFunction());
+    this.beginFunction(expression.builtinName);
     const paramPattern = { arrayPattern: expression.params ?? [] };
     const namedParamPattern = {
       objectPattern: expression.namedParams ?? [],
@@ -483,7 +546,7 @@ class Compiler {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
-    this.addInstruction(op.RESERVE, numDeclaredNames);
+    this.reserveSlots(numDeclaredNames);
     if (paramPattern.arrayPattern.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
@@ -507,12 +570,12 @@ class Compiler {
     this.popScope();
     const finishedFunction = this.activeFunctions.pop();
     this.addInstruction(op.FUNCTION, 0);
-    this.addMark({ functionNumber: this.finishedFunctions.length });
+    this.addMark({ functionNumber: finishedFunction.number });
     this.addDiagnostic({
       name: expression.builtinName ?? "<anonymous>",
+      number: finishedFunction.number,
       isBuiltin: true,
     });
-    this.finishedFunctions.push(finishedFunction);
   }
 
   compileCalling(expression) {
@@ -586,8 +649,7 @@ class Compiler {
       this.log(`Recovery point at ${jumpIndex}`);
     }
     this.addInstruction(op.UNCATCH);
-    this.currentFunction().instructions[catchIndex - 1] =
-      jumpIndex - catchIndex;
+    this.setInstruction(catchIndex - 1, jumpIndex - catchIndex);
   }
 
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
@@ -890,8 +952,23 @@ class Compiler {
     this.activeScopes.pop();
   }
 
+  beginFunction(name) {
+    if (this.trace) {
+      this.log(`Starting function ${this.finishedFunctions.length} (${name})`);
+    }
+    const f = new CompiledFunction(this.finishedFunctions.length, name);
+    this.activeFunctions.push(f);
+    this.finishedFunctions.push(f);
+  }
+
   currentFunction() {
     return this.activeFunctions.at(-1);
+  }
+
+  reserveSlots(numSlots) {
+    if (numSlots > 0) {
+      this.addInstruction(op.RESERVE, numSlots);
+    }
   }
 
   addInstruction(...instruction) {
@@ -907,24 +984,29 @@ class Compiler {
   }
 
   addMark(mark) {
-    this.currentFunction().marks[
-      this.currentFunction().instructions.length - 1
-    ] = mark;
+    const f = this.currentFunction();
+    f.marks[f.instructions.length - 1] = {
+      ...f.marks[f.instructions.length - 1],
+      ...mark,
+    };
   }
 
   addDiagnostic(diagnostic) {
-    this.currentFunction().diagnostics[
-      this.currentFunction().instructions.length - 1
-    ] = diagnostic;
+    const f = this.currentFunction();
+    f.diagnostics[f.instructions.length - 1] = {
+      ...f.diagnostics[f.instructions.length - 1],
+      ...diagnostic,
+    };
   }
 }
 
 class CompiledFunction {
-  constructor(name) {
+  constructor(number, name) {
+    this.number = number;
     this.name = name;
-    this.instructions = [];
+    this.instructions = [op.BEGIN];
     this.marks = [];
-    this.diagnostics = [];
+    this.diagnostics = [{ name, number }];
     this.upvalues = [];
     this.anonymousFunctionCount = 0;
   }

@@ -62,7 +62,7 @@ export function kpvmCall(
 
 export class Vm {
   constructor(
-    { instructions, diagnostics = [] },
+    { instructions, diagnostics = [], functions = [] },
     {
       trace = false,
       timeLimitSeconds = 0,
@@ -72,6 +72,7 @@ export class Vm {
   ) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
+    this.functions = new Map(functions.map((f) => [f.name, f.offset]));
     this.trace = trace;
     this.stepLimit = stepLimit;
     this.timeLimitSeconds = timeLimitSeconds;
@@ -87,6 +88,7 @@ export class Vm {
     this.openUpvalues = [];
 
     this.instructionTable = [];
+    this.instructionTable[op.BEGIN] = this.runBegin;
     this.instructionTable[op.VALUE] = this.runValue;
     this.instructionTable[op.ALIAS] = this.runAlias;
     this.instructionTable[op.DISCARD] = this.runDiscard;
@@ -220,6 +222,12 @@ export class Vm {
 
   logInstruction(message) {
     console.log(`${this.instructionStart} ${message}`);
+  }
+
+  runBegin() {
+    if (this.trace) {
+      this.logInstruction("BEGIN");
+    }
   }
 
   runValue() {
@@ -595,6 +603,8 @@ export class Vm {
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
       this.callGiven(callee);
+    } else if (typeof callee === "function" && "constructorName" in callee) {
+      this.callMethod(callee);
     } else if (isBuiltin(callee)) {
       this.callBuiltin(callee);
     } else {
@@ -605,6 +615,22 @@ export class Vm {
   callGiven(callee) {
     this.pushCallFrame(callee.name);
     const target = callee.target;
+    if (this.trace) {
+      console.log(`Jump to ${target}`);
+    }
+    this.cursor = target;
+  }
+
+  callMethod(callee) {
+    const name = `${callee.constructorName}.${callee.methodName}`;
+    if (this.trace) {
+      console.log(`Call method "${name}"`);
+    }
+    this.pushCallFrame(name);
+    const target = this.functions.get(name);
+    if (target === undefined) {
+      throw new Error(`Method "${name}" not found`);
+    }
     if (this.trace) {
       console.log(`Jump to ${target}`);
     }
