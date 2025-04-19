@@ -96,8 +96,8 @@ class Compiler {
 
   compileMethods() {
     for (const [name, builtin] of this.builtins) {
-      if (builtin.methodSpecs) {
-        for (const { name: methodName, paramSpec } of builtin.methodSpecs) {
+      if (builtin.methods) {
+        for (const { name: methodName, paramSpec } of builtin.methods) {
           this.compileMethod(name, methodName, paramSpec);
         }
       }

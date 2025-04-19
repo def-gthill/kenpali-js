@@ -35,6 +35,11 @@ most = (sequence) => (
     )
     | last
 );
+toFunction = (value) => if(
+    value | isFunction,
+    then: $ value,
+    else: $ $ value,
+);
 butIf = (value, condition, ifTrue) => if(
     toFunction(condition)(value),
     then: $ ifTrue(value),

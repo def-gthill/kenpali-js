@@ -351,9 +351,6 @@ const rawBuiltins = [
   builtin("isFunction", { params: ["value"] }, function ([value]) {
     return isFunction(value);
   }),
-  builtin("toFunction", { params: ["value"] }, function ([value]) {
-    return toFunction(value);
-  }),
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
@@ -934,6 +931,11 @@ const rawBuiltins = [
     "newSet",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      methods: [
+        methodSpec("size"),
+        methodSpec("elements"),
+        methodSpec("has", { params: ["element"] }),
+      ],
     },
     function ([elements]) {
       const keys = elements.map(toKey);
@@ -942,29 +944,24 @@ const rawBuiltins = [
       return instance("newSet", [
         [
           "size",
-          boundMethod("newSet", "size", function () {
+          function () {
             return set.size;
-          }),
+          },
         ],
         [
           "elements",
-          boundMethod("newSet", "elements", function () {
+          function () {
             return [...set.keys()].map((key) => originalKeys.get(key));
-          }),
+          },
         ],
         [
           "has",
-          boundMethod("newSet", "has", function ([element]) {
+          function ([element]) {
             return set.has(toKey(element));
-          }),
+          },
         ],
       ]);
-    },
-    [
-      methodSpec("size"),
-      methodSpec("elements"),
-      methodSpec("has", { params: ["element"] }),
-    ]
+    }
   ),
   builtin(
     "newMap",
@@ -976,6 +973,17 @@ const rawBuiltins = [
           defaultValue: literal([]),
         },
       ],
+      methods: [
+        methodSpec("size"),
+        methodSpec("keys"),
+        methodSpec("values"),
+        methodSpec("entries"),
+        methodSpec("has", { params: ["key"] }),
+        methodSpec("at", {
+          params: ["key"],
+          namedParams: [optionalFunctionParameter("default")],
+        }),
+      ],
     },
     function ([entries]) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
@@ -983,86 +991,99 @@ const rawBuiltins = [
       const originalKeys = new Map(
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
-      const object = kpobject(
+      const object = instance("newMap", [
         [
           "size",
-          builtin("size", {}, function () {
+          function () {
             return map.size;
-          }),
+          },
         ],
         [
           "keys",
-          builtin("keys", {}, function () {
+          function () {
             return [...map.keys()].map((key) => originalKeys.get(key));
-          }),
+          },
         ],
         [
           "values",
-          builtin("values", {}, function () {
+          function () {
             return [...map.values()];
-          }),
+          },
         ],
         [
           "entries",
-          builtin("entries", {}, function () {
+          function () {
             return [...map.entries()].map(([key, value]) => [
               originalKeys.get(key),
               value,
             ]);
-          }),
+          },
         ],
         [
           "has",
-          builtin("has", { params: ["key"] }, function ([key]) {
+          function ([key]) {
             return map.has(toKey(key));
-          }),
+          },
         ],
         [
           "at",
-          builtin(
-            "at",
-            {
-              params: ["key"],
-              namedParams: [optionalFunctionParameter("default")],
-            },
-            function ([key], namedArgs, kpcallback) {
-              const realKey = toKey(key);
-              return indexMapping(
-                map,
-                realKey,
-                namedArgs.get("default"),
-                kpcallback,
-                object
-              );
-            }
-          ),
-        ]
-      );
+          function ([key, default_], kpcallback) {
+            const realKey = toKey(key);
+            return indexMapping(map, realKey, default_, kpcallback, object);
+          },
+        ],
+      ]);
       return object;
     }
   ),
-  builtin("variable", { params: ["initialValue"] }, function ([initialValue]) {
-    let value = initialValue;
-    return kpobject(
-      [
-        "get",
-        builtin("get", {}, function () {
-          return value;
-        }),
-      ],
-      [
-        "set",
-        builtin("set", { params: ["newValue"] }, function ([newValue]) {
-          value = newValue;
-          return value;
-        }),
-      ]
-    );
-  }),
+  builtin(
+    "variable",
+    {
+      params: ["initialValue"],
+      methods: [methodSpec("get"), methodSpec("set", { params: ["newValue"] })],
+    },
+    function ([initialValue]) {
+      let value = initialValue;
+      return instance("variable", [
+        [
+          "get",
+          function () {
+            return value;
+          },
+        ],
+        [
+          "set",
+          function ([newValue]) {
+            value = newValue;
+            return value;
+          },
+        ],
+      ]);
+    }
+  ),
   builtin(
     "mutableArray",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      methods: [
+        methodSpec("size"),
+        methodSpec("elements"),
+        methodSpec("append", { params: ["element"] }),
+        methodSpec("set", {
+          params: [{ name: "index", type: "number" }, "element"],
+        }),
+        methodSpec("storeAt", {
+          params: ["element", { name: "index", type: "number" }],
+        }),
+        methodSpec("at", {
+          params: [{ name: "index", type: "number" }],
+          namedParams: [optionalFunctionParameter("default")],
+        }),
+        methodSpec("pop", {
+          namedParams: [optionalFunctionParameter("default")],
+        }),
+        methodSpec("clear"),
+      ],
     },
     function ([elements]) {
       const array = [...elements];
@@ -1138,82 +1159,71 @@ const rawBuiltins = [
         ],
       ]);
       return object;
-    },
-    [
-      methodSpec("size"),
-      methodSpec("elements"),
-      methodSpec("append", { params: ["element"] }),
-      methodSpec("set", {
-        params: [{ name: "index", type: "number" }, "element"],
-      }),
-      methodSpec("storeAt", {
-        params: ["element", { name: "index", type: "number" }],
-      }),
-      methodSpec("at", {
-        params: [{ name: "index", type: "number" }],
-        namedParams: [optionalFunctionParameter("default")],
-      }),
-      methodSpec("pop", {
-        namedParams: [optionalFunctionParameter("default")],
-      }),
-      methodSpec("clear"),
-    ]
+    }
   ),
   builtin(
     "mutableSet",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      methods: [
+        methodSpec("size"),
+        methodSpec("elements"),
+        methodSpec("add", { params: ["element"] }),
+        methodSpec("remove", { params: ["element"] }),
+        methodSpec("has", { params: ["element"] }),
+        methodSpec("clear"),
+      ],
     },
     function ([elements]) {
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      const object = kpobject(
+      const object = instance("mutableSet", [
         [
           "size",
-          builtin("size", {}, function () {
+          function () {
             return set.size;
-          }),
+          },
         ],
         [
           "elements",
-          builtin("elements", {}, function () {
+          function () {
             return [...set.keys()].map((key) => originalKeys.get(key));
-          }),
+          },
         ],
         [
           "add",
-          builtin("add", { params: ["element"] }, function ([element]) {
+          function ([element]) {
             const key = toKey(element);
             set.add(key);
             originalKeys.set(key, element);
             return object;
-          }),
+          },
         ],
         [
           "remove",
-          builtin("remove", { params: ["element"] }, function ([element]) {
+          function ([element]) {
             const key = toKey(element);
             set.delete(key);
             originalKeys.delete(key);
             return object;
-          }),
+          },
         ],
         [
           "has",
-          builtin("has", { params: ["element"] }, function ([element]) {
+          function ([element]) {
             return set.has(toKey(element));
-          }),
+          },
         ],
         [
           "clear",
-          builtin("clear", {}, function () {
+          function () {
             set.clear();
             originalKeys.clear();
             return object;
-          }),
-        ]
-      );
+          },
+        ],
+      ]);
       return object;
     }
   ),
@@ -1227,6 +1237,21 @@ const rawBuiltins = [
           defaultValue: literal([]),
         },
       ],
+      methods: [
+        methodSpec("size"),
+        methodSpec("keys"),
+        methodSpec("values"),
+        methodSpec("entries"),
+        methodSpec("set", { params: ["key", "value"] }),
+        methodSpec("storeAt", { params: ["value", "key"] }),
+        methodSpec("remove", { params: ["key"] }),
+        methodSpec("has", { params: ["key"] }),
+        methodSpec("at", {
+          params: ["key"],
+          namedParams: [optionalFunctionParameter("default")],
+        }),
+        methodSpec("clear"),
+      ],
     },
     function ([entries]) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
@@ -1234,100 +1259,83 @@ const rawBuiltins = [
       const originalKeys = new Map(
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
-      const object = kpobject(
+      const object = instance("mutableMap", [
         [
           "size",
-          builtin("size", {}, function () {
+          function () {
             return map.size;
-          }),
+          },
         ],
         [
           "keys",
-          builtin("keys", {}, function () {
+          function () {
             return [...map.keys()].map((key) => originalKeys.get(key));
-          }),
+          },
         ],
         [
           "values",
-          builtin("values", {}, function () {
+          function () {
             return [...map.values()];
-          }),
+          },
         ],
         [
           "entries",
-          builtin("entries", {}, function () {
+          function () {
             return [...map.entries()].map(([key, value]) => [
               originalKeys.get(key),
               value,
             ]);
-          }),
+          },
         ],
         [
           "set",
-          builtin("set", { params: ["key", "value"] }, function ([key, value]) {
+          function ([key, value]) {
             const realKey = toKey(key);
             map.set(realKey, value);
             originalKeys.set(realKey, key);
             return object;
-          }),
+          },
         ],
         [
           "storeAt",
-          builtin(
-            "storeAt",
-            { params: ["value", "key"] },
-            function ([value, key]) {
-              const realKey = toKey(key);
-              map.set(realKey, value);
-              originalKeys.set(realKey, key);
-              return object;
-            }
-          ),
+          function ([value, key]) {
+            const realKey = toKey(key);
+            map.set(realKey, value);
+            originalKeys.set(realKey, key);
+            return object;
+          },
         ],
         [
           "remove",
-          builtin("remove", { params: ["key"] }, function ([key]) {
+          function ([key]) {
             const realKey = toKey(key);
             map.delete(realKey);
             originalKeys.delete(realKey);
             return object;
-          }),
+          },
         ],
         [
           "has",
-          builtin("has", { params: ["key"] }, function ([key]) {
+          function ([key]) {
             return map.has(toKey(key));
-          }),
+          },
         ],
         [
           "at",
-          builtin(
-            "at",
-            {
-              params: ["key"],
-              namedParams: [optionalFunctionParameter("default")],
-            },
-            function ([key], namedArgs, kpcallback) {
-              const realKey = toKey(key);
-              return indexMapping(
-                map,
-                realKey,
-                namedArgs.get("default"),
-                kpcallback,
-                object
-              );
-            }
-          ),
+          function ([key, default_], kpcallback) {
+            const realKey = toKey(key);
+            return indexMapping(map, realKey, default_, kpcallback, object);
+          },
         ],
         [
           "clear",
-          builtin("clear", {}, function () {
+          function () {
             map.clear();
             originalKeys.clear();
             return object;
-          }),
-        ]
-      );
+          },
+        ],
+      ]);
       return object;
     }
   ),
@@ -1440,12 +1448,11 @@ const rawBuiltins = [
   ),
 ];
 
-export function builtin(name, paramSpec, f, methodSpecs = []) {
+export function builtin(name, paramSpec, f) {
   f.builtinName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
-  f.methodSpecs = methodSpecs;
   return f;
 }
 
@@ -1541,14 +1548,6 @@ export function toStream(value) {
     return toStream(toArray(value));
   } else {
     return value;
-  }
-}
-
-export function toFunction(value) {
-  if (isFunction(value)) {
-    return value;
-  } else {
-    return builtin("constant", {}, () => value);
   }
 }
 
