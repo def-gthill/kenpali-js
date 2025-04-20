@@ -100,7 +100,7 @@ class Compiler {
   compileLibrary() {
     for (const [name, libraryFunction] of this.library) {
       if (isBuiltin(libraryFunction)) {
-        this.compileBuiltin_NEW(name, libraryFunction);
+        this.compileBuiltin(name, libraryFunction);
         if (libraryFunction.methods) {
           for (const {
             name: methodName,
@@ -115,7 +115,7 @@ class Compiler {
     }
   }
 
-  compileBuiltin_NEW(name, expression) {
+  compileBuiltin(name, expression) {
     if (this.trace) {
       this.log(`Compiling builtin ${name}`);
     }
@@ -260,9 +260,7 @@ class Compiler {
   }
 
   compileExpression(expression, name) {
-    if (typeof expression === "function") {
-      this.compileBuiltin(expression);
-    } else if (expression === null || typeof expression !== "object") {
+    if (expression === null || typeof expression !== "object") {
       throw kperror("notAnExpression", ["value", expression]);
     } else if ("literal" in expression) {
       this.compileLiteral(expression);
@@ -623,6 +621,8 @@ class Compiler {
     }
     const finishedFunction = this.activeFunctions.pop();
     if (this.activeFunctions.length > 0) {
+      // This function is defined inside another function, so we need to
+      // add it to the stack and deal with closures.
       this.addInstruction(op.FUNCTION, 0);
       this.addMark({ functionNumber: finishedFunction.number });
       this.addDiagnostic({
@@ -647,61 +647,6 @@ class Compiler {
     }
   }
 
-  compileBuiltin(expression) {
-    if (this.trace) {
-      this.logNodeStart(`Compiling builtin ${expression.builtinName}`);
-    }
-    this.pushScope({
-      reservedSlots: 3,
-      functionStackIndex: this.activeFunctions.length,
-    });
-    this.beginFunction(expression.builtinName);
-    const paramPattern = { arrayPattern: expression.params ?? [] };
-    const namedParamPattern = {
-      objectPattern: expression.namedParams ?? [],
-    };
-    if (paramPattern.arrayPattern.length > 0) {
-      this.declareNames(paramPattern);
-    }
-    if (namedParamPattern.objectPattern.length > 0) {
-      this.declareNames(namedParamPattern);
-    }
-    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
-    this.reserveSlots(numDeclaredNames);
-    if (paramPattern.arrayPattern.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
-      this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
-    }
-    if (namedParamPattern.objectPattern.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
-      this.addDiagnostic({ name: "<namedArgs>" });
-      this.assignNames(namedParamPattern, { isArgumentPattern: true });
-    }
-    this.addInstruction(op.VALUE, expression);
-    this.addInstruction(op.WRITE_LOCAL, 2);
-    this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames);
-    this.addInstruction(op.CALL_BUILTIN);
-    this.addInstruction(op.POP);
-    this.addInstruction(op.WRITE_LOCAL, 0);
-    this.addDiagnostic({ name: "<result>" });
-    this.addInstruction(op.DISCARD); // The positional arguments handoff
-    // (The named arguments slot already got trampled by the result)
-    this.popScope();
-    const finishedFunction = this.activeFunctions.pop();
-    this.addInstruction(op.FUNCTION, 0);
-    this.addMark({ functionNumber: finishedFunction.number });
-    this.addDiagnostic({
-      name: expression.builtinName ?? "<anonymous>",
-      number: finishedFunction.number,
-      isBuiltin: true,
-    });
-    if (this.trace) {
-      this.logNodeEnd("Finished builtin");
-    }
-  }
-
   compileCalling(expression) {
     if (this.trace) {
       this.logNodeStart("Starting calling");
@@ -718,53 +663,9 @@ class Compiler {
   }
 
   compileIndexing(expression) {
-    if (this.tryCompilingModuleAccess(expression.indexing, expression.at)) {
-      return;
-    }
     this.compileExpression(expression.indexing);
     this.compileExpression(expression.at);
     this.addInstruction(op.INDEX);
-  }
-
-  tryCompilingModuleAccess(moduleName, name) {
-    if (
-      moduleName === null ||
-      typeof moduleName !== "object" ||
-      !("name" in moduleName)
-    ) {
-      return false;
-    }
-    if (name === null || typeof name !== "object" || !("literal" in name)) {
-      return false;
-    }
-
-    // Is the "module" actually a local?
-    for (let numLayers = 0; numLayers < this.activeScopes.length; numLayers++) {
-      const scope = this.activeScopes.at(-numLayers - 1);
-      const slot = scope.getSlot(moduleName.name);
-      if (slot !== undefined) {
-        return false;
-      }
-    }
-    // Is the "module" actually a global?
-    if (this.names.get(moduleName.name) !== undefined) {
-      return false;
-    }
-
-    const module = this.modules.get(moduleName.name);
-    if (!module) {
-      throw kperror("unknownModule", ["name", moduleName.name]);
-    }
-    const global = module.get(name.literal);
-    if (global === undefined) {
-      throw kperror(
-        "nameNotDefined",
-        ["name", name.literal],
-        ["module", moduleName.name]
-      );
-    }
-    this.addInstruction(op.VALUE, global);
-    return true;
   }
 
   compileCatching(expression) {
