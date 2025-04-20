@@ -21,10 +21,9 @@ export default function kpcompile(
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
-  const coreAsts = new Map([...loadCore(), ...builtins]);
+  const library = new Map([...loadCore(), ...builtins]);
   return new Compiler(expression, {
-    names: builtins,
-    library: coreAsts,
+    library,
     modules,
     trace,
   }).compile();
@@ -42,12 +41,7 @@ function loadCore() {
 class Compiler {
   constructor(
     expression,
-    {
-      names = new Map(),
-      library = new Map(),
-      modules = new Map(),
-      trace = false,
-    }
+    { library = new Map(), modules = new Map(), trace = false }
   ) {
     const fullLibrary = addModulesToLibrary(library, modules);
     const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
@@ -57,7 +51,6 @@ class Compiler {
       );
     }
     this.expression = expression;
-    this.names = names;
     this.library = filteredLibrary;
     this.libraryNames = new Set(filteredLibrary.keys());
     this.modules = modules;
@@ -349,9 +342,6 @@ class Compiler {
     if (this.resolveInLibrary(expression)) {
       return;
     }
-    if (this.resolveGlobal(expression)) {
-      return;
-    }
     const errorDetails = [["name", expression.name]];
     if (expression.from) {
       errorDetails.push(["moduleName", expression.from]);
@@ -442,15 +432,6 @@ class Compiler {
     } else {
       return false;
     }
-  }
-
-  resolveGlobal(expression) {
-    const global = this.names.get(expression.name);
-    if (global === undefined) {
-      return false;
-    }
-    this.addInstruction(op.VALUE, global);
-    return true;
   }
 
   compileDefining(expression) {
