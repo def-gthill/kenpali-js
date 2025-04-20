@@ -1,13 +1,6 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import {
-  calling,
-  defining,
-  given,
-  indexing,
-  literal,
-  name,
-} from "../src/kpast.js";
+import { calling, defining, given, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
@@ -65,9 +58,7 @@ test("Function arguments can reference names", (t) => {
 });
 
 test("Names in modules can be accessed", (t) => {
-  const ast = calling(indexing(name("foo"), literal("bar")), [
-    literal("world"),
-  ]);
+  const ast = calling(name("bar", "foo"), [literal("world")]);
   const fooModule = kpobject([
     "bar",
     builtin(
@@ -82,7 +73,7 @@ test("Names in modules can be accessed", (t) => {
 
 test("Local names don't shadow names in modules", (t) => {
   const ast = defining(
-    ["bar", indexing(name("foo"), literal("bar"))],
+    ["bar", name("bar", "foo")],
     calling(name("bar"), [literal("world")])
   );
   const fooModule = kpobject([
@@ -95,4 +86,23 @@ test("Local names don't shadow names in modules", (t) => {
   ]);
   const result = kpeval(ast, { modules: kpobject(["foo", fooModule]) });
   t.is(result, "Hello, world!");
+});
+
+test("Functions in modules have type checking applied", (t) => {
+  const ast = calling(name("bar", "foo"), [literal(42)]);
+  const fooModule = kpobject([
+    "bar",
+    builtin(
+      "bar",
+      { params: [{ name: "name", type: "string" }] },
+      (name) => `Hello, ${name}!`
+    ),
+  ]);
+  const result = kpcatch(() =>
+    kpeval(ast, { modules: kpobject(["foo", fooModule]) })
+  );
+  assertIsError(t, result, "wrongArgumentType", {
+    value: 42,
+    expectedType: "string",
+  });
 });

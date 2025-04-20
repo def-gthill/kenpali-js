@@ -521,7 +521,19 @@ function parseLiteral(parser, start) {
 }
 
 function parseName(parser, start) {
-  return parseSingle("NAME", (token) => name(token.text))(parser, start);
+  return parseAnyOf(
+    "name",
+    parseAllOf(
+      "nameInModule",
+      [
+        parseSingle("NAME", (token) => token.text),
+        consume("SLASH", "expectedNameInModule"),
+        parseSingle("NAME", (token) => token.text),
+      ],
+      (module, nameInModule) => name(nameInModule, module)
+    ),
+    parseSingle("NAME", (token) => name(token.text))
+  )(parser, start);
 }
 
 function parseSingle(tokenType, converter) {

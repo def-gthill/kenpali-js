@@ -32,6 +32,7 @@ const tokenSpec = [
   ["NEWLINE", r`\r\n|\r|\n`],
   ["WHITESPACE", r`[ \t]+`],
   ["COMMENT", r`//[^\r\n]*(\r\n|\r|\n)?`],
+  ["SLASH", r`\/`],
   ["INVALID", "."],
 ];
 

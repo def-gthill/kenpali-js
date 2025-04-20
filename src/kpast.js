@@ -22,8 +22,12 @@ export function spread(node) {
   return { spread: node };
 }
 
-export function name(name) {
-  return { name };
+export function name(name, moduleName) {
+  const result = { name };
+  if (moduleName) {
+    result.from = moduleName;
+  }
+  return result;
 }
 
 export function defining(...args) {

@@ -49,7 +49,8 @@ class Compiler {
       trace = false,
     }
   ) {
-    const filteredLibrary = new LibraryFilter(library, expression).filter();
+    const fullLibrary = addModulesToLibrary(library, modules);
+    const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
     if (trace && filteredLibrary.size > 0) {
       this.log(
         `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
@@ -58,6 +59,7 @@ class Compiler {
     this.expression = defining(...filteredLibrary, expression);
     this.names = names;
     this.builtins = filteredLibrary;
+    this.builtinNames = new Set(filteredLibrary.keys());
     this.modules = modules;
     this.trace = trace;
     this.traceLevel = 0;
@@ -70,7 +72,7 @@ class Compiler {
   compile() {
     this.beginFunction("$main");
     this.compileExpression(this.expression);
-    this.compileMethods();
+    this.compileBuiltins();
     const program = this.combineFunctions();
     if (this.trace) {
       this.log("--- Instructions ---");
@@ -94,14 +96,60 @@ class Compiler {
     this.log(message);
   }
 
-  compileMethods() {
+  compileBuiltins() {
     for (const [name, builtin] of this.builtins) {
+      this.compileBuiltin_NEW(name, builtin);
       if (builtin.methods) {
         for (const { name: methodName, paramSpec } of builtin.methods) {
           this.compileMethod(name, methodName, paramSpec);
         }
       }
     }
+  }
+
+  compileBuiltin_NEW(name, expression) {
+    if (this.trace) {
+      this.log(`Compiling builtin ${name}`);
+    }
+    this.pushScope({
+      reservedSlots: 3,
+      functionStackIndex: this.activeFunctions.length,
+    });
+    this.beginFunction(name);
+    const paramPattern = { arrayPattern: expression.params ?? [] };
+    const namedParamPattern = {
+      objectPattern: expression.namedParams ?? [],
+    };
+    if (paramPattern.arrayPattern.length > 0) {
+      this.declareNames(paramPattern);
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.declareNames(namedParamPattern);
+    }
+    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
+    this.reserveSlots(numDeclaredNames);
+    if (paramPattern.arrayPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addDiagnostic({ name: "<posArgs>" });
+      this.assignNames(paramPattern, { isArgumentPattern: true });
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addDiagnostic({ name: "<namedArgs>" });
+      this.assignNames(namedParamPattern, { isArgumentPattern: true });
+    }
+    this.addInstruction(op.VALUE, expression);
+    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addDiagnostic({ name: "<builtin>" });
+    this.addInstruction(op.PUSH, -numDeclaredNames);
+    this.addInstruction(op.CALL_BUILTIN);
+    this.addInstruction(op.POP);
+    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.addInstruction(op.DISCARD); // The positional arguments handoff
+    // (The named arguments slot already got trampled by the result)
+    this.popScope();
+    this.activeFunctions.pop();
   }
 
   compileMethod(constructorName, methodName, paramSpec) {
@@ -146,6 +194,7 @@ class Compiler {
     this.addInstruction(op.DISCARD); // The positional arguments handoff
     // (The named arguments slot already got trampled by the result)
     this.popScope();
+    this.activeFunctions.pop();
   }
 
   combineFunctions() {
@@ -156,16 +205,19 @@ class Compiler {
         finishedFunction.instructions.length;
     }
     const functionOffsets = [];
-    const functionOffsetsByName = [];
+    const functionTable = [];
+    const functionNumbersByName = new Map();
     let totalLength = 0;
     for (let i = 0; i < this.finishedFunctions.length; i++) {
       functionOffsets[i] = totalLength;
-      functionOffsetsByName.push({
+      functionTable.push({
         name: this.finishedFunctions[i].name,
         offset: totalLength,
       });
+      functionNumbersByName.set(this.finishedFunctions[i].name, i);
       totalLength += this.finishedFunctions[i].instructions.length;
     }
+
     const instructions = [].concat(
       ...this.finishedFunctions.map((f) => f.instructions)
     );
@@ -183,8 +235,20 @@ class Compiler {
         }
         instructions[i + 1] = functionOffsets[functionNumber];
       }
+      if (marks[i + 1] && "functionName" in marks[i + 1]) {
+        const functionName = marks[i + 1].functionName;
+        const functionNumber = functionNumbersByName.get(functionName);
+        const functionOffset = functionOffsets[functionNumber];
+        if (this.trace) {
+          this.log(
+            `Injecting offset ${functionOffset} for function ${functionName}`
+          );
+        }
+        instructions[i + 1] = functionOffset;
+        diagnostics[i + 1].number = functionNumber;
+      }
     }
-    return { instructions, diagnostics, functions: functionOffsetsByName };
+    return { instructions, diagnostics, functions: functionTable };
   }
 
   compileExpression(expression, name) {
@@ -270,13 +334,43 @@ class Compiler {
   }
 
   compileName(expression) {
+    if (this.resolveInModule(expression)) {
+      return;
+    }
     if (this.resolveLocal(expression)) {
       return;
     }
     if (this.resolveGlobal(expression)) {
       return;
     }
-    throw kperror("nameNotDefined", ["name", expression.name]);
+    const errorDetails = [["name", expression.name]];
+    if (expression.from) {
+      errorDetails.push(["moduleName", expression.from]);
+    }
+    throw kperror("nameNotDefined", ...errorDetails);
+  }
+
+  resolveInModule(expression) {
+    if (expression.from) {
+      const fullName = `${expression.from}/${expression.name}`;
+      if (this.builtinNames.has(fullName)) {
+        this.addInstruction(op.FUNCTION, 0);
+        this.addMark({ functionName: fullName });
+        this.addDiagnostic({
+          name: fullName,
+          isBuiltin: true,
+        });
+        return true;
+      } else {
+        throw kperror(
+          "nameNotDefined",
+          ["name", expression.name],
+          ["from", expression.from]
+        );
+      }
+    } else {
+      return false;
+    }
   }
 
   resolveLocal(expression) {
@@ -1068,6 +1162,16 @@ class CompiledScope {
   }
 }
 
+function addModulesToLibrary(library, modules) {
+  const result = new Map(library);
+  for (const [moduleName, module] of modules) {
+    for (const [name, value] of module) {
+      result.set(`${moduleName}/${name}`, value);
+    }
+  }
+  return result;
+}
+
 class LibraryFilter {
   constructor(library, expression) {
     this.libraryExpressions = [...library];
@@ -1103,11 +1207,20 @@ class LibraryFilter {
     const outerThis = this;
     transformTree(expression, {
       handleName(node) {
+        if (node.from) {
+          const fullName = `${node.from}/${node.name}`;
+          if (outerThis.libraryByName.has(fullName)) {
+            outerThis.currentUsage.add(outerThis.libraryByName.get(fullName));
+          }
+          return;
+        }
+
         for (const scope of outerThis.activeScopes) {
           if (scope.has(node.name)) {
             return;
           }
         }
+
         if (outerThis.libraryByName.has(node.name)) {
           outerThis.currentUsage.add(outerThis.libraryByName.get(node.name));
         }
