@@ -1,12 +1,12 @@
 import { loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import * as op from "./instructions.js";
-import { defining, transformTree } from "./kpast.js";
+import { transformTree } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
 import { either } from "./validate.js";
-import { isObject, isString } from "./values.js";
+import { isBuiltin, isObject, isString } from "./values.js";
 
 export function kpcompileJson(
   json,
@@ -56,10 +56,10 @@ class Compiler {
         `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
       );
     }
-    this.expression = defining(...filteredLibrary, expression);
+    this.expression = expression;
     this.names = names;
-    this.builtins = filteredLibrary;
-    this.builtinNames = new Set(filteredLibrary.keys());
+    this.library = filteredLibrary;
+    this.libraryNames = new Set(filteredLibrary.keys());
     this.modules = modules;
     this.trace = trace;
     this.traceLevel = 0;
@@ -72,7 +72,8 @@ class Compiler {
   compile() {
     this.beginFunction("$main");
     this.compileExpression(this.expression);
-    this.compileBuiltins();
+    this.activeFunctions.pop();
+    this.compileLibrary();
     const program = this.combineFunctions();
     if (this.trace) {
       this.log("--- Instructions ---");
@@ -96,13 +97,20 @@ class Compiler {
     this.log(message);
   }
 
-  compileBuiltins() {
-    for (const [name, builtin] of this.builtins) {
-      this.compileBuiltin_NEW(name, builtin);
-      if (builtin.methods) {
-        for (const { name: methodName, paramSpec } of builtin.methods) {
-          this.compileMethod(name, methodName, paramSpec);
+  compileLibrary() {
+    for (const [name, libraryFunction] of this.library) {
+      if (isBuiltin(libraryFunction)) {
+        this.compileBuiltin_NEW(name, libraryFunction);
+        if (libraryFunction.methods) {
+          for (const {
+            name: methodName,
+            paramSpec,
+          } of libraryFunction.methods) {
+            this.compileMethod(name, methodName, paramSpec);
+          }
         }
+      } else {
+        this.compileExpression(libraryFunction, name);
       }
     }
   }
@@ -267,10 +275,10 @@ class Compiler {
     } else if ("defining" in expression) {
       this.compileDefining(expression);
     } else if ("given" in expression) {
-      const enclosingFunctionName = this.activeFunctions.at(-1).name;
+      const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
       let givenName =
         name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-      if (enclosingFunctionName !== "$main") {
+      if (enclosingFunctionName && enclosingFunctionName !== "$main") {
         givenName = `${enclosingFunctionName}/${givenName}`;
       }
       this.compileGiven(expression, givenName);
@@ -340,6 +348,9 @@ class Compiler {
     if (this.resolveLocal(expression)) {
       return;
     }
+    if (this.resolveInLibrary(expression)) {
+      return;
+    }
     if (this.resolveGlobal(expression)) {
       return;
     }
@@ -353,7 +364,7 @@ class Compiler {
   resolveInModule(expression) {
     if (expression.from) {
       const fullName = `${expression.from}/${expression.name}`;
-      if (this.builtinNames.has(fullName)) {
+      if (this.libraryNames.has(fullName)) {
         this.addInstruction(op.FUNCTION, 0);
         this.addMark({ functionName: fullName });
         this.addDiagnostic({
@@ -419,6 +430,20 @@ class Compiler {
       }
     }
     return false;
+  }
+
+  resolveInLibrary(expression) {
+    if (this.libraryNames.has(expression.name)) {
+      this.addInstruction(op.FUNCTION, 0);
+      this.addMark({ functionName: expression.name });
+      this.addDiagnostic({
+        name: expression.name,
+        isBuiltin: true,
+      });
+      return true;
+    } else {
+      return false;
+    }
   }
 
   resolveGlobal(expression) {
@@ -597,15 +622,17 @@ class Compiler {
       this.logNodeEnd("Finished function");
     }
     const finishedFunction = this.activeFunctions.pop();
-    this.addInstruction(op.FUNCTION, 0);
-    this.addMark({ functionNumber: finishedFunction.number });
-    this.addDiagnostic({
-      name,
-      number: finishedFunction.number,
-      isBuiltin: false,
-    });
-    for (const upvalue of finishedFunction.upvalues) {
-      this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
+    if (this.activeFunctions.length > 0) {
+      this.addInstruction(op.FUNCTION, 0);
+      this.addMark({ functionNumber: finishedFunction.number });
+      this.addDiagnostic({
+        name,
+        number: finishedFunction.number,
+        isBuiltin: false,
+      });
+      for (const upvalue of finishedFunction.upvalues) {
+        this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
+      }
     }
   }
 
@@ -622,7 +649,7 @@ class Compiler {
 
   compileBuiltin(expression) {
     if (this.trace) {
-      this.log(`Compiling builtin ${expression.builtinName}`);
+      this.logNodeStart(`Compiling builtin ${expression.builtinName}`);
     }
     this.pushScope({
       reservedSlots: 3,
@@ -670,15 +697,24 @@ class Compiler {
       number: finishedFunction.number,
       isBuiltin: true,
     });
+    if (this.trace) {
+      this.logNodeEnd("Finished builtin");
+    }
   }
 
   compileCalling(expression) {
+    if (this.trace) {
+      this.logNodeStart("Starting calling");
+    }
     this.compileExpression(expression.calling);
     this.compileExpression({ array: expression.args ?? [] });
     this.compileExpression({ object: expression.namedArgs ?? [] });
     this.addInstruction(op.PUSH, -2);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP);
+    if (this.trace) {
+      this.logNodeEnd("Finished calling");
+    }
   }
 
   compileIndexing(expression) {
