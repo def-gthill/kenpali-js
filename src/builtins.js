@@ -1459,7 +1459,7 @@ export function builtin(name, paramSpec, f) {
 export function methodSpec(name, paramSpec = {}) {
   return {
     name,
-    paramSpec,
+    ...paramSpec,
   };
 }
 

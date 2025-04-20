@@ -14,7 +14,24 @@ export interface ParamSpec {
   namedParams?: SingleParamSpec[];
 }
 
-export type Builtin = function & { builtinName: string } & ParamSpec;
+export interface MethodSpec extends ParamSpec {
+  name: string;
+}
+
+export interface BuiltinParamSpec extends ParamSpec {
+  methods?: MethodSpec[];
+}
+
+export interface BuiltinSpec extends BuiltinParamSpec {
+  builtinName: string;
+}
+
+export type Builtin = function & BuiltinSpec;
+
+export type BoundMethod = function & {
+  constructorName: string;
+  methodName: string;
+};
 
 export type Given = object;
 
@@ -31,6 +48,7 @@ export type KpValue =
   | KpArray
   | KpObject
   | Builtin
+  | BoundMethod
   | Given
   | KpError;
 
@@ -136,3 +154,19 @@ export function kpobject(...entries: [string, KpValue][]): KpObject;
 export function matches(value: KpValue, schema: Schema): boolean;
 export function validate(value: KpValue, schema: Schema): void;
 export function toString(value: KpValue): string;
+
+export function builtin(
+  name: string,
+  paramSpec: BuiltinParamSpec,
+  f: function
+): Builtin;
+export function methodSpec(name: string, paramSpec: ParamSpec): MethodSpec;
+export function instance(
+  constructorName: string,
+  methods: [string, function][]
+): KpObject;
+export function boundMethod(
+  constructorName: string,
+  methodName: string,
+  f: function
+): BoundMethod;

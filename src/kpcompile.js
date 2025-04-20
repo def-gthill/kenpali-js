@@ -97,7 +97,7 @@ class Compiler {
         if (libraryFunction.methods) {
           for (const {
             name: methodName,
-            paramSpec,
+            ...paramSpec
           } of libraryFunction.methods) {
             this.compileMethod(name, methodName, paramSpec);
           }
