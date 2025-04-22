@@ -630,7 +630,8 @@ export class Vm {
     const posArgs = this.stack.pop();
     const kpcallback = this.kpcallback.bind(this);
     try {
-      const result = callee(posArgs, namedArgs, kpcallback, {
+      const result = callee(posArgs, namedArgs, {
+        kpcallback,
         debugLog: this.debugLog,
       });
       this.stack.pop(); // Discard called function
@@ -705,7 +706,8 @@ export class Vm {
     const kpcallback = this.kpcallback.bind(this);
     const getMethod = this.getMethod.bind(this, calleeName);
     try {
-      const result = callee(args, kpcallback, {
+      const result = callee(args, {
+        kpcallback,
         debugLog: this.debugLog,
         getMethod,
       });
@@ -742,7 +744,8 @@ export class Vm {
 
   kpcallback(f, posArgs, namedArgs) {
     if (typeof f === "function") {
-      return f(posArgs, namedArgs, this.kpcallback.bind(this), {
+      return f(posArgs, namedArgs, {
+        kpcallback: this.kpcallback.bind(this),
         debugLog: this.debugLog,
       });
     } else {
@@ -750,13 +753,12 @@ export class Vm {
     }
   }
 
-  getMethod(constructorName, self, name) {
+  getMethod(constructorName, name) {
     const methods = this.methods.get(constructorName);
     if (methods && methods.has(name)) {
       const target = this.functions.get(`${constructorName}/${name}`);
       return new Function(`${constructorName}/${name}`, this.program, target, {
         isBuiltin: true,
-        self,
       });
     }
     throw new Error(`Method ${constructorName}/${name} not found`);
@@ -1074,12 +1076,11 @@ function extractMethods(functions) {
 }
 
 class Function {
-  constructor(name, program, target, { isBuiltin, self = null }) {
+  constructor(name, program, target, { isBuiltin }) {
     this.name = name;
     this.program = program;
     this.target = target;
     this.isBuiltin = isBuiltin;
-    this.self = self;
     this.closure = [];
   }
 }

@@ -14,16 +14,11 @@ export interface ParamSpec {
   namedParams?: SingleParamSpec[];
 }
 
-export type BuiltinSpec = function & {
-  builtinName: string;
-  methods?: MethodSpec[];
-};
-
-export type MethodSpec = function & {
-  methodName: string;
-};
-
-export type Callback = function & { callbackName: string };
+export type Callback = (
+  args: KpArray,
+  namedArgs: KpObject,
+  context: VmContext
+) => KpValue;
 
 export interface Function {
   name: string;
@@ -33,10 +28,6 @@ export interface Function {
 export type Builtin = Function & { isBuiltin: true };
 
 export type Given = Function & { isBuiltin: false };
-
-export interface BoundMethod<T> extends Builtin {
-  self: T;
-}
 
 export interface KpError {
   error: string;
@@ -149,27 +140,62 @@ export function kpcall(
   namedArgs: Record<string, KpValue>,
   options: CallOptions = {}
 ): any;
-export function toKpFunction(f: function): Callback;
-export function kpcatch(f: function): KpValue;
+export function toKpFunction(
+  f: (
+    args: KpValue[],
+    namedArgs: Record<string, KpValue>,
+    kpcallback: Kpcallback
+  ) => KpValue
+): Callback;
+export function kpcatch(f: () => KpValue): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
 export function matches(value: KpValue, schema: Schema): boolean;
 export function validate(value: KpValue, schema: Schema): void;
 export function toString(value: KpValue): string;
 
+export type Kpcallback = (
+  callee: KpValue,
+  args: KpArray,
+  namedArgs: KpObject
+) => KpValue;
+
+export type DebugLog = (message: string) => void;
+export type GetMethod = (methodName: string) => Builtin;
+export type VmContext = {
+  kpcallback: Kpcallback;
+  debugLog: DebugLog;
+  getMethod: GetMethod;
+};
+
+export type BuiltinImpl = (args: KpArray, context: VmContext) => KpValue;
+export type MethodImpl = (
+  args: [any, ...KpArray],
+  context: VmContext
+) => KpValue;
+
+export type BuiltinSpec = BuiltinImpl & {
+  builtinName: string;
+  methods?: MethodSpec[];
+};
+
+export type MethodSpec = MethodImpl & {
+  methodName: string;
+};
+
 export function builtin(
   name: string,
   paramSpec: ParamSpec,
-  f: function,
+  f: BuiltinImpl,
   methods?: MethodSpec[]
 ): BuiltinSpec;
 export function method(
   name: string,
   paramSpec: ParamSpec,
-  f: function
+  f: MethodImpl
 ): MethodSpec;
-export function instance<Self>(
-  self: Self,
+export function instance(
+  self: any,
   methods: string[],
-  getMethod: (self: Self, method: string) => BoundMethod<Self>
+  getMethod: GetMethod
 ): KpObject;

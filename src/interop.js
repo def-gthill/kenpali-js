@@ -6,7 +6,7 @@ export function kpcall(kpf, args, namedArgs, { timeLimitSeconds = 0 } = {}) {
 }
 
 export function toKpFunction(jsf) {
-  return (args, namedArgs, kpcallback) =>
+  return (args, namedArgs, { kpcallback }) =>
     jsf(args, toJsObject(namedArgs), (callback, args, namedArgs) =>
       kpcallback(callback, args, toKpobject(namedArgs))
     );

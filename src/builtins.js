@@ -46,7 +46,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([value, name], _, { debugLog }) {
+    function ([value, name], { debugLog }) {
       if (name) {
         debugLog(`${name}: ${toString(value)}`);
       } else {
@@ -246,7 +246,7 @@ const rawBuiltins = [
         { rest: { name: "rest", type: arrayOf("function") } },
       ],
     },
-    function ([first, rest], kpcallback) {
+    function ([first, rest], { kpcallback }) {
       if (!first) {
         return false;
       }
@@ -268,7 +268,7 @@ const rawBuiltins = [
         { rest: { name: "rest", type: arrayOf("function") } },
       ],
     },
-    function ([first, rest], kpcallback) {
+    function ([first, rest], { kpcallback }) {
       if (first) {
         return true;
       }
@@ -363,7 +363,7 @@ const rawBuiltins = [
         { name: "else", type: "function" },
       ],
     },
-    function ([condition, then, else_], kpcallback) {
+    function ([condition, then, else_], { kpcallback }) {
       if (condition) {
         return kpcallback(then, [], kpobject());
       } else {
@@ -385,7 +385,7 @@ const rawBuiltins = [
       ],
       namedParams: [{ name: "else", type: "function" }],
     },
-    function ([value, conditions, else_], kpcallback) {
+    function ([value, conditions, else_], { kpcallback }) {
       for (const [condition, result] of conditions) {
         const conditionResult = kpcallback(condition, [value], kpobject());
         validateReturn(conditionResult, "boolean");
@@ -401,7 +401,7 @@ const rawBuiltins = [
     {
       params: ["start", { name: "next", type: "function" }],
     },
-    function ([start, next], kpcallback) {
+    function ([start, next], { kpcallback }) {
       function streamFrom(state) {
         return stream({
           value() {
@@ -424,7 +424,7 @@ const rawBuiltins = [
         { name: "next", type: "function" },
       ],
     },
-    function ([value, next], kpcallback) {
+    function ([value, next], { kpcallback }) {
       return stream({
         value: () => kpcallback(value, [], kpobject()),
         next: () => kpcallback(next, [], kpobject()),
@@ -443,7 +443,7 @@ const rawBuiltins = [
       ],
       namedParams: [optionalFunctionParameter("default")],
     },
-    function ([collection, index, default_], kpcallback) {
+    function ([collection, index, default_], { kpcallback }) {
       if (isString(collection) || isArray(collection)) {
         if (!isNumber(index)) {
           throw kperror(
@@ -497,7 +497,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([sequence, by], kpcallback) {
+    function ([sequence, by], { kpcallback }) {
       const array = toArray(sequence);
       if (by) {
         const withSortKey = array.map((element) => [
@@ -521,7 +521,7 @@ const rawBuiltins = [
         { name: "action", type: "function" },
       ],
     },
-    function ([sequence, action], kpcallback) {
+    function ([sequence, action], { kpcallback }) {
       const array = toArray(sequence);
       for (const element of array) {
         kpcallback(action, [element], kpobject());
@@ -537,7 +537,7 @@ const rawBuiltins = [
         { name: "f", type: "function" },
       ],
     },
-    function ([sequence, f], kpcallback) {
+    function ([sequence, f], { kpcallback }) {
       const start = toStream(sequence);
       function streamFrom(current) {
         if (current.isEmpty()) {
@@ -562,7 +562,7 @@ const rawBuiltins = [
       params: [{ name: "sequence", type: "sequence" }],
       namedParams: ["start", { name: "next", type: "function" }],
     },
-    function ([in_, start, next], kpcallback) {
+    function ([in_, start, next], { kpcallback }) {
       const inStream = toStream(in_);
       function streamFrom(current, state) {
         return stream({
@@ -655,7 +655,7 @@ const rawBuiltins = [
         { name: "condition", type: "function" },
       ],
     },
-    function ([sequence, condition], kpcallback) {
+    function ([sequence, condition], { kpcallback }) {
       const start = toStream(sequence);
 
       function streamFrom(current) {
@@ -692,7 +692,7 @@ const rawBuiltins = [
         { name: "condition", type: "function" },
       ],
     },
-    function ([sequence, condition], kpcallback) {
+    function ([sequence, condition], { kpcallback }) {
       const start = toStream(sequence);
 
       function streamFrom(current) {
@@ -728,7 +728,7 @@ const rawBuiltins = [
         { name: "condition", type: "function" },
       ],
     },
-    function ([sequence, condition], kpcallback) {
+    function ([sequence, condition], { kpcallback }) {
       const inStream = toStream(sequence);
 
       function streamFrom(start) {
@@ -859,7 +859,7 @@ const rawBuiltins = [
         { name: "condition", type: "function" },
       ],
     },
-    function ([sequence, condition], kpcallback) {
+    function ([sequence, condition], { kpcallback }) {
       const start = toStream(sequence);
       function streamFrom(start) {
         let current = start;
@@ -932,7 +932,7 @@ const rawBuiltins = [
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
     },
-    function ([elements], _, { getMethod }) {
+    function ([elements], { getMethod }) {
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
@@ -962,7 +962,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([entries], _, { getMethod }) {
+    function ([entries], { getMethod }) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
       const map = new Map(realEntries);
       const originalKeys = new Map(
@@ -1000,7 +1000,7 @@ const rawBuiltins = [
           params: ["key"],
           namedParams: [optionalFunctionParameter("default")],
         },
-        function ([self, key, default_], kpcallback) {
+        function ([self, key, default_], { kpcallback }) {
           const realKey = toKey(key);
           return indexMapping(self.map, realKey, default_, kpcallback, self);
         }
@@ -1012,7 +1012,7 @@ const rawBuiltins = [
     {
       params: ["initialValue"],
     },
-    function ([initialValue], _, { getMethod }) {
+    function ([initialValue], { getMethod }) {
       return instance({ value: initialValue }, ["get", "set"], getMethod);
     },
     [
@@ -1030,7 +1030,7 @@ const rawBuiltins = [
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
     },
-    function ([elements], _, { getMethod }) {
+    function ([elements], { getMethod }) {
       const array = [...elements];
 
       const self = { array };
@@ -1082,7 +1082,7 @@ const rawBuiltins = [
           params: [{ name: "index", type: "number" }],
           namedParams: [optionalFunctionParameter("default")],
         },
-        function ([self, index, default_], kpcallback) {
+        function ([self, index, default_], { kpcallback }) {
           return indexArray(
             self.array,
             index,
@@ -1097,7 +1097,7 @@ const rawBuiltins = [
         {
           namedParams: [optionalFunctionParameter("default")],
         },
-        function ([self, default_], kpcallback) {
+        function ([self, default_], { kpcallback }) {
           const result = indexArray(
             self.array,
             -1,
@@ -1120,7 +1120,7 @@ const rawBuiltins = [
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
     },
-    function ([elements], _, { getMethod }) {
+    function ([elements], { getMethod }) {
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
@@ -1173,7 +1173,7 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([entries], _, { getMethod }) {
+    function ([entries], { getMethod }) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
       const map = new Map(realEntries);
       const originalKeys = new Map(
@@ -1250,7 +1250,7 @@ const rawBuiltins = [
           params: ["key"],
           namedParams: [optionalFunctionParameter("default")],
         },
-        function ([self, key, default_], kpcallback) {
+        function ([self, key, default_], { kpcallback }) {
           const realKey = toKey(key);
           return indexMapping(
             self.map,
@@ -1271,7 +1271,7 @@ const rawBuiltins = [
   builtin(
     "validate",
     { params: ["value", "schema"] },
-    function ([value, schema], kpcallback) {
+    function ([value, schema], { kpcallback }) {
       validate(value, schema, kpcallback);
       return true;
     }
@@ -1279,7 +1279,7 @@ const rawBuiltins = [
   builtin(
     "matches",
     { params: ["value", "schema"] },
-    function ([value, schema], kpcallback) {
+    function ([value, schema], { kpcallback }) {
       return matches(value, schema, kpcallback);
     }
   ),
@@ -1397,7 +1397,14 @@ export function method(name, paramSpec, f) {
 }
 
 export function instance(self, methods, getMethod) {
-  return kpobject(...methods.map((name) => [name, getMethod(self, name)]));
+  return kpobject(
+    ...methods.map((name) => [name, bindMethod(self, getMethod(name))])
+  );
+}
+
+export function bindMethod(self, method) {
+  method.self = self;
+  return method;
 }
 
 function optionalFunctionParameter(name) {
