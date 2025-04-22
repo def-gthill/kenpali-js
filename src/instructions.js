@@ -35,6 +35,7 @@ export const CAPTURE = 22;
 export const READ_UPVALUE = 20;
 export const RETURN = 18;
 export const CALL_BUILTIN = 41;
+export const SELF = 52;
 export const INDEX = 30;
 export const THROW = 49;
 export const CATCH = 23;
@@ -101,6 +102,7 @@ class Disassembler {
     this.instructionTable[READ_UPVALUE] = this.disassembleReadUpvalue;
     this.instructionTable[RETURN] = this.disassembleReturn;
     this.instructionTable[CALL_BUILTIN] = this.disassembleCallBuiltin;
+    this.instructionTable[SELF] = this.disassembleSelf;
     this.instructionTable[INDEX] = this.disassembleIndex;
     this.instructionTable[THROW] = this.disassembleThrow;
     this.instructionTable[CATCH] = this.disassembleCatch;
@@ -289,6 +291,10 @@ class Disassembler {
 
   disassembleCallBuiltin() {
     return "CALL_BUILTIN";
+  }
+
+  disassembleSelf() {
+    return "SELF";
   }
 
   disassembleIndex() {

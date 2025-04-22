@@ -95,11 +95,12 @@ class Compiler {
       if (isBuiltin(libraryFunction)) {
         this.compileBuiltin(name, libraryFunction);
         if (libraryFunction.methods) {
-          for (const {
-            name: methodName,
-            ...paramSpec
-          } of libraryFunction.methods) {
-            this.compileMethod(name, methodName, paramSpec);
+          for (const method of libraryFunction.methods) {
+            if (typeof method === "function") {
+              this.compileMethod_NEW(name, method);
+            } else {
+              this.compileMethod(name, method.methodName, method);
+            }
           }
         }
       } else {
@@ -153,15 +154,63 @@ class Compiler {
     this.activeFunctions.pop();
   }
 
-  compileMethod(constructorName, methodName, paramSpec) {
+  compileMethod_NEW(constructorName, method) {
     if (this.trace) {
-      this.log(`Compiling method ${constructorName}.${methodName}`);
+      this.log(`Compiling method ${constructorName}/${method.methodName}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(`${constructorName}.${methodName}`);
+    this.beginFunction(`${constructorName}/${method.methodName}`);
+    const paramPattern = { arrayPattern: method.params ?? [] };
+    const namedParamPattern = {
+      objectPattern: method.namedParams ?? [],
+    };
+    if (paramPattern.arrayPattern.length > 0) {
+      this.declareNames(paramPattern);
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.declareNames(namedParamPattern);
+    }
+    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
+    this.reserveSlots(numDeclaredNames);
+    if (paramPattern.arrayPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addDiagnostic({ name: "<posArgs>" });
+      this.assignNames(paramPattern, { isArgumentPattern: true });
+    }
+    if (namedParamPattern.objectPattern.length > 0) {
+      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addDiagnostic({ name: "<namedArgs>" });
+      this.assignNames(namedParamPattern, { isArgumentPattern: true });
+    }
+    this.addInstruction(op.VALUE, method);
+    this.addInstruction(op.WRITE_LOCAL, 1);
+    this.addDiagnostic({ name: "<method>" });
+    this.addInstruction(op.READ_LOCAL, 0, 0);
+    this.addDiagnostic({ name: "<boundMethod>" });
+    this.addInstruction(op.SELF);
+    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addDiagnostic({ name: "<self>" });
+    this.addInstruction(op.PUSH, -numDeclaredNames - 1);
+    this.addInstruction(op.CALL_BUILTIN);
+    this.addInstruction(op.POP);
+    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addDiagnostic({ name: "<result>" });
+    this.popScope();
+    this.activeFunctions.pop();
+  }
+
+  compileMethod(constructorName, methodName, paramSpec) {
+    if (this.trace) {
+      this.log(`Compiling method ${constructorName}/${methodName}`);
+    }
+    this.pushScope({
+      reservedSlots: 3,
+      functionStackIndex: this.activeFunctions.length,
+    });
+    this.beginFunction(`${constructorName}/${methodName}`);
     const paramPattern = { arrayPattern: paramSpec.params ?? [] };
     const namedParamPattern = {
       objectPattern: paramSpec.namedParams ?? [],

@@ -931,37 +931,25 @@ const rawBuiltins = [
     "newSet",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
-      methods: [
-        methodSpec("size"),
-        methodSpec("elements"),
-        methodSpec("has", { params: ["element"] }),
-      ],
     },
-    function ([elements]) {
+    function ([elements], _, { getMethod }) {
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      return instance("newSet", [
-        [
-          "size",
-          function () {
-            return set.size;
-          },
-        ],
-        [
-          "elements",
-          function () {
-            return [...set.keys()].map((key) => originalKeys.get(key));
-          },
-        ],
-        [
-          "has",
-          function ([element]) {
-            return set.has(toKey(element));
-          },
-        ],
-      ]);
-    }
+      const self = { set, originalKeys };
+      return instance_NEW(self, ["size", "elements", "has"], getMethod);
+    },
+    [
+      method("size", {}, function ([self]) {
+        return self.set.size;
+      }),
+      method("elements", {}, function ([self]) {
+        return [...self.set.keys()].map((key) => self.originalKeys.get(key));
+      }),
+      method("has", { params: ["element"] }, function ([self, element]) {
+        return self.set.has(toKey(element));
+      }),
+    ]
   ),
   builtin(
     "newMap",
@@ -1448,17 +1436,32 @@ const rawBuiltins = [
   ),
 ];
 
-export function builtin(name, paramSpec, f) {
+export function builtin(name, paramSpec, f, methods = []) {
   f.builtinName = name;
+  for (const property in paramSpec) {
+    f[property] = paramSpec[property];
+  }
+  if (methods.length > 0) {
+    f.methods = methods;
+  }
+  return f;
+}
+
+export function method(name, paramSpec, f) {
+  f.methodName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
   return f;
 }
 
+export function instance_NEW(self, methods, getMethod) {
+  return kpobject(...methods.map((name) => [name, getMethod(self, name)]));
+}
+
 export function methodSpec(name, paramSpec = {}) {
   return {
-    name,
+    methodName: name,
     ...paramSpec,
   };
 }

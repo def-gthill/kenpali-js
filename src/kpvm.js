@@ -62,7 +62,7 @@ export function kpvmCall(
 
 export class Vm {
   constructor(
-    { instructions, diagnostics = [], functions = [] },
+    program,
     {
       trace = false,
       timeLimitSeconds = 0,
@@ -70,9 +70,12 @@ export class Vm {
       debugLog = console.error,
     } = {}
   ) {
+    const { instructions, diagnostics = [], functions = [] } = program;
+    this.program = program;
     this.instructions = instructions;
     this.diagnostics = diagnostics;
     this.functions = new Map(functions.map((f) => [f.name, f.offset]));
+    this.methods = extractMethods(functions);
     this.trace = trace;
     this.stepLimit = stepLimit;
     this.timeLimitSeconds = timeLimitSeconds;
@@ -123,6 +126,7 @@ export class Vm {
     this.instructionTable[op.READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[op.RETURN] = this.runReturn;
     this.instructionTable[op.CALL_BUILTIN] = this.runCallBuiltin;
+    this.instructionTable[op.SELF] = this.runSelf;
     this.instructionTable[op.INDEX] = this.runIndex;
     this.instructionTable[op.THROW] = this.runThrow;
     this.instructionTable[op.CATCH] = this.runCatch;
@@ -561,12 +565,9 @@ export class Vm {
       this.logInstruction(`FUNCTION ${target} (${diagnostic.name})`);
     }
     this.stack.push(
-      new Function(
-        diagnostic.name,
-        { instructions: this.instructions, diagnostics: this.diagnostics },
-        target,
-        { isBuiltin: diagnostic.isBuiltin }
-      )
+      new Function(diagnostic.name, this.program, target, {
+        isBuiltin: diagnostic.isBuiltin,
+      })
     );
   }
 
@@ -603,7 +604,7 @@ export class Vm {
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
       this.callGiven(callee);
-    } else if (typeof callee === "function" && "constructorName" in callee) {
+    } else if (typeof callee === "function" && "methodName" in callee) {
       this.callMethod(callee);
     } else if (isBuiltin(callee)) {
       this.callBuiltin(callee);
@@ -622,7 +623,7 @@ export class Vm {
   }
 
   callMethod(callee) {
-    const name = `${callee.constructorName}.${callee.methodName}`;
+    const name = `${callee.constructorName}/${callee.methodName}`;
     if (this.trace) {
       console.log(`Call method "${name}"`);
     }
@@ -638,10 +639,11 @@ export class Vm {
   }
 
   callBuiltin(callee) {
+    const calleeName = functionName(callee);
     if (this.trace) {
-      console.log(`Call builtin "${functionName(callee)}"`);
+      console.log(`Call builtin "${calleeName}"`);
     }
-    this.pushCallFrame(functionName(callee));
+    this.pushCallFrame(calleeName);
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
     const kpcallback = this.kpcallback.bind(this);
@@ -718,8 +720,12 @@ export class Vm {
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
     const kpcallback = this.kpcallback.bind(this);
+    const getMethod = this.getMethod.bind(this, functionName(callee));
     try {
-      const result = callee(args, kpcallback, { debugLog: this.debugLog });
+      const result = callee(args, kpcallback, {
+        debugLog: this.debugLog,
+        getMethod,
+      });
       this.stack.push(result);
       this.popCallFrame();
       if (this.trace) {
@@ -732,6 +738,13 @@ export class Vm {
         throw error;
       }
     }
+  }
+
+  runSelf() {
+    if (this.trace) {
+      this.logInstruction("SELF");
+    }
+    this.stack.push(this.stack.pop().self);
   }
 
   pushCallFrame(name) {
@@ -752,6 +765,18 @@ export class Vm {
     } else {
       return this.callback(f, posArgs, namedArgs);
     }
+  }
+
+  getMethod(constructorName, self, name) {
+    const methods = this.methods.get(constructorName);
+    if (methods.has(name)) {
+      const target = this.functions.get(`${constructorName}/${name}`);
+      return new Function(`${constructorName}/${name}`, this.program, target, {
+        isBuiltin: true,
+        self,
+      });
+    }
+    throw new Error(`Method ${constructorName}/${name} not found`);
   }
 
   runIndex() {
@@ -1049,12 +1074,29 @@ export class Vm {
   }
 }
 
+function extractMethods(functions) {
+  const functionSet = new Set(functions.map((f) => f.name));
+  const methods = new Map();
+  for (const f of functions) {
+    const enclosingName = f.name.split("/").slice(0, -1).join("/");
+    const methodName = f.name.split("/").at(-1);
+    if (functionSet.has(enclosingName)) {
+      if (!methods.has(enclosingName)) {
+        methods.set(enclosingName, new Set());
+      }
+      methods.get(enclosingName).add(methodName);
+    }
+  }
+  return methods;
+}
+
 class Function {
-  constructor(name, program, target, { isBuiltin }) {
+  constructor(name, program, target, { isBuiltin, self = null }) {
     this.name = name;
     this.program = program;
     this.target = target;
     this.isBuiltin = isBuiltin;
+    this.self = self;
     this.closure = [];
   }
 }
