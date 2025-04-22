@@ -144,7 +144,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstruction(op.PUSH, -numDeclaredNames);
-    this.addInstruction(op.CALL_BUILTIN);
+    this.addInstruction(op.CALL_BUILTIN, name);
     this.addInstruction(op.POP);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
@@ -155,14 +155,15 @@ class Compiler {
   }
 
   compileMethod_NEW(constructorName, method) {
+    const fullName = `${constructorName}/${method.methodName}`;
     if (this.trace) {
-      this.log(`Compiling method ${constructorName}/${method.methodName}`);
+      this.log(`Compiling method ${fullName}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(`${constructorName}/${method.methodName}`);
+    this.beginFunction(fullName);
     const paramPattern = { arrayPattern: method.params ?? [] };
     const namedParamPattern = {
       objectPattern: method.namedParams ?? [],
@@ -194,7 +195,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
     this.addInstruction(op.PUSH, -numDeclaredNames - 1);
-    this.addInstruction(op.CALL_BUILTIN);
+    this.addInstruction(op.CALL_BUILTIN, fullName);
     this.addInstruction(op.POP);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });

@@ -711,16 +711,17 @@ export class Vm {
   }
 
   runCallBuiltin() {
+    const calleeName = this.next();
     if (this.trace) {
-      this.logInstruction("CALL_BUILTIN");
+      this.logInstruction(`CALL_BUILTIN ${calleeName}`);
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
-    this.pushCallFrame(functionName(callee));
+    this.pushCallFrame(calleeName);
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
     const kpcallback = this.kpcallback.bind(this);
-    const getMethod = this.getMethod.bind(this, functionName(callee));
+    const getMethod = this.getMethod.bind(this, calleeName);
     try {
       const result = callee(args, kpcallback, {
         debugLog: this.debugLog,
@@ -769,7 +770,7 @@ export class Vm {
 
   getMethod(constructorName, self, name) {
     const methods = this.methods.get(constructorName);
-    if (methods.has(name)) {
+    if (methods && methods.has(name)) {
       const target = this.functions.get(`${constructorName}/${name}`);
       return new Function(`${constructorName}/${name}`, this.program, target, {
         isBuiltin: true,

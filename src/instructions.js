@@ -290,7 +290,7 @@ class Disassembler {
   }
 
   disassembleCallBuiltin() {
-    return "CALL_BUILTIN";
+    return `CALL_BUILTIN ${this.next()}`;
   }
 
   disassembleSelf() {

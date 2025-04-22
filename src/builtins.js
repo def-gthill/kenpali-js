@@ -937,7 +937,7 @@ const rawBuiltins = [
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
       const self = { set, originalKeys };
-      return instance_NEW(self, ["size", "elements", "has"], getMethod);
+      return instance(self, ["size", "elements", "has"], getMethod);
     },
     [
       method("size", {}, function ([self]) {
@@ -969,7 +969,7 @@ const rawBuiltins = [
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
       const self = { map, originalKeys };
-      return instance_NEW(
+      return instance(
         self,
         ["size", "keys", "values", "entries", "has", "at"],
         getMethod
@@ -1013,7 +1013,7 @@ const rawBuiltins = [
       params: ["initialValue"],
     },
     function ([initialValue], _, { getMethod }) {
-      return instance_NEW({ value: initialValue }, ["get", "set"], getMethod);
+      return instance({ value: initialValue }, ["get", "set"], getMethod);
     },
     [
       method("get", {}, function ([self]) {
@@ -1035,7 +1035,7 @@ const rawBuiltins = [
 
       const self = { array };
 
-      const object = instance_NEW(
+      const object = instance(
         self,
         ["size", "elements", "append", "set", "storeAt", "at", "pop", "clear"],
         getMethod
@@ -1125,7 +1125,7 @@ const rawBuiltins = [
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
       const self = { set, originalKeys };
-      const object = instance_NEW(
+      const object = instance(
         self,
         ["size", "elements", "add", "remove", "has", "clear"],
         getMethod
@@ -1180,7 +1180,7 @@ const rawBuiltins = [
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
       const self = { map, originalKeys };
-      const object = instance_NEW(
+      const object = instance(
         self,
         [
           "size",
@@ -1396,27 +1396,8 @@ export function method(name, paramSpec, f) {
   return f;
 }
 
-export function instance_NEW(self, methods, getMethod) {
+export function instance(self, methods, getMethod) {
   return kpobject(...methods.map((name) => [name, getMethod(self, name)]));
-}
-
-export function methodSpec(name, paramSpec = {}) {
-  return {
-    methodName: name,
-    ...paramSpec,
-  };
-}
-
-export function instance(constructorName, methods) {
-  return kpobject(
-    ...methods.map(([name, f]) => [name, boundMethod(constructorName, name, f)])
-  );
-}
-
-export function boundMethod(constructorName, methodName, f) {
-  f.constructorName = constructorName;
-  f.methodName = methodName;
-  return f;
 }
 
 function optionalFunctionParameter(name) {

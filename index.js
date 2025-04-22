@@ -1,4 +1,4 @@
-import { boundMethod, builtin, instance, methodSpec } from "./src/builtins.js";
+import { builtin, instance, method } from "./src/builtins.js";
 import { kpcall, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
 import { kpcatch } from "./src/kperror.js";
@@ -20,7 +20,6 @@ function validate(value, schema) {
 }
 
 export {
-  boundMethod,
   builtin,
   instance,
   kpcall,
@@ -31,7 +30,7 @@ export {
   kpparse,
   kpvm,
   matches,
-  methodSpec,
+  method,
   toKpFunction,
   toString,
   validate,

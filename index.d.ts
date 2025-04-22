@@ -14,26 +14,29 @@ export interface ParamSpec {
   namedParams?: SingleParamSpec[];
 }
 
-export interface MethodSpec extends ParamSpec {
-  name: string;
-}
-
-export interface BuiltinParamSpec extends ParamSpec {
-  methods?: MethodSpec[];
-}
-
-export interface BuiltinSpec extends BuiltinParamSpec {
+export type BuiltinSpec = function & {
   builtinName: string;
-}
+  methods?: MethodSpec[];
+};
 
-export type Builtin = function & BuiltinSpec;
-
-export type BoundMethod = function & {
-  constructorName: string;
+export type MethodSpec = function & {
   methodName: string;
 };
 
-export type Given = object;
+export type Callback = function & { callbackName: string };
+
+export interface Function {
+  name: string;
+  isBuiltin: boolean;
+}
+
+export type Builtin = Function & { isBuiltin: true };
+
+export type Given = Function & { isBuiltin: false };
+
+export interface BoundMethod<T> extends Builtin {
+  self: T;
+}
 
 export interface KpError {
   error: string;
@@ -47,9 +50,8 @@ export type KpValue =
   | string
   | KpArray
   | KpObject
-  | Builtin
-  | BoundMethod
-  | Given
+  | Callback
+  | Function
   | KpError;
 
 export type TypeSchema =
@@ -147,7 +149,7 @@ export function kpcall(
   namedArgs: Record<string, KpValue>,
   options: CallOptions = {}
 ): any;
-export function toKpFunction(f: function): Builtin;
+export function toKpFunction(f: function): Callback;
 export function kpcatch(f: function): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
@@ -157,16 +159,17 @@ export function toString(value: KpValue): string;
 
 export function builtin(
   name: string,
-  paramSpec: BuiltinParamSpec,
+  paramSpec: ParamSpec,
+  f: function,
+  methods?: MethodSpec[]
+): BuiltinSpec;
+export function method(
+  name: string,
+  paramSpec: ParamSpec,
   f: function
-): Builtin;
-export function methodSpec(name: string, paramSpec: ParamSpec): MethodSpec;
-export function instance(
-  constructorName: string,
-  methods: [string, function][]
+): MethodSpec;
+export function instance<Self>(
+  self: Self,
+  methods: string[],
+  getMethod: (self: Self, method: string) => BoundMethod<Self>
 ): KpObject;
-export function boundMethod(
-  constructorName: string,
-  methodName: string,
-  f: function
-): BoundMethod;
