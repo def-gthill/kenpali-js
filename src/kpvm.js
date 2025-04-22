@@ -604,8 +604,6 @@ export class Vm {
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
       this.callGiven(callee);
-    } else if (typeof callee === "function" && "methodName" in callee) {
-      this.callMethod(callee);
     } else if (isBuiltin(callee)) {
       this.callBuiltin(callee);
     } else {
@@ -616,22 +614,6 @@ export class Vm {
   callGiven(callee) {
     this.pushCallFrame(callee.name);
     const target = callee.target;
-    if (this.trace) {
-      console.log(`Jump to ${target}`);
-    }
-    this.cursor = target;
-  }
-
-  callMethod(callee) {
-    const name = `${callee.constructorName}/${callee.methodName}`;
-    if (this.trace) {
-      console.log(`Call method "${name}"`);
-    }
-    this.pushCallFrame(name);
-    const target = this.functions.get(name);
-    if (target === undefined) {
-      throw new Error(`Method "${name}" not found`);
-    }
     if (this.trace) {
       console.log(`Jump to ${target}`);
     }

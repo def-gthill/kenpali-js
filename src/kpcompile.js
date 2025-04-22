@@ -96,11 +96,7 @@ class Compiler {
         this.compileBuiltin(name, libraryFunction);
         if (libraryFunction.methods) {
           for (const method of libraryFunction.methods) {
-            if (typeof method === "function") {
-              this.compileMethod_NEW(name, method);
-            } else {
-              this.compileMethod(name, method.methodName, method);
-            }
+            this.compileMethod(name, method);
           }
         }
       } else {
@@ -154,7 +150,7 @@ class Compiler {
     this.activeFunctions.pop();
   }
 
-  compileMethod_NEW(constructorName, method) {
+  compileMethod(constructorName, method) {
     const fullName = `${constructorName}/${method.methodName}`;
     if (this.trace) {
       this.log(`Compiling method ${fullName}`);
@@ -199,51 +195,6 @@ class Compiler {
     this.addInstruction(op.POP);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
-    this.popScope();
-    this.activeFunctions.pop();
-  }
-
-  compileMethod(constructorName, methodName, paramSpec) {
-    if (this.trace) {
-      this.log(`Compiling method ${constructorName}/${methodName}`);
-    }
-    this.pushScope({
-      reservedSlots: 3,
-      functionStackIndex: this.activeFunctions.length,
-    });
-    this.beginFunction(`${constructorName}/${methodName}`);
-    const paramPattern = { arrayPattern: paramSpec.params ?? [] };
-    const namedParamPattern = {
-      objectPattern: paramSpec.namedParams ?? [],
-    };
-    if (paramPattern.arrayPattern.length > 0) {
-      this.declareNames(paramPattern);
-    }
-    if (namedParamPattern.objectPattern.length > 0) {
-      this.declareNames(namedParamPattern);
-    }
-    const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
-    this.reserveSlots(numDeclaredNames);
-    if (paramPattern.arrayPattern.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
-      this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
-    }
-    if (namedParamPattern.objectPattern.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
-      this.addDiagnostic({ name: "<namedArgs>" });
-      this.assignNames(namedParamPattern, { isArgumentPattern: true });
-    }
-    this.addInstruction(op.READ_LOCAL, 0, 0);
-    this.addInstruction(op.WRITE_LOCAL, 2);
-    this.addDiagnostic({ name: "<method>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames);
-    this.addInstruction(op.CALL_BUILTIN);
-    this.addInstruction(op.POP);
-    this.addInstruction(op.WRITE_LOCAL, 0);
-    this.addDiagnostic({ name: "<result>" });
-    this.addInstruction(op.DISCARD); // The positional arguments handoff
-    // (The named arguments slot already got trampled by the result)
     this.popScope();
     this.activeFunctions.pop();
   }
