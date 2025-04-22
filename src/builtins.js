@@ -961,259 +961,206 @@ const rawBuiltins = [
           defaultValue: literal([]),
         },
       ],
-      methods: [
-        methodSpec("size"),
-        methodSpec("keys"),
-        methodSpec("values"),
-        methodSpec("entries"),
-        methodSpec("has", { params: ["key"] }),
-        methodSpec("at", {
-          params: ["key"],
-          namedParams: [optionalFunctionParameter("default")],
-        }),
-      ],
     },
-    function ([entries]) {
+    function ([entries], _, { getMethod }) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
       const map = new Map(realEntries);
       const originalKeys = new Map(
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
-      const object = instance("newMap", [
-        [
-          "size",
-          function () {
-            return map.size;
-          },
-        ],
-        [
-          "keys",
-          function () {
-            return [...map.keys()].map((key) => originalKeys.get(key));
-          },
-        ],
-        [
-          "values",
-          function () {
-            return [...map.values()];
-          },
-        ],
-        [
-          "entries",
-          function () {
-            return [...map.entries()].map(([key, value]) => [
-              originalKeys.get(key),
-              value,
-            ]);
-          },
-        ],
-        [
-          "has",
-          function ([key]) {
-            return map.has(toKey(key));
-          },
-        ],
-        [
-          "at",
-          function ([key, default_], kpcallback) {
-            const realKey = toKey(key);
-            return indexMapping(map, realKey, default_, kpcallback, object);
-          },
-        ],
-      ]);
-      return object;
-    }
+      const self = { map, originalKeys };
+      return instance_NEW(
+        self,
+        ["size", "keys", "values", "entries", "has", "at"],
+        getMethod
+      );
+    },
+    [
+      method("size", {}, function ([self]) {
+        return self.map.size;
+      }),
+      method("keys", {}, function ([self]) {
+        return [...self.map.keys()].map((key) => self.originalKeys.get(key));
+      }),
+      method("values", {}, function ([self]) {
+        return [...self.map.values()];
+      }),
+      method("entries", {}, function ([self]) {
+        return [...self.map.entries()].map(([key, value]) => [
+          self.originalKeys.get(key),
+          value,
+        ]);
+      }),
+      method("has", { params: ["key"] }, function ([self, key]) {
+        return self.map.has(toKey(key));
+      }),
+      method(
+        "at",
+        {
+          params: ["key"],
+          namedParams: [optionalFunctionParameter("default")],
+        },
+        function ([self, key, default_], kpcallback) {
+          const realKey = toKey(key);
+          return indexMapping(self.map, realKey, default_, kpcallback, self);
+        }
+      ),
+    ]
   ),
   builtin(
     "variable",
     {
       params: ["initialValue"],
-      methods: [methodSpec("get"), methodSpec("set", { params: ["newValue"] })],
     },
-    function ([initialValue]) {
-      let value = initialValue;
-      return instance("variable", [
-        [
-          "get",
-          function () {
-            return value;
-          },
-        ],
-        [
-          "set",
-          function ([newValue]) {
-            value = newValue;
-            return value;
-          },
-        ],
-      ]);
-    }
+    function ([initialValue], _, { getMethod }) {
+      return instance_NEW({ value: initialValue }, ["get", "set"], getMethod);
+    },
+    [
+      method("get", {}, function ([self]) {
+        return self.value;
+      }),
+      method("set", { params: ["newValue"] }, function ([self, newValue]) {
+        self.value = newValue;
+        return newValue;
+      }),
+    ]
   ),
   builtin(
     "mutableArray",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
-      methods: [
-        methodSpec("size"),
-        methodSpec("elements"),
-        methodSpec("append", { params: ["element"] }),
-        methodSpec("set", {
-          params: [{ name: "index", type: "number" }, "element"],
-        }),
-        methodSpec("storeAt", {
-          params: ["element", { name: "index", type: "number" }],
-        }),
-        methodSpec("at", {
-          params: [{ name: "index", type: "number" }],
-          namedParams: [optionalFunctionParameter("default")],
-        }),
-        methodSpec("pop", {
-          namedParams: [optionalFunctionParameter("default")],
-        }),
-        methodSpec("clear"),
-      ],
     },
-    function ([elements]) {
+    function ([elements], _, { getMethod }) {
       const array = [...elements];
 
-      function set(index, element) {
-        if (index > 0 && index <= array.length) {
-          array[index - 1] = element;
-        } else if (index < 0 && index >= -array.length) {
-          array[array.length - index] = element;
-        } else {
-          throw kperror(
-            "indexOutOfBounds",
-            ["value", object],
-            ["length", array.length],
-            ["index", index]
+      const self = { array };
+
+      const object = instance_NEW(
+        self,
+        ["size", "elements", "append", "set", "storeAt", "at", "pop", "clear"],
+        getMethod
+      );
+
+      self.object = object;
+
+      return object;
+    },
+    [
+      method("size", {}, function ([self]) {
+        return self.array.length;
+      }),
+      method("elements", {}, function ([self]) {
+        return [...self.array];
+      }),
+      method("append", { params: ["element"] }, function ([self, element]) {
+        self.array.push(element);
+        return self.object;
+      }),
+      method(
+        "set",
+        {
+          params: [{ name: "index", type: "number" }, "element"],
+        },
+        function ([self, index, element]) {
+          setArray(self.array, index, element, self.object);
+          return self.object;
+        }
+      ),
+      method(
+        "storeAt",
+        {
+          params: ["element", { name: "index", type: "number" }],
+        },
+        function ([self, element, index]) {
+          setArray(self.array, index, element, self.object);
+          return self.object;
+        }
+      ),
+      method(
+        "at",
+        {
+          params: [{ name: "index", type: "number" }],
+          namedParams: [optionalFunctionParameter("default")],
+        },
+        function ([self, index, default_], kpcallback) {
+          return indexArray(
+            self.array,
+            index,
+            default_,
+            kpcallback,
+            self.object
           );
         }
-        return object;
-      }
-
-      const object = instance("mutableArray", [
-        [
-          "size",
-          function () {
-            return array.length;
-          },
-        ],
-        [
-          "elements",
-          function () {
-            return [...array];
-          },
-        ],
-        [
-          "append",
-          function ([element]) {
-            array.push(element);
-            return object;
-          },
-        ],
-        [
-          "set",
-          function ([index, element]) {
-            return set(index, element);
-          },
-        ],
-        [
-          "storeAt",
-          function ([element, index]) {
-            return set(index, element);
-          },
-        ],
-        [
-          "at",
-          function ([index, default_], kpcallback) {
-            return indexArray(array, index, default_, kpcallback, object);
-          },
-        ],
-        [
-          "pop",
-          function ([default_], kpcallback) {
-            const result = indexArray(array, -1, default_, kpcallback, object);
-            array.pop();
-            return result;
-          },
-        ],
-        [
-          "clear",
-          function () {
-            array.length = 0;
-            return object;
-          },
-        ],
-      ]);
-      return object;
-    }
+      ),
+      method(
+        "pop",
+        {
+          namedParams: [optionalFunctionParameter("default")],
+        },
+        function ([self, default_], kpcallback) {
+          const result = indexArray(
+            self.array,
+            -1,
+            default_,
+            kpcallback,
+            self.object
+          );
+          self.array.pop();
+          return result;
+        }
+      ),
+      method("clear", {}, function ([self]) {
+        self.array.length = 0;
+        return self.object;
+      }),
+    ]
   ),
   builtin(
     "mutableSet",
     {
       params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
-      methods: [
-        methodSpec("size"),
-        methodSpec("elements"),
-        methodSpec("add", { params: ["element"] }),
-        methodSpec("remove", { params: ["element"] }),
-        methodSpec("has", { params: ["element"] }),
-        methodSpec("clear"),
-      ],
     },
-    function ([elements]) {
+    function ([elements], _, { getMethod }) {
       const keys = elements.map(toKey);
       const set = new Set(keys);
       const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      const object = instance("mutableSet", [
-        [
-          "size",
-          function () {
-            return set.size;
-          },
-        ],
-        [
-          "elements",
-          function () {
-            return [...set.keys()].map((key) => originalKeys.get(key));
-          },
-        ],
-        [
-          "add",
-          function ([element]) {
-            const key = toKey(element);
-            set.add(key);
-            originalKeys.set(key, element);
-            return object;
-          },
-        ],
-        [
-          "remove",
-          function ([element]) {
-            const key = toKey(element);
-            set.delete(key);
-            originalKeys.delete(key);
-            return object;
-          },
-        ],
-        [
-          "has",
-          function ([element]) {
-            return set.has(toKey(element));
-          },
-        ],
-        [
-          "clear",
-          function () {
-            set.clear();
-            originalKeys.clear();
-            return object;
-          },
-        ],
-      ]);
+      const self = { set, originalKeys };
+      const object = instance_NEW(
+        self,
+        ["size", "elements", "add", "remove", "has", "clear"],
+        getMethod
+      );
+      self.object = object;
       return object;
-    }
+    },
+    [
+      method("size", {}, function ([self]) {
+        return self.set.size;
+      }),
+      method("elements", {}, function ([self]) {
+        return [...self.set.keys()].map((key) => self.originalKeys.get(key));
+      }),
+      method("add", { params: ["element"] }, function ([self, element]) {
+        const key = toKey(element);
+        self.set.add(key);
+        self.originalKeys.set(key, element);
+        return self.object;
+      }),
+      method("remove", { params: ["element"] }, function ([self, element]) {
+        const key = toKey(element);
+        self.set.delete(key);
+        self.originalKeys.delete(key);
+        return self.object;
+      }),
+      method("has", { params: ["element"] }, function ([self, element]) {
+        return self.set.has(toKey(element));
+      }),
+      method("clear", {}, function ([self]) {
+        self.set.clear();
+        originalKeys.clear();
+        return self.object;
+      }),
+    ]
   ),
   builtin(
     "mutableMap",
@@ -1225,107 +1172,101 @@ const rawBuiltins = [
           defaultValue: literal([]),
         },
       ],
-      methods: [
-        methodSpec("size"),
-        methodSpec("keys"),
-        methodSpec("values"),
-        methodSpec("entries"),
-        methodSpec("set", { params: ["key", "value"] }),
-        methodSpec("storeAt", { params: ["value", "key"] }),
-        methodSpec("remove", { params: ["key"] }),
-        methodSpec("has", { params: ["key"] }),
-        methodSpec("at", {
-          params: ["key"],
-          namedParams: [optionalFunctionParameter("default")],
-        }),
-        methodSpec("clear"),
-      ],
     },
-    function ([entries]) {
+    function ([entries], _, { getMethod }) {
       const realEntries = entries.map(([key, value]) => [toKey(key), value]);
       const map = new Map(realEntries);
       const originalKeys = new Map(
         realEntries.map(([key, _], i) => [key, entries[i][0]])
       );
-      const object = instance("mutableMap", [
+      const self = { map, originalKeys };
+      const object = instance_NEW(
+        self,
         [
           "size",
-          function () {
-            return map.size;
-          },
-        ],
-        [
           "keys",
-          function () {
-            return [...map.keys()].map((key) => originalKeys.get(key));
-          },
-        ],
-        [
           "values",
-          function () {
-            return [...map.values()];
-          },
-        ],
-        [
           "entries",
-          function () {
-            return [...map.entries()].map(([key, value]) => [
-              originalKeys.get(key),
-              value,
-            ]);
-          },
-        ],
-        [
           "set",
-          function ([key, value]) {
-            const realKey = toKey(key);
-            map.set(realKey, value);
-            originalKeys.set(realKey, key);
-            return object;
-          },
-        ],
-        [
           "storeAt",
-          function ([value, key]) {
-            const realKey = toKey(key);
-            map.set(realKey, value);
-            originalKeys.set(realKey, key);
-            return object;
-          },
-        ],
-        [
           "remove",
-          function ([key]) {
-            const realKey = toKey(key);
-            map.delete(realKey);
-            originalKeys.delete(realKey);
-            return object;
-          },
-        ],
-        [
           "has",
-          function ([key]) {
-            return map.has(toKey(key));
-          },
-        ],
-        [
           "at",
-          function ([key, default_], kpcallback) {
-            const realKey = toKey(key);
-            return indexMapping(map, realKey, default_, kpcallback, object);
-          },
-        ],
-        [
           "clear",
-          function () {
-            map.clear();
-            originalKeys.clear();
-            return object;
-          },
         ],
-      ]);
+        getMethod
+      );
+      self.object = object;
       return object;
-    }
+    },
+    [
+      method("size", {}, function ([self]) {
+        return self.map.size;
+      }),
+      method("keys", {}, function ([self]) {
+        return [...self.map.keys()].map((key) => self.originalKeys.get(key));
+      }),
+      method("values", {}, function ([self]) {
+        return [...self.map.values()];
+      }),
+      method("entries", {}, function ([self]) {
+        return [...self.map.entries()].map(([key, value]) => [
+          self.originalKeys.get(key),
+          value,
+        ]);
+      }),
+      method(
+        "set",
+        { params: ["key", "value"] },
+        function ([self, key, value]) {
+          const realKey = toKey(key);
+          self.map.set(realKey, value);
+          self.originalKeys.set(realKey, key);
+          return self.object;
+        }
+      ),
+      method(
+        "storeAt",
+        { params: ["value", "key"] },
+        function ([self, value, key]) {
+          const realKey = toKey(key);
+          self.map.set(realKey, value);
+          self.originalKeys.set(realKey, key);
+          return self.object;
+        }
+      ),
+      method("remove", { params: ["key"] }, function ([self, key]) {
+        const realKey = toKey(key);
+        self.map.delete(realKey);
+        self.originalKeys.delete(realKey);
+        return self.object;
+      }),
+      method("has", { params: ["key"] }, function ([self, key]) {
+        return self.map.has(toKey(key));
+      }),
+      method(
+        "at",
+        {
+          params: ["key"],
+          namedParams: [optionalFunctionParameter("default")],
+        },
+        function ([self, key, default_], kpcallback) {
+          const realKey = toKey(key);
+          return indexMapping(
+            self.map,
+            realKey,
+            default_,
+            kpcallback,
+            self.object
+          );
+        }
+      ),
+      method("clear", {}, function ([self]) {
+        self.map.clear();
+        self.originalKeys.clear();
+        return self.object;
+      }),
+    ]
   ),
   builtin(
     "validate",
@@ -1551,6 +1492,21 @@ export function toStream(value) {
     return toStream(toArray(value));
   } else {
     return value;
+  }
+}
+
+function setArray(array, index, element, valueForError) {
+  if (index > 0 && index <= array.length) {
+    array[index - 1] = element;
+  } else if (index < 0 && index >= -array.length) {
+    array[array.length - index] = element;
+  } else {
+    throw kperror(
+      "indexOutOfBounds",
+      ["value", valueForError],
+      ["length", array.length],
+      ["index", index]
+    );
   }
 }
 
