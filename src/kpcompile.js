@@ -270,7 +270,7 @@ class Compiler {
       const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
       let givenName =
         name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-      if (enclosingFunctionName && enclosingFunctionName !== "$main") {
+      if (enclosingFunctionName) {
         givenName = `${enclosingFunctionName}/${givenName}`;
       }
       this.compileGiven(expression, givenName);
