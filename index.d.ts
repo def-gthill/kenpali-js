@@ -2,6 +2,16 @@ export type KpAstNode = object;
 
 export type KpArray = KpValue[];
 
+export type Stream = (
+  | {
+      value: () => KpValue;
+      next: () => Stream;
+    }
+  | {}
+) & { isEmpty: () => boolean };
+
+export type Sequence = string | KpArray | Stream;
+
 export type KpObject = Map<string, KpValue>;
 
 export type SingleParamSpec =
@@ -20,14 +30,16 @@ export type Callback = (
   context: VmContext
 ) => KpValue;
 
-export interface Function {
+export interface CompiledFunction {
   name: string;
   isBuiltin: boolean;
 }
 
-export type Builtin = Function & { isBuiltin: true };
+export type Builtin = CompiledFunction & { isBuiltin: true };
 
-export type Given = Function & { isBuiltin: false };
+export type Given = CompiledFunction & { isBuiltin: false };
+
+export type KpFunction = Callback | CompiledFunction;
 
 export interface KpError {
   error: string;
@@ -40,9 +52,10 @@ export type KpValue =
   | number
   | string
   | KpArray
+  | Stream
   | KpObject
   | Callback
-  | Function
+  | CompiledFunction
   | KpError;
 
 export type TypeSchema =
@@ -51,6 +64,7 @@ export type TypeSchema =
   | "number"
   | "string"
   | "array"
+  | "stream"
   | "object"
   | "builtin"
   | "given"
@@ -66,16 +80,42 @@ export interface OneOfSchema {
   oneOf: KpValue[];
 }
 
-export interface TypeWithWhereSchema {
-  type: TypeSchema;
-  where: (value: KpValue) => boolean;
+export type TypeToValue<T extends TypeSchema> = T extends "null"
+  ? null
+  : T extends "boolean"
+    ? boolean
+    : T extends "number"
+      ? number
+      : T extends "string"
+        ? string
+        : T extends "array"
+          ? KpArray
+          : T extends "stream"
+            ? Stream
+            : T extends "object"
+              ? KpObject
+              : T extends "builtin"
+                ? Builtin
+                : T extends "given"
+                  ? Given
+                  : T extends "error"
+                    ? KpError
+                    : T extends "function"
+                      ? KpFunction
+                      : T extends "sequence"
+                        ? Sequence
+                        : KpValue;
+
+export interface TypeWithWhereSchema<T extends TypeSchema = TypeSchema> {
+  type: T;
+  where: (value: TypeToValue<T>) => boolean;
 }
 
 export interface ArrayWithConditionsSchema {
   type: "array";
   shape?: Schema[];
   elements?: Schema;
-  where?: (value: KpValue) => boolean;
+  where?: (value: KpArray) => boolean;
 }
 
 export interface ObjectWithConditionsSchema {
@@ -83,7 +123,7 @@ export interface ObjectWithConditionsSchema {
   shape?: Record<string, Schema>;
   keys?: TypeWithWhereSchema & { type: "string" };
   values?: Schema;
-  where?: (value: KpValue) => boolean;
+  where?: (value: KpObject) => boolean;
 }
 
 export type TypeWithConditionsSchema =
@@ -135,7 +175,7 @@ export function kpcompile(
 export function kpvm(program: KpProgram, options: VmOptions): KpValue;
 
 export function kpcall(
-  f: Given,
+  f: KpFunction,
   args: KpValue[],
   namedArgs: Record<string, KpValue>,
   options: CallOptions = {}
@@ -147,12 +187,30 @@ export function toKpFunction(
     kpcallback: Kpcallback
   ) => KpValue
 ): Callback;
-export function kpcatch(f: () => KpValue): KpValue;
+export function kpcatch<T>(f: () => T): T | KpError;
+export function foldError(
+  f: () => KpValue,
+  onSuccess: (value: KpValue) => KpValue,
+  onFailure: (error: KpError) => KpValue
+): KpValue;
 
 export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function matches(value: KpValue, schema: Schema): boolean;
+export function matches<T extends Schema = Schema>(
+  value: KpValue,
+  schema: T
+): value is TypeToValue<T>;
 export function validate(value: KpValue, schema: Schema): void;
+export function validateCatching(
+  value: KpValue,
+  schema: Schema
+): KpError | null;
+export function validateErrorTo(
+  value: KpValue,
+  schema: Schema,
+  onFailure: (error: KpError) => void
+): void;
 export function toString(value: KpValue): string;
+export function isError(value: unknown): value is KpError;
 
 export type Kpcallback = (
   callee: KpValue,
