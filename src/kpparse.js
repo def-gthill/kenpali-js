@@ -3,7 +3,7 @@ import {
   array,
   arrayPattern,
   arraySpread,
-  defining,
+  block,
   given,
   group,
   indexing,
@@ -87,7 +87,7 @@ function parseScope(parser, start) {
       parseAssignable,
     ],
     (statements, result) =>
-      statements.length === 0 ? result : defining(...statements, result)
+      statements.length === 0 ? result : block(...statements, result)
   )(parser, start);
 }
 
@@ -97,7 +97,7 @@ function parseStatement(parser, start) {
       "assignmentTargets",
       parseAllOfFlat(
         "assignmentTarget",
-        [parseDefiningPattern, consume("EQUALS", "missingEqualsInDefinition")],
+        [parseNamePattern, consume("EQUALS", "missingEqualsInDefinition")],
         (result) => result
       )
     ),
@@ -105,9 +105,9 @@ function parseStatement(parser, start) {
   ])(parser, start);
 }
 
-function parseDefiningPattern(parser, start) {
+function parseNamePattern(parser, start) {
   return parseAnyOf(
-    "definingPattern",
+    "namePattern",
     convert(parseName, (name) => name.name),
     parseArrayPattern,
     parseObjectPattern
@@ -134,19 +134,15 @@ function parseArrayPatternElement(parser, start) {
     "arrayPatternElement",
     parseAllOf(
       "arrayPatternDefault",
-      [
-        parseDefiningPattern,
-        consume("EQUALS", "expectedDefault"),
-        parseAssignable,
-      ],
+      [parseNamePattern, consume("EQUALS", "expectedDefault"), parseAssignable],
       (name, defaultValue) => ({ name, defaultValue })
     ),
     parseAllOf(
       "arrayPatternRest",
-      [consume("STAR", "expectedRest"), parseDefiningPattern],
+      [consume("STAR", "expectedRest"), parseNamePattern],
       (pattern) => ({ rest: pattern })
     ),
-    parseDefiningPattern
+    parseNamePattern
   )(parser, start);
 }
 
@@ -179,7 +175,7 @@ function parseObjectPatternElement(parser, start) {
     ),
     parseAllOf(
       "objectPatternRest",
-      [consume("DOUBLE_STAR", "expectedRest"), parseDefiningPattern],
+      [consume("DOUBLE_STAR", "expectedRest"), parseNamePattern],
       (pattern) => ({ namedRest: pattern })
     ),
     parseObjectPatternSimple
@@ -194,7 +190,7 @@ function parseObjectPatternSimple(parser, start) {
       [
         parseAssignable,
         consume("COLON", "missingKeyTargetSeparator"),
-        parseDefiningPattern,
+        parseNamePattern,
       ],
       (name, pattern) => ({ name: pattern, property: name.name })
     ),

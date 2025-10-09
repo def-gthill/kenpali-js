@@ -264,8 +264,8 @@ class Compiler {
       this.compileObject(expression);
     } else if ("name" in expression) {
       this.compileName(expression);
-    } else if ("defining" in expression) {
-      this.compileDefining(expression);
+    } else if ("defs" in expression) {
+      this.compileBlock(expression);
     } else if ("given" in expression) {
       const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
       let givenName =
@@ -435,11 +435,11 @@ class Compiler {
     }
   }
 
-  compileDefining(expression) {
+  compileBlock(expression) {
     this.reserveSlots(1); // For the result
     this.pushScope();
     this.addInstruction(op.PUSH, 0);
-    this.defineNames(expression.defining);
+    this.defineNames(expression.defs);
     this.compileExpression(expression.result);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
@@ -1144,16 +1144,16 @@ class LibraryFilter {
           outerThis.currentUsage.add(outerThis.libraryByName.get(node.name));
         }
       },
-      handleDefining(node, recurse) {
+      handleBlock(node, recurse) {
         const scope = new Set();
-        for (const statement of node.defining) {
+        for (const statement of node.defs) {
           if (Array.isArray(statement)) {
             const [name, _] = statement;
             scope.add(name);
           }
         }
         outerThis.activeScopes.push(scope);
-        for (const statement of node.defining) {
+        for (const statement of node.defs) {
           if (Array.isArray(statement)) {
             const [_, value] = statement;
             recurse(value);

@@ -1,8 +1,8 @@
 import {
   array,
+  block,
   calling,
   catching,
-  defining,
   given,
   indexing,
   literal,
@@ -15,8 +15,8 @@ export default function desugar(expression) {
     return desugarArray(expression);
   } else if ("object" in expression) {
     return desugarObject(expression);
-  } else if ("defining" in expression) {
-    return desugarDefining(expression);
+  } else if ("defs" in expression) {
+    return desugarBlock(expression);
   } else if ("given" in expression) {
     return desugarGiven(expression);
   } else if ("indexing" in expression) {
@@ -66,17 +66,17 @@ function desugarPropertyDefinition(expression) {
   }
 }
 
-function desugarDefining(expression) {
-  return defining(
-    ...kpoEntries(expression.defining).map(([name, value]) => [
-      name ? desugarDefiningPattern(name) : name,
+function desugarBlock(expression) {
+  return block(
+    ...kpoEntries(expression.defs).map(([name, value]) => [
+      name ? desugarNamePattern(name) : name,
       desugar(value),
     ]),
     desugar(expression.result)
   );
 }
 
-function desugarDefiningPattern(pattern) {
+function desugarNamePattern(pattern) {
   if (typeof pattern === "string") {
     return pattern;
   } else if ("arrayPattern" in pattern) {
@@ -84,30 +84,30 @@ function desugarDefiningPattern(pattern) {
   } else if ("objectPattern" in pattern) {
     return { objectPattern: desugarObjectPattern(pattern.objectPattern) };
   } else if ("name" in pattern) {
-    return { ...pattern, name: desugarDefiningPattern(pattern.name) };
+    return { ...pattern, name: desugarNamePattern(pattern.name) };
   }
 }
 
 function desugarArrayPattern(pattern) {
-  return pattern.map(desugarDefiningPatternElement);
+  return pattern.map(desugarNamePatternElement);
 }
 
 function desugarObjectPattern(pattern) {
-  return pattern.map(desugarDefiningPatternElement);
+  return pattern.map(desugarNamePatternElement);
 }
 
-function desugarDefiningPatternElement(element) {
+function desugarNamePatternElement(element) {
   if (typeof element === "object" && "rest" in element) {
-    return { rest: desugarDefiningPattern(element.rest) };
+    return { rest: desugarNamePattern(element.rest) };
   } else if (typeof element === "object" && "namedRest" in element) {
-    return { rest: desugarDefiningPattern(element.namedRest) };
+    return { rest: desugarNamePattern(element.namedRest) };
   } else if (typeof element === "object" && "defaultValue" in element) {
     return {
-      name: desugarDefiningPattern(element.name),
+      name: desugarNamePattern(element.name),
       defaultValue: desugar(element.defaultValue),
     };
   } else {
-    return desugarDefiningPattern(element);
+    return desugarNamePattern(element);
   }
 }
 

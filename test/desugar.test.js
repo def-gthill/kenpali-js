@@ -3,9 +3,9 @@ import desugar from "../src/desugar.js";
 import {
   array,
   arraySpread,
+  block,
   calling,
   catching,
-  defining,
   given,
   group,
   indexing,
@@ -75,9 +75,9 @@ test("Desugaring propagates through objects", (t) => {
 });
 
 test("Desugaring propagates through scopes", (t) => {
-  const expression = defining(["foo", pipeSugared], pipeSugared);
+  const expression = block(["foo", pipeSugared], pipeSugared);
   const result = desugar(expression);
-  t.deepEqual(result, defining(["foo", pipeDesugared], pipeDesugared));
+  t.deepEqual(result, block(["foo", pipeDesugared], pipeDesugared));
 });
 
 test("Desugaring propagates through function definitions", (t) => {

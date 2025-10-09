@@ -1,8 +1,8 @@
 import test from "ava";
 import { kpcall, toKpFunction } from "../src/interop.js";
 import {
+  block,
   calling,
-  defining,
   given,
   indexing,
   literal,
@@ -65,7 +65,7 @@ test("Named arguments are sent to the Kenpali function", (t) => {
 
 test("Kenpali parameter defaults can reference names from the context", (t) => {
   const kpf = kpeval(
-    defining(
+    block(
       ["a", literal(5)],
       given(
         { params: ["x", { name: "y", defaultValue: name("a") }] },

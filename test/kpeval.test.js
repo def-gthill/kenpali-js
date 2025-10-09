@@ -1,6 +1,6 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import { calling, defining, given, literal, name } from "../src/kpast.js";
+import { block, calling, given, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
@@ -18,7 +18,7 @@ test("Evaluating null returns an error", (t) => {
 test("We can define and call a two-argument function", (t) => {
   t.is(
     kpeval(
-      defining(
+      block(
         [
           "funkyTimes",
           given(
@@ -39,7 +39,7 @@ test("We can define and call a two-argument function", (t) => {
 test("Function arguments can reference names", (t) => {
   t.is(
     kpeval(
-      defining(
+      block(
         [
           "add3",
           given(
@@ -47,7 +47,7 @@ test("Function arguments can reference names", (t) => {
             calling(name("plus"), [name("x"), literal(3)])
           ),
         ],
-        defining(
+        block(
           ["meaning", literal(42)],
           calling(name("add3"), [name("meaning")])
         )
@@ -72,7 +72,7 @@ test("Names in modules can be accessed", (t) => {
 });
 
 test("Local names don't shadow names in modules", (t) => {
-  const ast = defining(
+  const ast = block(
     ["bar", name("bar", "foo")],
     calling(name("bar"), [literal("world")])
   );

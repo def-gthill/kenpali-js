@@ -30,10 +30,10 @@ export function name(name, moduleName) {
   return result;
 }
 
-export function defining(...args) {
-  const names = args.slice(0, -1);
+export function block(...args) {
+  const defs = args.slice(0, -1);
   const result = args.at(-1);
-  return { defining: names, result };
+  return { defs, result };
 }
 
 export function given(params, result) {
@@ -121,10 +121,10 @@ export function transformTree(expression, handlers) {
     }));
   } else if ("name" in expression) {
     return transformNode("handleName", (node) => node);
-  } else if ("defining" in expression) {
-    return transformNode("handleDefining", (node) => ({
+  } else if ("defs" in expression) {
+    return transformNode("handleBlock", (node) => ({
       ...node,
-      defining: node.defining.map(([name, value]) => [
+      defs: node.defs.map(([name, value]) => [
         typeof name === "string" ? name : recurse(name),
         recurse(value),
       ]),
@@ -177,12 +177,10 @@ export function transformTree(expression, handlers) {
 
 export function toAst(expressionRaw) {
   return transformTree(expressionRaw, {
-    handleDefining(node, _recurse, handleDefault) {
+    handleBlock(node, _recurse, handleDefault) {
       return handleDefault({
         ...node,
-        defining: Array.isArray(node.defining)
-          ? node.defining
-          : toKpobject(node.defining),
+        defs: Array.isArray(node.defs) ? node.defs : toKpobject(node.defs),
       });
     },
     handleCalling(node, _recurse, handleDefault) {
