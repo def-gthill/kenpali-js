@@ -1,6 +1,6 @@
 import test from "ava";
 import { builtin } from "../src/builtins.js";
-import { block, calling, given, literal, name } from "../src/kpast.js";
+import { block, call, function_, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
@@ -21,15 +21,15 @@ test("We can define and call a two-argument function", (t) => {
       block(
         [
           "funkyTimes",
-          given(
-            { params: ["a", "b"] },
-            calling(name("times"), [
-              calling(name("plus"), [name("a"), literal(2)]),
-              calling(name("plus"), [name("b"), literal(3)]),
-            ])
+          function_(
+            call(name("times"), [
+              call(name("plus"), [name("a"), literal(2)]),
+              call(name("plus"), [name("b"), literal(3)]),
+            ]),
+            ["a", "b"]
           ),
         ],
-        calling(name("funkyTimes"), [literal(5), literal(3)])
+        call(name("funkyTimes"), [literal(5), literal(3)])
       )
     ),
     42
@@ -40,17 +40,8 @@ test("Function arguments can reference names", (t) => {
   t.is(
     kpeval(
       block(
-        [
-          "add3",
-          given(
-            { params: ["x"] },
-            calling(name("plus"), [name("x"), literal(3)])
-          ),
-        ],
-        block(
-          ["meaning", literal(42)],
-          calling(name("add3"), [name("meaning")])
-        )
+        ["add3", function_(call(name("plus"), [name("x"), literal(3)]), ["x"])],
+        block(["meaning", literal(42)], call(name("add3"), [name("meaning")]))
       )
     ),
     45
@@ -58,7 +49,7 @@ test("Function arguments can reference names", (t) => {
 });
 
 test("Names in modules can be accessed", (t) => {
-  const ast = calling(name("bar", "foo"), [literal("world")]);
+  const ast = call(name("bar", "foo"), [literal("world")]);
   const fooModule = kpobject([
     "bar",
     builtin(
@@ -74,7 +65,7 @@ test("Names in modules can be accessed", (t) => {
 test("Local names don't shadow names in modules", (t) => {
   const ast = block(
     ["bar", name("bar", "foo")],
-    calling(name("bar"), [literal("world")])
+    call(name("bar"), [literal("world")])
   );
   const fooModule = kpobject([
     "bar",
@@ -89,7 +80,7 @@ test("Local names don't shadow names in modules", (t) => {
 });
 
 test("Functions in modules have type checking applied", (t) => {
-  const ast = calling(name("bar", "foo"), [literal(42)]);
+  const ast = call(name("bar", "foo"), [literal(42)]);
   const fooModule = kpobject([
     "bar",
     builtin(

@@ -1,7 +1,7 @@
 import { loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import * as op from "./instructions.js";
-import { transformTree } from "./kpast.js";
+import { array, object, transformTree } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
@@ -254,39 +254,59 @@ class Compiler {
   }
 
   compileExpression(expression, name) {
-    if (expression === null || typeof expression !== "object") {
+    if (
+      expression === null ||
+      typeof expression !== "object" ||
+      !("type" in expression)
+    ) {
       throw kperror("notAnExpression", ["value", expression]);
-    } else if ("literal" in expression) {
-      this.compileLiteral(expression);
-    } else if ("array" in expression) {
-      this.compileArray(expression);
-    } else if ("object" in expression) {
-      this.compileObject(expression);
-    } else if ("name" in expression) {
-      this.compileName(expression);
-    } else if ("defs" in expression) {
-      this.compileBlock(expression);
-    } else if ("given" in expression) {
-      const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
-      let givenName =
-        name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-      if (enclosingFunctionName) {
-        givenName = `${enclosingFunctionName}/${givenName}`;
-      }
-      this.compileGiven(expression, givenName);
-    } else if ("calling" in expression) {
-      this.compileCalling(expression);
-    } else if ("indexing" in expression) {
-      this.compileIndexing(expression);
-    } else if ("catching" in expression) {
-      this.compileCatching(expression);
     } else {
-      throw kperror("notAnExpression", ["value", expression]);
+      this.compileExpressionByType(expression, name);
+    }
+  }
+
+  compileExpressionByType(expression, name) {
+    switch (expression.type) {
+      case "literal":
+        this.compileLiteral(expression);
+        break;
+      case "array":
+        this.compileArray(expression);
+        break;
+      case "object":
+        this.compileObject(expression);
+        break;
+      case "name":
+        this.compileName(expression);
+        break;
+      case "block":
+        this.compileBlock(expression);
+        break;
+      case "function":
+        const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
+        let functionName =
+          name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
+        if (enclosingFunctionName) {
+          functionName = `${enclosingFunctionName}/${functionName}`;
+        }
+        this.compileFunction(expression, functionName);
+        break;
+      case "call":
+        this.compileCall(expression);
+        break;
+      case "index":
+        this.compileIndex(expression);
+        break;
+      case "catch":
+        this.compileCatch(expression);
+        break;
+      default:
+        throw kperror("notAnExpression", ["value", expression]);
     }
   }
 
   compileLiteral(expression) {
-    this.addInstruction(op.VALUE, expression.literal);
+    this.addInstruction(op.VALUE, expression.value);
   }
 
   compileArray(expression) {
@@ -294,7 +314,7 @@ class Compiler {
       this.logNodeStart("Starting array");
     }
     this.addInstruction(op.EMPTY_ARRAY);
-    for (const element of expression.array) {
+    for (const element of expression.elements) {
       if ("spread" in element) {
         this.compileExpression(element.spread);
         this.addInstruction(op.ARRAY_EXTEND);
@@ -313,7 +333,7 @@ class Compiler {
       this.logNodeStart("Starting object");
     }
     this.addInstruction(op.EMPTY_OBJECT);
-    for (const entry of expression.object) {
+    for (const entry of expression.entries) {
       if ("spread" in entry) {
         this.compileExpression(entry.spread);
         this.addInstruction(op.OBJECT_MERGE);
@@ -563,7 +583,7 @@ class Compiler {
     }
   }
 
-  compileGiven(expression, name) {
+  compileFunction(expression, name) {
     if (this.trace) {
       this.logNodeStart(`Starting function ${name}`);
     }
@@ -572,9 +592,9 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(name);
-    const paramPattern = { arrayPattern: expression.given.params ?? [] };
+    const paramPattern = { arrayPattern: expression.params ?? [] };
     const namedParamPattern = {
-      objectPattern: expression.given.namedParams ?? [],
+      objectPattern: expression.namedParams ?? [],
     };
     if (paramPattern.arrayPattern.length > 0) {
       this.declareNames(paramPattern);
@@ -593,7 +613,7 @@ class Compiler {
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
-    this.compileExpression(expression.result);
+    this.compileExpression(expression.body);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
@@ -629,34 +649,34 @@ class Compiler {
     }
   }
 
-  compileCalling(expression) {
+  compileCall(expression) {
     if (this.trace) {
-      this.logNodeStart("Starting calling");
+      this.logNodeStart("Starting call");
     }
-    this.compileExpression(expression.calling);
-    this.compileExpression({ array: expression.args ?? [] });
-    this.compileExpression({ object: expression.namedArgs ?? [] });
+    this.compileExpression(expression.callee);
+    this.compileExpression(array(...(expression.args ?? [])));
+    this.compileExpression(object(...(expression.namedArgs ?? [])));
     this.addInstruction(op.PUSH, -2);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP);
     if (this.trace) {
-      this.logNodeEnd("Finished calling");
+      this.logNodeEnd("Finished call");
     }
   }
 
-  compileIndexing(expression) {
-    this.compileExpression(expression.indexing);
-    this.compileExpression(expression.at);
+  compileIndex(expression) {
+    this.compileExpression(expression.collection);
+    this.compileExpression(expression.index);
     this.addInstruction(op.INDEX);
   }
 
-  compileCatching(expression) {
+  compileCatch(expression) {
     this.addInstruction(op.CATCH, 0);
     const catchIndex = this.currentFunction().instructions.length;
     if (this.trace) {
       this.log(`Catching at ${catchIndex}`);
     }
-    this.compileExpression(expression.catching);
+    this.compileExpression(expression.expression);
     const jumpIndex = this.currentFunction().instructions.length;
     if (this.trace) {
       this.log(`Recovery point at ${jumpIndex}`);

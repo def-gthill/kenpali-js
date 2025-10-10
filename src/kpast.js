@@ -1,9 +1,9 @@
 export function literal(value) {
-  return { literal: value };
+  return { type: "literal", value };
 }
 
 export function array(...elements) {
-  return { array: elements };
+  return { type: "array", elements };
 }
 
 export function arrayPattern(...elements) {
@@ -11,7 +11,7 @@ export function arrayPattern(...elements) {
 }
 
 export function object(...entries) {
-  return { object: entries };
+  return { type: "object", entries };
 }
 
 export function objectPattern(...elements) {
@@ -23,7 +23,7 @@ export function spread(node) {
 }
 
 export function name(name, moduleName) {
-  const result = { name };
+  const result = { type: "name", name };
   if (moduleName) {
     result.from = moduleName;
   }
@@ -33,15 +33,22 @@ export function name(name, moduleName) {
 export function block(...args) {
   const defs = args.slice(0, -1);
   const result = args.at(-1);
-  return { defs, result };
+  return { type: "block", defs, result };
 }
 
-export function given(params, result) {
-  return { given: params, result };
+export function function_(body, params = [], namedParams = []) {
+  const result = { type: "function", body };
+  if (params.length > 0) {
+    result.params = params;
+  }
+  if (namedParams.length > 0) {
+    result.namedParams = namedParams;
+  }
+  return result;
 }
 
-export function calling(f, args = [], namedArgs = []) {
-  const result = { calling: f };
+export function call(f, args = [], namedArgs = []) {
+  const result = { type: "call", callee: f };
   if (args.length > 0) {
     result.args = args;
   }
@@ -51,12 +58,12 @@ export function calling(f, args = [], namedArgs = []) {
   return result;
 }
 
-export function indexing(collection, index) {
-  return { indexing: collection, at: index };
+export function index(collection, index) {
+  return { type: "index", collection, index };
 }
 
-export function catching(expression) {
-  return { catching: expression };
+export function catch_(expression) {
+  return { type: "catch", expression };
 }
 
 //#region Syntactic sugar
@@ -92,86 +99,92 @@ export function transformTree(expression, handlers) {
     }
   }
 
-  if (expression === null || typeof expression !== "object") {
+  if (
+    expression === null ||
+    typeof expression !== "object" ||
+    !("type" in expression)
+  ) {
     return transformNode("handleOther", (node) => node);
-  } else if ("literal" in expression) {
-    return transformNode("handleLiteral", (node) => node);
-  } else if ("array" in expression) {
-    return transformNode("handleArray", (node) => ({
-      ...node,
-      array: node.array.map((element) => {
-        if ("spread" in element) {
-          return { spread: recurse(element.spread) };
-        } else {
-          return recurse(element);
-        }
-      }),
-    }));
-  } else if ("object" in expression) {
-    return transformNode("handleObject", (node) => ({
-      ...node,
-      object: node.object.map((element) => {
-        if ("spread" in element) {
-          return { spread: recurse(element.spread) };
-        } else {
-          const [key, value] = element;
-          return [typeof key === "string" ? key : recurse(key), recurse(value)];
-        }
-      }),
-    }));
-  } else if ("name" in expression) {
-    return transformNode("handleName", (node) => node);
-  } else if ("defs" in expression) {
-    return transformNode("handleBlock", (node) => ({
-      ...node,
-      defs: node.defs.map(([name, value]) => [
-        typeof name === "string" ? name : recurse(name),
-        recurse(value),
-      ]),
-      result: recurse(node.result),
-    }));
-  } else if ("given" in expression) {
-    return transformNode("handleGiven", (node) => ({
-      ...node,
-      result: recurse(node.result),
-    }));
-  } else if ("calling" in expression) {
-    return transformNode("handleCalling", (node) => {
-      return {
-        ...node,
-        calling: recurse(node.calling),
-        args: (node.args ?? []).map((element) => {
-          if ("spread" in element) {
-            return { spread: recurse(element.spread) };
-          } else {
-            return recurse(element);
-          }
-        }),
-        namedArgs: (node.namedArgs ?? []).map((element) => {
-          if ("spread" in element) {
-            return { spread: recurse(element.spread) };
-          } else {
-            const [name, value] = element;
-            return [name, recurse(value)];
-          }
-        }),
-      };
-    });
-  } else if ("indexing" in expression) {
-    return transformNode("handleIndexing", (node) => {
-      return {
-        ...node,
-        indexing: recurse(node.indexing),
-        at: recurse(node.at),
-      };
-    });
-  } else if ("catching" in expression) {
-    return transformNode("handleCatching", (node) => ({
-      ...node,
-      catching: recurse(node.catching),
-    }));
   } else {
-    return transformNode("handleOther", (node) => node);
+    switch (expression.type) {
+      case "literal":
+        return transformNode("handleLiteral", (node) => node);
+      case "array":
+        return transformNode("handleArray", (node) => ({
+          ...node,
+          elements: node.elements.map((element) => {
+            if ("spread" in element) {
+              return { spread: recurse(element.spread) };
+            } else {
+              return recurse(element);
+            }
+          }),
+        }));
+      case "object":
+        return transformNode("handleObject", (node) => ({
+          ...node,
+          entries: node.entries.map((element) => {
+            if ("spread" in element) {
+              return { spread: recurse(element.spread) };
+            } else {
+              const [key, value] = element;
+              return [
+                typeof key === "string" ? key : recurse(key),
+                recurse(value),
+              ];
+            }
+          }),
+        }));
+      case "name":
+        return transformNode("handleName", (node) => node);
+      case "block":
+        return transformNode("handleBlock", (node) => ({
+          ...node,
+          defs: node.defs.map(([name, value]) => [
+            typeof name === "string" ? name : recurse(name),
+            recurse(value),
+          ]),
+          result: recurse(node.result),
+        }));
+      case "function":
+        return transformNode("handleFunction", (node) => ({
+          ...node,
+          body: recurse(node.body),
+        }));
+      case "call":
+        return transformNode("handleCall", (node) => ({
+          ...node,
+          callee: recurse(node.callee),
+          args: (node.args ?? []).map((element) => {
+            if ("spread" in element) {
+              return { spread: recurse(element.spread) };
+            } else {
+              return recurse(element);
+            }
+          }),
+          namedArgs: (node.namedArgs ?? []).map((element) => {
+            if ("spread" in element) {
+              return { spread: recurse(element.spread) };
+            } else {
+              const [name, value] = element;
+              return [name, recurse(value)];
+            }
+          }),
+        }));
+      case "index":
+        return transformNode("handleIndex", (node) => ({
+          ...node,
+          collection: recurse(node.collection),
+          index: recurse(node.index),
+        }));
+      case "catch":
+        return transformNode("handleCatch", (node) => ({
+          ...node,
+          expression: recurse(node.expression),
+        }));
+      default:
+        return transformNode("handleOther", (node) => node);
+    }
   }
 }
 
@@ -183,7 +196,7 @@ export function toAst(expressionRaw) {
         defs: Array.isArray(node.defs) ? node.defs : toKpobject(node.defs),
       });
     },
-    handleCalling(node, _recurse, handleDefault) {
+    handleCall(node, _recurse, handleDefault) {
       const result = handleDefault({
         ...node,
         args: node.args,

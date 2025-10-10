@@ -4,9 +4,9 @@ import {
   arrayPattern,
   arraySpread,
   block,
-  given,
+  function_,
   group,
-  indexing,
+  index,
   literal,
   name,
   object,
@@ -220,7 +220,7 @@ function parseConstantFunction(parser, start) {
   return parseAllOf(
     "constantFunction",
     [consume("DOLLAR", "expectedConstantFunction"), parseAssignable],
-    (result) => given({}, result)
+    (body) => function_(body)
   )(parser, start);
 }
 
@@ -240,7 +240,7 @@ function parsePipeline(parser, start) {
 
 function parsePointFreePipeline(parser, start) {
   return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
-    given({ params: ["pipelineArg"] }, pipeline(name("pipelineArg"), ...calls))
+    function_(pipeline(name("pipelineArg"), ...calls), ["pipelineArg"])
   )(parser, start);
 }
 
@@ -301,7 +301,7 @@ function parseArrowFunction(parser, start) {
       consume("ARROW", "expectedArrowFunction"),
       parseAssignable,
     ],
-    given
+    (params, body) => function_(body, params.params, params.namedParams)
   )(parser, start);
 }
 
@@ -402,8 +402,8 @@ function parseTightPipeline(parser, start) {
     [parseAtomic, parseZeroOrMore("propertyIndexes", parsePropertyIndex)],
     (expression, indexes) => {
       let axis = expression;
-      for (const index of indexes) {
-        axis = indexing(axis, index);
+      for (const i of indexes) {
+        axis = index(axis, i);
       }
       return axis;
     }

@@ -1601,16 +1601,20 @@ export function fromString(string) {
 }
 
 function toValue(expression) {
-  if ("literal" in expression) {
-    return expression.literal;
-  } else if ("array" in expression) {
-    return expression.array.map(toValue);
-  } else if ("object" in expression) {
-    return kpobject(
-      ...expression.object.map(([key, value]) => [key, toValue(value)])
-    );
-  } else {
-    throw kperror("");
+  switch (expression.type) {
+    case "literal":
+      return expression.value;
+    case "array":
+      return expression.elements.map(toValue);
+    case "object":
+      return kpobject(
+        ...expression.entries.map(([key, value]) => [
+          toValue(key),
+          toValue(value),
+        ])
+      );
+    default:
+      throw kperror("invalidConstant", ["value", expression]);
   }
 }
 

@@ -1,26 +1,35 @@
 import {
   array,
   block,
-  calling,
-  catching,
-  given,
-  indexing,
+  call,
+  catch_,
+  function_,
+  index,
   literal,
   object,
 } from "./kpast.js";
 import { kpoEntries } from "./kpobject.js";
 
 export default function desugar(expression) {
-  if ("array" in expression) {
-    return desugarArray(expression);
-  } else if ("object" in expression) {
-    return desugarObject(expression);
-  } else if ("defs" in expression) {
-    return desugarBlock(expression);
-  } else if ("given" in expression) {
-    return desugarGiven(expression);
-  } else if ("indexing" in expression) {
-    return desugarIndexing(expression);
+  if ("type" in expression) {
+    switch (expression.type) {
+      case "array":
+        return desugarArray(expression);
+      case "object":
+        return desugarObject(expression);
+      case "block":
+        return desugarBlock(expression);
+      case "function":
+        return desugarFunction(expression);
+      case "index":
+        return desugarIndexing(expression);
+      case "group":
+        return desugarGroup(expression);
+      case "pipeline":
+        return desugarPipeline(expression);
+      default:
+        return expression;
+    }
   } else if ("group" in expression) {
     return desugarGroup(expression);
   } else if ("calls" in expression) {
@@ -32,7 +41,7 @@ export default function desugar(expression) {
 
 function desugarArray(expression) {
   return array(
-    ...expression.array.map((element) => {
+    ...expression.elements.map((element) => {
       if ("arraySpread" in element) {
         return { spread: desugar(element.arraySpread) };
       } else {
@@ -44,26 +53,17 @@ function desugarArray(expression) {
 
 function desugarObject(expression) {
   return object(
-    ...expression.object.map((element) => {
+    ...expression.entries.map((element) => {
       if ("objectSpread" in element) {
         return { spread: desugar(element.objectSpread) };
       } else if ("name" in element) {
-        return [element.name, element];
+        return [literal(element.name), element];
       } else {
         const [key, value] = element;
-        return [desugarPropertyDefinition(key), desugar(value)];
+        return [desugarProperty(key), desugar(value)];
       }
     })
   );
-}
-
-function desugarPropertyDefinition(expression) {
-  const desugaredKey = desugarProperty(expression);
-  if ("literal" in desugaredKey) {
-    return desugaredKey.literal;
-  } else {
-    return desugaredKey;
-  }
 }
 
 function desugarBlock(expression) {
@@ -111,21 +111,16 @@ function desugarNamePatternElement(element) {
   }
 }
 
-function desugarGiven(expression) {
-  const params = {};
-  if (expression.given.params) {
-    params.params = desugarArrayPattern(expression.given.params ?? []);
-  }
-  if (expression.given.namedParams) {
-    params.namedParams = desugarObjectPattern(
-      expression.given.namedParams ?? []
-    );
-  }
-  return given(params, desugar(expression.result));
+function desugarFunction(expression) {
+  return function_(
+    desugar(expression.body),
+    desugarArrayPattern(expression.params ?? []),
+    desugarObjectPattern(expression.namedParams ?? [])
+  );
 }
 
 function desugarIndexing(expression) {
-  return indexing(desugar(expression.indexing), desugar(expression.at));
+  return index(desugar(expression.collection), desugar(expression.index));
 }
 
 function desugarGroup(expression) {
@@ -146,26 +141,26 @@ function desugarPipeline(expression) {
     if (op === "CALL") {
       const [allArgs] = target;
       const { args, namedArgs } = allArgs;
-      axis = calling(axis, desugarPosArgs(args), desugarNamedArgs(namedArgs));
+      axis = call(axis, desugarPosArgs(args), desugarNamedArgs(namedArgs));
     } else if (op === "PIPECALL") {
       const [callee, allArgs] = target;
       const { args, namedArgs } = allArgs;
-      axis = calling(
+      axis = call(
         desugar(callee),
         [axis, ...desugarPosArgs(args)],
         desugarNamedArgs(namedArgs)
       );
     } else if (op === "PIPEDOT") {
       const [propertyName] = target;
-      axis = indexing(axis, propertyName);
+      axis = index(axis, propertyName);
     } else if (op === "PIPE") {
       const [callee] = target;
-      axis = calling(desugar(callee), [axis]);
+      axis = call(desugar(callee), [axis]);
     } else if (op === "AT") {
-      const [index] = target;
-      axis = indexing(axis, desugar(index));
+      const [i] = target;
+      axis = index(axis, desugar(i));
     } else if (op === "BANG") {
-      axis = catching(axis);
+      axis = catch_(axis);
     } else {
       throw new Error(`Invalid pipeline op ${op}`);
     }
@@ -174,12 +169,8 @@ function desugarPipeline(expression) {
 }
 
 function desugarPosArgs(posArgs) {
-  const desugaredArgs = desugarArray({ array: posArgs });
-  if ("array" in desugaredArgs) {
-    return desugaredArgs.array;
-  } else {
-    return desugaredArgs;
-  }
+  const desugaredArgs = desugarArray(array(...posArgs));
+  return desugaredArgs.elements;
 }
 
 function desugarNamedArgs(namedArgs) {

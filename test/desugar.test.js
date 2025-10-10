@@ -4,11 +4,11 @@ import {
   array,
   arraySpread,
   block,
-  calling,
-  catching,
-  given,
+  call,
+  catch_,
+  function_,
   group,
-  indexing,
+  index,
   literal,
   name,
   object,
@@ -25,7 +25,11 @@ test("Object key syntactic sugar desugars to standard object syntax", (t) => {
   const result = desugar(expression);
   t.deepEqual(
     result,
-    object(["foo", literal(1)], ["bar", literal(2)], [name("baz"), literal(3)])
+    object(
+      [literal("foo"), literal(1)],
+      [literal("bar"), literal(2)],
+      [name("baz"), literal(3)]
+    )
   );
 });
 
@@ -44,17 +48,17 @@ test("A simple array desugars to itself", (t) => {
 test("A forward pipe desugars to a function call", (t) => {
   const expression = pipeline(name("x"), ["PIPE", name("f")]);
   const result = desugar(expression);
-  t.deepEqual(result, calling(name("f"), [name("x")]));
+  t.deepEqual(result, call(name("f"), [name("x")]));
 });
 
 test("A bang operator desugars to a catching node", (t) => {
   const expression = pipeline(name("x"), ["BANG"]);
   const result = desugar(expression);
-  t.deepEqual(result, catching(name("x")));
+  t.deepEqual(result, catch_(name("x")));
 });
 
 const pipeSugared = pipeline(name("x"), ["PIPE", name("f")]);
-const pipeDesugared = calling(name("f"), [name("x")]);
+const pipeDesugared = call(name("f"), [name("x")]);
 
 test("Desugaring propagates through arrays", (t) => {
   const expression = array(pipeSugared);
@@ -81,9 +85,9 @@ test("Desugaring propagates through scopes", (t) => {
 });
 
 test("Desugaring propagates through function definitions", (t) => {
-  const expression = given({}, pipeSugared);
+  const expression = function_(pipeSugared);
   const result = desugar(expression);
-  t.deepEqual(result, given({}, pipeDesugared));
+  t.deepEqual(result, function_(pipeDesugared));
 });
 
 test("Desugaring propagates through pipelines", (t) => {
@@ -95,6 +99,6 @@ test("Desugaring propagates through pipelines", (t) => {
   const result = desugar(expression);
   t.deepEqual(
     result,
-    indexing(calling(pipeDesugared, [pipeDesugared]), pipeDesugared)
+    index(call(pipeDesugared, [pipeDesugared]), pipeDesugared)
   );
 });
