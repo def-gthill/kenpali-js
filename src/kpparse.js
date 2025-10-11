@@ -356,10 +356,12 @@ function parseArgumentList(parser, start) {
     ],
     (args) => {
       const posArgs = args.filter(
-        (argument) => !(Array.isArray(argument) || "objectSpread" in argument)
+        (argument) =>
+          !(Array.isArray(argument) || argument.type === "objectSpread")
       );
       const namedArgs = args.filter(
-        (argument) => Array.isArray(argument) || "objectSpread" in argument
+        (argument) =>
+          Array.isArray(argument) || argument.type === "objectSpread"
       );
       return { args: posArgs, namedArgs };
     }

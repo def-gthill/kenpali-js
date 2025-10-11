@@ -69,19 +69,19 @@ export function catch_(expression) {
 //#region Syntactic sugar
 
 export function group(expression) {
-  return { group: expression };
+  return { type: "group", expression };
 }
 
-export function pipeline(start, ...expressions) {
-  return { start, calls: expressions };
+export function pipeline(start, ...calls) {
+  return { type: "pipeline", start, calls };
 }
 
 export function arraySpread(expression) {
-  return { arraySpread: expression };
+  return { type: "arraySpread", expression };
 }
 
 export function objectSpread(expression) {
-  return { objectSpread: expression };
+  return { type: "objectSpread", expression };
 }
 
 //#endregion

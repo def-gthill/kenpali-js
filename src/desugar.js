@@ -30,10 +30,6 @@ export default function desugar(expression) {
       default:
         return expression;
     }
-  } else if ("group" in expression) {
-    return desugarGroup(expression);
-  } else if ("calls" in expression) {
-    return desugarPipeline(expression);
   } else {
     return expression;
   }
@@ -42,8 +38,8 @@ export default function desugar(expression) {
 function desugarArray(expression) {
   return array(
     ...expression.elements.map((element) => {
-      if ("arraySpread" in element) {
-        return { spread: desugar(element.arraySpread) };
+      if (element.type === "arraySpread") {
+        return { spread: desugar(element.expression) };
       } else {
         return desugar(element);
       }
@@ -54,8 +50,8 @@ function desugarArray(expression) {
 function desugarObject(expression) {
   return object(
     ...expression.entries.map((element) => {
-      if ("objectSpread" in element) {
-        return { spread: desugar(element.objectSpread) };
+      if (element.type === "objectSpread") {
+        return { spread: desugar(element.expression) };
       } else if ("name" in element) {
         return [literal(element.name), element];
       } else {
@@ -124,7 +120,7 @@ function desugarIndexing(expression) {
 }
 
 function desugarGroup(expression) {
-  return desugar(expression.group);
+  return desugar(expression.expression);
 }
 
 function desugarProperty(expression) {
@@ -175,8 +171,8 @@ function desugarPosArgs(posArgs) {
 
 function desugarNamedArgs(namedArgs) {
   return namedArgs.map((element) => {
-    if ("objectSpread" in element) {
-      return { spread: desugar(element.objectSpread) };
+    if (element.type === "objectSpread") {
+      return { spread: desugar(element.expression) };
     } else {
       const [name, value] = element;
       return [name, desugar(value)];
