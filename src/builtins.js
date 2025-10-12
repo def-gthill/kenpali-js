@@ -1677,7 +1677,7 @@ function toValue(expression) {
     case "object":
       return kpobject(
         ...expression.entries.map(([key, value]) => [
-          toValue(key),
+          typeof key == "string" ? key : toValue(key),
           toValue(value),
         ])
       );

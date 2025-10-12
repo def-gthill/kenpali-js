@@ -6,7 +6,6 @@ import {
   catch_,
   function_,
   index,
-  literal,
   object,
   objectPattern,
   optional,
@@ -58,7 +57,7 @@ function desugarObject(expression) {
       if (element.type === "objectSpread") {
         return spread(desugar(element.expression));
       } else if (element.type === "name") {
-        return [literal(element.name), element];
+        return [element.name, element];
       } else {
         const [key, value] = element;
         return [desugarProperty(key), desugar(value)];
@@ -136,7 +135,9 @@ function desugarGroup(expression) {
 
 function desugarProperty(expression) {
   if (expression.type === "name") {
-    return literal(expression.name);
+    return expression.name;
+  } else if (expression.type === "literal") {
+    return expression.value;
   } else {
     return desugar(expression);
   }
