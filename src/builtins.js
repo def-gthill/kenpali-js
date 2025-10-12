@@ -1,4 +1,10 @@
-import { literal } from "./kpast.js";
+import {
+  arrayPattern,
+  literal,
+  objectPattern,
+  optional as optionalNode,
+  rest,
+} from "./kpast.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
@@ -1413,6 +1419,68 @@ function optionalFunctionParameter(name) {
     type: either("function", "null"),
     defaultValue: literal(null),
   };
+}
+
+export function getParamPatterns(f) {
+  const paramPattern = arrayPattern(
+    ...(f.params ?? []).map(toArrayNamePattern)
+  );
+  const namedParamPattern = objectPattern(
+    ...(f.namedParams ?? []).map(toObjectNamePattern)
+  );
+  return { paramPattern, namedParamPattern };
+}
+
+function toArrayNamePattern(param) {
+  if (typeof param === "string") {
+    return param;
+  } else if ("rest" in param) {
+    return rest(toNamePattern(param.rest));
+  } else if ("defaultValue" in param) {
+    const { defaultValue, ...rest } = param;
+    return optionalNode(toNamePattern(rest), defaultValue);
+  } else {
+    const result = { ...param };
+    if ("type" in result) {
+      result.schema = result.type;
+      delete result.type;
+    }
+    return result;
+  }
+}
+
+function toObjectNamePattern(param) {
+  if (typeof param === "string") {
+    return param;
+  } else if ("rest" in param) {
+    return rest(toNamePattern(param.rest));
+  } else if ("defaultValue" in param) {
+    const { defaultValue, ...rest } = param;
+    return {
+      ...optionalNode(toNamePattern(rest), defaultValue),
+      property: param.name,
+    };
+  } else {
+    const result = { ...param };
+    if ("type" in result) {
+      result.schema = result.type;
+      delete result.type;
+    }
+    return result;
+  }
+}
+
+function toNamePattern(param) {
+  if (typeof param === "string") {
+    return param;
+  } else {
+    const result = { ...param };
+    if ("type" in result) {
+      result.schema = result.type;
+      delete result.type;
+    }
+    return result;
+  }
 }
 
 function compare(a, b) {

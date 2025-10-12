@@ -1,5 +1,6 @@
 import {
   array,
+  arrayPattern,
   block,
   call,
   catch_,
@@ -7,6 +8,10 @@ import {
   index,
   literal,
   object,
+  objectPattern,
+  optional,
+  rest,
+  spread,
 } from "./kpast.js";
 import { kpoEntries } from "./kpobject.js";
 
@@ -39,7 +44,7 @@ function desugarArray(expression) {
   return array(
     ...expression.elements.map((element) => {
       if (element.type === "arraySpread") {
-        return { spread: desugar(element.expression) };
+        return spread(desugar(element.expression));
       } else {
         return desugar(element);
       }
@@ -51,8 +56,8 @@ function desugarObject(expression) {
   return object(
     ...expression.entries.map((element) => {
       if (element.type === "objectSpread") {
-        return { spread: desugar(element.expression) };
-      } else if ("name" in element) {
+        return spread(desugar(element.expression));
+      } else if (element.type === "name") {
         return [literal(element.name), element];
       } else {
         const [key, value] = element;
@@ -75,10 +80,15 @@ function desugarBlock(expression) {
 function desugarNamePattern(pattern) {
   if (typeof pattern === "string") {
     return pattern;
-  } else if ("arrayPattern" in pattern) {
-    return { arrayPattern: desugarArrayPattern(pattern.arrayPattern) };
-  } else if ("objectPattern" in pattern) {
-    return { objectPattern: desugarObjectPattern(pattern.objectPattern) };
+  } else if ("type" in pattern) {
+    switch (pattern.type) {
+      case "arrayPattern":
+        return arrayPattern(...pattern.names.map(desugarNamePatternElement));
+      case "objectPattern":
+        return objectPattern(...pattern.names.map(desugarNamePatternElement));
+      default:
+        throw new Error(`Invalid name pattern type ${pattern.type}`);
+    }
   } else if ("name" in pattern) {
     return { ...pattern, name: desugarNamePattern(pattern.name) };
   }
@@ -93,15 +103,16 @@ function desugarObjectPattern(pattern) {
 }
 
 function desugarNamePatternElement(element) {
-  if (typeof element === "object" && "rest" in element) {
-    return { rest: desugarNamePattern(element.rest) };
-  } else if (typeof element === "object" && "namedRest" in element) {
-    return { rest: desugarNamePattern(element.namedRest) };
-  } else if (typeof element === "object" && "defaultValue" in element) {
-    return {
-      name: desugarNamePattern(element.name),
-      defaultValue: desugar(element.defaultValue),
-    };
+  if (
+    typeof element === "object" &&
+    (element.type === "arrayRest" || element.type === "objectRest")
+  ) {
+    return rest(desugarNamePattern(element.name));
+  } else if (typeof element === "object" && element.type === "optional") {
+    return optional(
+      desugarNamePattern(element.name),
+      desugar(element.defaultValue)
+    );
   } else {
     return desugarNamePattern(element);
   }
@@ -124,7 +135,7 @@ function desugarGroup(expression) {
 }
 
 function desugarProperty(expression) {
-  if ("name" in expression) {
+  if (expression.type === "name") {
     return literal(expression.name);
   } else {
     return desugar(expression);
@@ -172,7 +183,7 @@ function desugarPosArgs(posArgs) {
 function desugarNamedArgs(namedArgs) {
   return namedArgs.map((element) => {
     if (element.type === "objectSpread") {
-      return { spread: desugar(element.expression) };
+      return spread(desugar(element.expression));
     } else {
       const [name, value] = element;
       return [name, desugar(value)];

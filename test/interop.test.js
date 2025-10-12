@@ -1,6 +1,15 @@
 import test from "ava";
 import { kpcall, toKpFunction } from "../src/interop.js";
-import { block, call, function_, index, literal, name } from "../src/kpast.js";
+import {
+  block,
+  call,
+  function_,
+  index,
+  literal,
+  name,
+  optional,
+  rest,
+} from "../src/kpast.js";
 import kperror, { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
@@ -29,7 +38,7 @@ test("Positional arguments are sent to the Kenpali function", (t) => {
 
 test("Positional arguments are bound to rest parameters on the Kenpali function", (t) => {
   const kpf = kpeval(
-    function_(call(name("length"), [name("rest")]), [{ rest: "rest" }])
+    function_(call(name("length"), [name("rest")]), [rest("rest")])
   );
 
   const result = kpcall(kpf, [1, "a", [], null], {});
@@ -60,7 +69,7 @@ test("Kenpali parameter defaults can reference names from the context", (t) => {
       ["a", literal(5)],
       function_(call(name("times"), [name("x"), name("y")]), [
         "x",
-        { name: "y", defaultValue: name("a") },
+        optional("y", name("a")),
       ])
     )
   );

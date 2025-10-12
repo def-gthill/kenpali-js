@@ -6,20 +6,28 @@ export function array(...elements) {
   return { type: "array", elements };
 }
 
-export function arrayPattern(...elements) {
-  return { arrayPattern: elements };
+export function arrayPattern(...names) {
+  return { type: "arrayPattern", names };
 }
 
 export function object(...entries) {
   return { type: "object", entries };
 }
 
-export function objectPattern(...elements) {
-  return { objectPattern: elements };
+export function objectPattern(...names) {
+  return { type: "objectPattern", names };
 }
 
-export function spread(node) {
-  return { spread: node };
+export function optional(name, defaultValue) {
+  return { type: "optional", name, defaultValue };
+}
+
+export function spread(value) {
+  return { type: "spread", value };
+}
+
+export function rest(name) {
+  return { type: "rest", name };
 }
 
 export function name(name, moduleName) {
@@ -84,6 +92,14 @@ export function objectSpread(expression) {
   return { type: "objectSpread", expression };
 }
 
+export function arrayRest(name) {
+  return { type: "arrayRest", name };
+}
+
+export function objectRest(name) {
+  return { type: "objectRest", name };
+}
+
 //#endregion
 
 export function transformTree(expression, handlers) {
@@ -113,8 +129,8 @@ export function transformTree(expression, handlers) {
         return transformNode("handleArray", (node) => ({
           ...node,
           elements: node.elements.map((element) => {
-            if ("spread" in element) {
-              return { spread: recurse(element.spread) };
+            if (element.type === "spread") {
+              return spread(recurse(element.value));
             } else {
               return recurse(element);
             }
@@ -124,8 +140,8 @@ export function transformTree(expression, handlers) {
         return transformNode("handleObject", (node) => ({
           ...node,
           entries: node.entries.map((element) => {
-            if ("spread" in element) {
-              return { spread: recurse(element.spread) };
+            if (element.type === "spread") {
+              return spread(recurse(element.value));
             } else {
               const [key, value] = element;
               return [
@@ -156,15 +172,15 @@ export function transformTree(expression, handlers) {
           ...node,
           callee: recurse(node.callee),
           args: (node.args ?? []).map((element) => {
-            if ("spread" in element) {
-              return { spread: recurse(element.spread) };
+            if (element.type === "spread") {
+              return spread(recurse(element.value));
             } else {
               return recurse(element);
             }
           }),
           namedArgs: (node.namedArgs ?? []).map((element) => {
-            if ("spread" in element) {
-              return { spread: recurse(element.spread) };
+            if (element.type === "spread") {
+              return spread(recurse(element.value));
             } else {
               const [name, value] = element;
               return [name, recurse(value)];
@@ -186,29 +202,4 @@ export function transformTree(expression, handlers) {
         return transformNode("handleOther", (node) => node);
     }
   }
-}
-
-export function toAst(expressionRaw) {
-  return transformTree(expressionRaw, {
-    handleBlock(node, _recurse, handleDefault) {
-      return handleDefault({
-        ...node,
-        defs: Array.isArray(node.defs) ? node.defs : toKpobject(node.defs),
-      });
-    },
-    handleCall(node, _recurse, handleDefault) {
-      const result = handleDefault({
-        ...node,
-        args: node.args,
-        namedArgs: node.namedArgs,
-      });
-      if (result.args.length === 0) {
-        delete result.args;
-      }
-      if (result.namedArgs.length === 0) {
-        delete result.namedArgs;
-      }
-      return result;
-    },
-  });
 }

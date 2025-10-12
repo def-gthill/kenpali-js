@@ -2,6 +2,7 @@ import desugar from "./desugar.js";
 import {
   array,
   arrayPattern,
+  arrayRest,
   arraySpread,
   block,
   function_,
@@ -11,7 +12,9 @@ import {
   name,
   object,
   objectPattern,
+  objectRest,
   objectSpread,
+  optional,
   pipeline,
 } from "./kpast.js";
 import kplex from "./kplex.js";
@@ -135,12 +138,12 @@ function parseArrayPatternElement(parser, start) {
     parseAllOf(
       "arrayPatternDefault",
       [parseNamePattern, consume("EQUALS", "expectedDefault"), parseAssignable],
-      (name, defaultValue) => ({ name, defaultValue })
+      (name, defaultValue) => optional(name, defaultValue)
     ),
     parseAllOf(
       "arrayPatternRest",
       [consume("STAR", "expectedRest"), parseNamePattern],
-      (pattern) => ({ rest: pattern })
+      (pattern) => arrayRest(pattern)
     ),
     parseNamePattern
   )(parser, start);
@@ -171,12 +174,12 @@ function parseObjectPatternElement(parser, start) {
         consume("EQUALS", "expectedDefault"),
         parseAssignable,
       ],
-      (name, defaultValue) => ({ name, defaultValue })
+      (name, defaultValue) => optional(name, defaultValue)
     ),
     parseAllOf(
       "objectPatternRest",
       [consume("DOUBLE_STAR", "expectedRest"), parseNamePattern],
-      (pattern) => ({ namedRest: pattern })
+      (pattern) => objectRest(pattern)
     ),
     parseObjectPatternSimple
   )(parser, start);

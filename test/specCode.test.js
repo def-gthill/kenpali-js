@@ -1,4 +1,3 @@
-import { toAst } from "../src/kpast.js";
 import { kpcatch } from "../src/kperror.js";
 import kpparse from "../src/kpparse.js";
 import { assertIsError } from "./assertIsError.js";
@@ -10,7 +9,7 @@ runSpecFile(
   specPath,
   (code) => kpcatch(() => kpparse(code)),
   (t, actualCode, expectedOutput) => {
-    const expectedCode = toAst(JSON.parse(expectedOutput));
+    const expectedCode = JSON.parse(expectedOutput);
     t.deepEqual(actualCode, expectedCode);
   },
   (t, actualOutputValue, expectedErrorName, expectedErrorDetails) => {
