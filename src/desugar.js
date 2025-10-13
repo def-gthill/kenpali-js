@@ -11,165 +11,193 @@ import {
   optional,
   rest,
   spread,
+  transformTree,
 } from "./kpast.js";
-import { kpoEntries } from "./kpobject.js";
 
 export default function desugar(expression) {
-  if ("type" in expression) {
-    switch (expression.type) {
-      case "array":
-        return desugarArray(expression);
-      case "object":
-        return desugarObject(expression);
-      case "block":
-        return desugarBlock(expression);
-      case "function":
-        return desugarFunction(expression);
-      case "index":
-        return desugarIndexing(expression);
-      case "group":
-        return desugarGroup(expression);
-      case "pipeline":
-        return desugarPipeline(expression);
-      default:
-        return expression;
+  return transformTree(expression, {
+    handleArray(node, transformExpression) {
+      return array(
+        ...node.elements.map((element) => {
+          if (element.type === "arraySpread") {
+            return spread(transformExpression(element.expression));
+          } else {
+            return transformExpression(element);
+          }
+        })
+      );
+    },
+    handleObject(node, transformExpression) {
+      return object(
+        ...node.entries.map((element) => {
+          if (element.type === "objectSpread") {
+            return spread(transformExpression(element.expression));
+          } else if (element.type === "name") {
+            return [element.name, element];
+          } else {
+            const [key, value] = element;
+            return [
+              desugarProperty(key, transformExpression),
+              transformExpression(value),
+            ];
+          }
+        })
+      );
+    },
+    handleBlock(node, transformExpression) {
+      return block(
+        ...node.defs.map(([name, value]) => [
+          name ? desugarNamePattern(name, transformExpression) : name,
+          transformExpression(value),
+        ]),
+        transformExpression(node.result)
+      );
+    },
+    handleFunction(node, transformExpression) {
+      return function_(
+        transformExpression(node.body),
+        desugarArrayPattern(node.params ?? [], transformExpression),
+        desugarObjectPattern(node.namedParams ?? [], transformExpression)
+      );
+    },
+    handleOther(node, transformExpression) {
+      switch (node.type) {
+        case "group":
+          return desugarGroup(node, transformExpression);
+        case "pipeline":
+          return desugarPipeline(node, transformExpression);
+        default:
+          return node;
+      }
+    },
+  });
+}
+
+function desugarArrayElements(elements, transformExpression) {
+  return elements.map((element) => {
+    if (element.type === "arraySpread") {
+      return spread(transformExpression(element.expression));
+    } else {
+      return transformExpression(element);
     }
-  } else {
-    return expression;
-  }
+  });
 }
 
-function desugarArray(expression) {
-  return array(
-    ...expression.elements.map((element) => {
-      if (element.type === "arraySpread") {
-        return spread(desugar(element.expression));
-      } else {
-        return desugar(element);
-      }
-    })
-  );
+function desugarObjectEntries(entries, transformExpression) {
+  return entries.map((element) => {
+    if (element.type === "objectSpread") {
+      return spread(transformExpression(element.expression));
+    } else {
+      const [key, value] = element;
+      return [
+        desugarProperty(key, transformExpression),
+        transformExpression(value),
+      ];
+    }
+  });
 }
 
-function desugarObject(expression) {
-  return object(
-    ...expression.entries.map((element) => {
-      if (element.type === "objectSpread") {
-        return spread(desugar(element.expression));
-      } else if (element.type === "name") {
-        return [element.name, element];
-      } else {
-        const [key, value] = element;
-        return [desugarProperty(key), desugar(value)];
-      }
-    })
-  );
-}
-
-function desugarBlock(expression) {
-  return block(
-    ...kpoEntries(expression.defs).map(([name, value]) => [
-      name ? desugarNamePattern(name) : name,
-      desugar(value),
-    ]),
-    desugar(expression.result)
-  );
-}
-
-function desugarNamePattern(pattern) {
+function desugarNamePattern(pattern, transformExpression) {
   if (typeof pattern === "string") {
     return pattern;
   }
   switch (pattern.type) {
     case "arrayPattern":
-      return arrayPattern(...pattern.names.map(desugarNamePatternElement));
+      return arrayPattern(
+        ...pattern.names.map((element) =>
+          desugarNamePatternElement(element, transformExpression)
+        )
+      );
     case "objectPattern":
-      return objectPattern(...pattern.entries.map(desugarObjectPatternElement));
+      return objectPattern(
+        ...pattern.entries.map((element) =>
+          desugarObjectPatternElement(element, transformExpression)
+        )
+      );
     default:
       throw new Error(`Invalid name pattern type ${pattern.type}`);
   }
 }
 
-function desugarArrayPattern(pattern) {
-  return pattern.map(desugarNamePatternElement);
-}
-
-function desugarObjectPattern(pattern) {
-  return pattern.map(desugarObjectPatternElement);
-}
-
-function desugarObjectPatternElement(element) {
-  if (element.type === "objectRest") {
-    return rest(desugarNamePattern(element.name));
-  } else {
-    const [key, name] = element;
-    return [desugarNamePattern(key), desugarNamePatternElement(name)];
-  }
-}
-
-function desugarNamePatternElement(element) {
-  if (typeof element === "object" && element.type === "arrayRest") {
-    return rest(desugarNamePattern(element.name));
-  } else if (typeof element === "object" && element.type === "optional") {
-    return optional(
-      desugarNamePattern(element.name),
-      desugar(element.defaultValue)
-    );
-  } else {
-    return desugarNamePattern(element);
-  }
-}
-
-function desugarFunction(expression) {
-  return function_(
-    desugar(expression.body),
-    desugarArrayPattern(expression.params ?? []),
-    desugarObjectPattern(expression.namedParams ?? [])
+function desugarArrayPattern(pattern, transformExpression) {
+  return pattern.map((element) =>
+    desugarNamePatternElement(element, transformExpression)
   );
 }
 
-function desugarIndexing(expression) {
-  return index(desugar(expression.collection), desugar(expression.index));
+function desugarObjectPattern(pattern, transformExpression) {
+  return pattern.map((element) =>
+    desugarObjectPatternElement(element, transformExpression)
+  );
 }
 
-function desugarGroup(expression) {
-  return desugar(expression.expression);
+function desugarObjectPatternElement(element, transformExpression) {
+  if (element.type === "objectRest") {
+    return rest(desugarNamePattern(element.name, transformExpression));
+  } else {
+    const [key, name] = element;
+    return [
+      desugarNamePattern(key, transformExpression),
+      desugarNamePatternElement(name, transformExpression),
+    ];
+  }
 }
 
-function desugarProperty(expression) {
+function desugarNamePatternElement(element, transformExpression) {
+  if (typeof element === "object" && element.type === "arrayRest") {
+    return rest(desugarNamePattern(element.name, transformExpression));
+  } else if (typeof element === "object" && element.type === "optional") {
+    return optional(
+      desugarNamePattern(element.name, transformExpression),
+      transformExpression(element.defaultValue)
+    );
+  } else {
+    return desugarNamePattern(element, transformExpression);
+  }
+}
+
+function desugarGroup(expression, transformExpression) {
+  return transformExpression(expression.expression);
+}
+
+function desugarProperty(expression, transformExpression) {
   if (expression.type === "name") {
     return expression.name;
   } else if (expression.type === "literal") {
     return expression.value;
   } else {
-    return desugar(expression);
+    return transformExpression(expression);
   }
 }
 
-function desugarPipeline(expression) {
-  let axis = desugar(expression.start);
+function desugarPipeline(expression, transformExpression) {
+  let axis = transformExpression(expression.start);
   for (const [op, ...target] of expression.calls) {
     if (op === "CALL") {
       const [allArgs] = target;
       const { args, namedArgs } = allArgs;
-      axis = call(axis, desugarPosArgs(args), desugarNamedArgs(namedArgs));
+      axis = call(
+        axis,
+        desugarArrayElements(args, transformExpression),
+        desugarObjectEntries(namedArgs, transformExpression)
+      );
     } else if (op === "PIPECALL") {
       const [callee, allArgs] = target;
       const { args, namedArgs } = allArgs;
       axis = call(
-        desugar(callee),
-        [axis, ...desugarPosArgs(args)],
-        desugarNamedArgs(namedArgs)
+        transformExpression(callee),
+        [axis, ...desugarArrayElements(args, transformExpression)],
+        desugarObjectEntries(namedArgs, transformExpression)
       );
     } else if (op === "PIPEDOT") {
       const [propertyName] = target;
       axis = index(axis, propertyName);
     } else if (op === "PIPE") {
       const [callee] = target;
-      axis = call(desugar(callee), [axis]);
+      axis = call(transformExpression(callee), [axis]);
     } else if (op === "AT") {
       const [i] = target;
-      axis = index(axis, desugar(i));
+      axis = index(axis, transformExpression(i));
     } else if (op === "BANG") {
       axis = catch_(axis);
     } else {
@@ -177,20 +205,4 @@ function desugarPipeline(expression) {
     }
   }
   return axis;
-}
-
-function desugarPosArgs(posArgs) {
-  const desugaredArgs = desugarArray(array(...posArgs));
-  return desugaredArgs.elements;
-}
-
-function desugarNamedArgs(namedArgs) {
-  return namedArgs.map((element) => {
-    if (element.type === "objectSpread") {
-      return spread(desugar(element.expression));
-    } else {
-      const [name, value] = element;
-      return [name, desugar(value)];
-    }
-  });
 }

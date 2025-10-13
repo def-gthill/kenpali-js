@@ -390,13 +390,17 @@ function parseNamedArgument(parser, start) {
     "namedArgument",
     parseAllOf(
       "namedArgumentEntry",
-      [parseName, consume("COLON", "expectedNamedArgument"), parseAssignable],
-      (name, value) => [name.name, value]
+      [
+        parseAssignable,
+        consume("COLON", "expectedNamedArgument"),
+        parseAssignable,
+      ],
+      (name, value) => [name, value]
     ),
     parseAllOf(
       "namedArgumentName",
       [parseName, consume("COLON", "expectedNamedArgument")],
-      (name) => [name.name, name]
+      (name) => [name, name]
     )
   )(parser, start);
 }

@@ -92,7 +92,7 @@ test("An object spread operator in an argument list parses to an objectSpread no
       "CALL",
       {
         args: [],
-        namedArgs: [["question", literal(42)], objectSpread(name("foo"))],
+        namedArgs: [[name("question"), literal(42)], objectSpread(name("foo"))],
       },
     ])
   );

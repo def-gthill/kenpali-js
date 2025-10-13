@@ -1181,7 +1181,7 @@ class LibraryFilter {
           outerThis.currentUsage.add(outerThis.libraryByName.get(node.name));
         }
       },
-      handleBlock(node, recurse) {
+      handleBlock(node, transformExpression) {
         const scope = new Set();
         for (const statement of node.defs) {
           if (Array.isArray(statement)) {
@@ -1193,10 +1193,10 @@ class LibraryFilter {
         for (const statement of node.defs) {
           if (Array.isArray(statement)) {
             const [_, value] = statement;
-            recurse(value);
+            transformExpression(value);
           }
         }
-        recurse(node.result);
+        transformExpression(node.result);
         outerThis.activeScopes.pop();
       },
     });

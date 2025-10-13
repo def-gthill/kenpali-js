@@ -107,13 +107,17 @@ export function objectRest(name) {
 //#endregion
 
 export function transformTree(expression, handlers) {
-  function recurse(node) {
+  function transformExpression(node) {
     return transformTree(node, handlers);
   }
 
   function transformNode(handlerName, defaultHandler) {
     if (handlerName in handlers) {
-      return handlers[handlerName](expression, recurse, defaultHandler);
+      return handlers[handlerName](
+        expression,
+        transformExpression,
+        defaultHandler
+      );
     } else {
       return defaultHandler(expression);
     }
@@ -125,85 +129,84 @@ export function transformTree(expression, handlers) {
     !("type" in expression)
   ) {
     return transformNode("handleOther", (node) => node);
-  } else {
-    switch (expression.type) {
-      case "literal":
-        return transformNode("handleLiteral", (node) => node);
-      case "array":
-        return transformNode("handleArray", (node) => ({
-          ...node,
-          elements: node.elements.map((element) => {
-            if (element.type === "spread") {
-              return spread(recurse(element.value));
-            } else {
-              return recurse(element);
-            }
-          }),
-        }));
-      case "object":
-        return transformNode("handleObject", (node) => ({
-          ...node,
-          entries: node.entries.map((element) => {
-            if (element.type === "spread") {
-              return spread(recurse(element.value));
-            } else {
-              const [key, value] = element;
-              return [
-                typeof key === "string" ? key : recurse(key),
-                recurse(value),
-              ];
-            }
-          }),
-        }));
-      case "name":
-        return transformNode("handleName", (node) => node);
-      case "block":
-        return transformNode("handleBlock", (node) => ({
-          ...node,
-          defs: node.defs.map(([name, value]) => [
-            typeof name === "string" ? name : recurse(name),
-            recurse(value),
-          ]),
-          result: recurse(node.result),
-        }));
-      case "function":
-        return transformNode("handleFunction", (node) => ({
-          ...node,
-          body: recurse(node.body),
-        }));
-      case "call":
-        return transformNode("handleCall", (node) => ({
-          ...node,
-          callee: recurse(node.callee),
-          args: (node.args ?? []).map((element) => {
-            if (element.type === "spread") {
-              return spread(recurse(element.value));
-            } else {
-              return recurse(element);
-            }
-          }),
-          namedArgs: (node.namedArgs ?? []).map((element) => {
-            if (element.type === "spread") {
-              return spread(recurse(element.value));
-            } else {
-              const [name, value] = element;
-              return [name, recurse(value)];
-            }
-          }),
-        }));
-      case "index":
-        return transformNode("handleIndex", (node) => ({
-          ...node,
-          collection: recurse(node.collection),
-          index: recurse(node.index),
-        }));
-      case "catch":
-        return transformNode("handleCatch", (node) => ({
-          ...node,
-          expression: recurse(node.expression),
-        }));
-      default:
-        return transformNode("handleOther", (node) => node);
-    }
+  }
+  switch (expression.type) {
+    case "literal":
+      return transformNode("handleLiteral", (node) => node);
+    case "array":
+      return transformNode("handleArray", (node) => ({
+        ...node,
+        elements: node.elements.map((element) => {
+          if (element.type === "spread") {
+            return spread(transformExpression(element.value));
+          } else {
+            return transformExpression(element);
+          }
+        }),
+      }));
+    case "object":
+      return transformNode("handleObject", (node) => ({
+        ...node,
+        entries: node.entries.map((element) => {
+          if (element.type === "spread") {
+            return spread(transformExpression(element.value));
+          } else {
+            const [key, value] = element;
+            return [
+              typeof key === "string" ? key : transformExpression(key),
+              transformExpression(value),
+            ];
+          }
+        }),
+      }));
+    case "name":
+      return transformNode("handleName", (node) => node);
+    case "block":
+      return transformNode("handleBlock", (node) => ({
+        ...node,
+        defs: node.defs.map(([name, value]) => [
+          typeof name === "string" ? name : transformExpression(name),
+          transformExpression(value),
+        ]),
+        result: transformExpression(node.result),
+      }));
+    case "function":
+      return transformNode("handleFunction", (node) => ({
+        ...node,
+        body: transformExpression(node.body),
+      }));
+    case "call":
+      return transformNode("handleCall", (node) => ({
+        ...node,
+        callee: transformExpression(node.callee),
+        args: (node.args ?? []).map((element) => {
+          if (element.type === "spread") {
+            return spread(transformExpression(element.value));
+          } else {
+            return transformExpression(element);
+          }
+        }),
+        namedArgs: (node.namedArgs ?? []).map((element) => {
+          if (element.type === "spread") {
+            return spread(transformExpression(element.value));
+          } else {
+            const [name, value] = element;
+            return [name, transformExpression(value)];
+          }
+        }),
+      }));
+    case "index":
+      return transformNode("handleIndex", (node) => ({
+        ...node,
+        collection: transformExpression(node.collection),
+        index: transformExpression(node.index),
+      }));
+    case "catch":
+      return transformNode("handleCatch", (node) => ({
+        ...node,
+        expression: transformExpression(node.expression),
+      }));
+    default:
+      return transformNode("handleOther", (node) => node);
   }
 }
