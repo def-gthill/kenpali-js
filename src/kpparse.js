@@ -174,7 +174,7 @@ function parseObjectPatternElement(parser, start) {
         consume("EQUALS", "expectedDefault"),
         parseAssignable,
       ],
-      (name, defaultValue) => optional(name, defaultValue)
+      ([key, name], defaultValue) => [key, optional(name, defaultValue)]
     ),
     parseAllOf(
       "objectPatternRest",
@@ -195,7 +195,7 @@ function parseObjectPatternSimple(parser, start) {
         consume("COLON", "missingKeyTargetSeparator"),
         parseNamePattern,
       ],
-      (name, pattern) => ({ name: pattern, property: name.name })
+      (name, pattern) => [name.name, pattern]
     ),
     parseObjectPatternPropertyName
   )(parser, start);
@@ -205,7 +205,7 @@ function parseObjectPatternPropertyName(parser, start) {
   return parseAllOf(
     "objectPatternName",
     [parseName, consume("COLON", "expectedPropertyName")],
-    (name) => name.name
+    (name) => [name.name, name.name]
   )(parser, start);
 }
 

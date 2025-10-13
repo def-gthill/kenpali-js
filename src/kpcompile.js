@@ -124,7 +124,7 @@ class Compiler {
     if (paramPattern.names.length > 0) {
       this.declareNames(paramPattern);
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
@@ -134,7 +134,7 @@ class Compiler {
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(paramPattern, { isArgumentPattern: true });
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
@@ -167,7 +167,7 @@ class Compiler {
     if (paramPattern.names.length > 0) {
       this.declareNames(paramPattern);
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
@@ -177,7 +177,7 @@ class Compiler {
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(paramPattern, { isArgumentPattern: true });
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
@@ -499,8 +499,12 @@ class Compiler {
           }
           break;
         case "objectPattern":
-          for (const element of pattern.names) {
-            this.declareNames(element);
+          for (const entry of pattern.entries) {
+            if (entry.type === "rest") {
+              this.declareNames(entry.name);
+            } else {
+              this.declareNames(entry[1]);
+            }
           }
           break;
         case "rest":
@@ -574,22 +578,24 @@ class Compiler {
     this.validate("object");
     this.addInstruction(op.OBJECT_COPY);
     let rest = null;
-    for (const element of pattern.names) {
-      if (typeof element === "object" && element.type === "rest") {
-        rest = element.name;
-      } else if (typeof element === "object" && element.type === "optional") {
-        this.addInstruction(op.VALUE, this.paramName(element.name));
-        this.compileExpression(element.defaultValue);
-        this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
-        this.assignNames(element.name, { isArgument: isArgumentPattern });
+    for (const entry of pattern.entries) {
+      if (entry.type === "rest") {
+        rest = entry.name;
       } else {
-        this.addInstruction(op.VALUE, this.paramName(element));
-        this.addInstruction(op.OBJECT_POP);
-        this.addDiagnostic({
-          name: this.paramName(element),
-          isArgument: isArgumentPattern,
-        });
-        this.assignNames(element, { isArgument: isArgumentPattern });
+        const [key, name] = entry;
+        this.addInstruction(op.VALUE, key);
+        if (typeof name === "object" && name.type === "optional") {
+          this.compileExpression(name.defaultValue);
+          this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
+          this.assignNames(name.name, { isArgument: isArgumentPattern });
+        } else {
+          this.addInstruction(op.OBJECT_POP);
+          this.addDiagnostic({
+            name: key,
+            isArgument: isArgumentPattern,
+          });
+          this.assignNames(name, { isArgument: isArgumentPattern });
+        }
       }
     }
     if (rest) {
@@ -613,7 +619,7 @@ class Compiler {
     if (paramPattern.names.length > 0) {
       this.declareNames(paramPattern);
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames() - 2);
@@ -622,7 +628,7 @@ class Compiler {
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(paramPattern, { isArgumentPattern: true });
     }
-    if (namedParamPattern.names.length > 0) {
+    if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });

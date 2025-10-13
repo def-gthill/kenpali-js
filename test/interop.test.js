@@ -54,7 +54,10 @@ test("Named arguments are sent to the Kenpali function", (t) => {
         name("bonus"),
       ]),
       ["base"],
-      ["multiplier", "bonus"]
+      [
+        ["multiplier", "multiplier"],
+        ["bonus", "bonus"],
+      ]
     )
   );
 

@@ -84,7 +84,9 @@ function desugarNamePattern(pattern) {
       case "arrayPattern":
         return arrayPattern(...pattern.names.map(desugarNamePatternElement));
       case "objectPattern":
-        return objectPattern(...pattern.names.map(desugarNamePatternElement));
+        return objectPattern(
+          ...pattern.entries.map(desugarObjectPatternElement)
+        );
       default:
         throw new Error(`Invalid name pattern type ${pattern.type}`);
     }
@@ -98,14 +100,20 @@ function desugarArrayPattern(pattern) {
 }
 
 function desugarObjectPattern(pattern) {
-  return pattern.map(desugarNamePatternElement);
+  return pattern.map(desugarObjectPatternElement);
+}
+
+function desugarObjectPatternElement(element) {
+  if (element.type === "objectRest") {
+    return rest(desugarNamePattern(element.name));
+  } else {
+    const [key, name] = element;
+    return [desugarNamePattern(key), desugarNamePatternElement(name)];
+  }
 }
 
 function desugarNamePatternElement(element) {
-  if (
-    typeof element === "object" &&
-    (element.type === "arrayRest" || element.type === "objectRest")
-  ) {
+  if (typeof element === "object" && element.type === "arrayRest") {
     return rest(desugarNamePattern(element.name));
   } else if (typeof element === "object" && element.type === "optional") {
     return optional(

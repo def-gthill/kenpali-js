@@ -14,8 +14,8 @@ export function object(...entries) {
   return { type: "object", entries };
 }
 
-export function objectPattern(...names) {
-  return { type: "objectPattern", names };
+export function objectPattern(...entries) {
+  return { type: "objectPattern", entries };
 }
 
 export function optional(name, defaultValue) {

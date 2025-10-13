@@ -1451,22 +1451,19 @@ function toArrayNamePattern(param) {
 
 function toObjectNamePattern(param) {
   if (typeof param === "string") {
-    return param;
+    return [param, param];
   } else if ("rest" in param) {
     return rest(toNamePattern(param.rest));
   } else if ("defaultValue" in param) {
     const { defaultValue, ...rest } = param;
-    return {
-      ...optionalNode(toNamePattern(rest), defaultValue),
-      property: param.name,
-    };
+    return [param.name, optionalNode(toNamePattern(rest), defaultValue)];
   } else {
     const result = { ...param };
     if ("type" in result) {
       result.schema = result.type;
       delete result.type;
     }
-    return result;
+    return [result.name, result];
   }
 }
 
