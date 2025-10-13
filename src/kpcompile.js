@@ -491,33 +491,30 @@ class Compiler {
       if (this.trace) {
         this.log(`Declared name "${pattern}"`);
       }
-    } else if ("type" in pattern) {
-      switch (pattern.type) {
-        case "arrayPattern":
-          for (const element of pattern.names) {
-            this.declareNames(element);
+      return;
+    }
+    switch (pattern.type) {
+      case "arrayPattern":
+        for (const element of pattern.names) {
+          this.declareNames(element);
+        }
+        break;
+      case "objectPattern":
+        for (const entry of pattern.entries) {
+          if (entry.type === "rest") {
+            this.declareNames(entry.name);
+          } else {
+            this.declareNames(entry[1]);
           }
-          break;
-        case "objectPattern":
-          for (const entry of pattern.entries) {
-            if (entry.type === "rest") {
-              this.declareNames(entry.name);
-            } else {
-              this.declareNames(entry[1]);
-            }
-          }
-          break;
-        case "rest":
-        case "optional":
-          this.declareNames(pattern.name);
-          break;
-        default:
-          throw kperror("invalidPattern", ["pattern", pattern]);
-      }
-    } else if ("name" in pattern) {
-      this.declareNames(pattern.name);
-    } else {
-      throw kperror("invalidPattern", ["pattern", pattern]);
+        }
+        break;
+      case "checked":
+      case "optional":
+      case "rest":
+        this.declareNames(pattern.name);
+        break;
+      default:
+        throw kperror("invalidPattern", ["pattern", pattern]);
     }
   }
 
@@ -526,25 +523,25 @@ class Compiler {
     if (pattern === null) {
       // Expression statement, throw away the result
       this.addInstruction(op.DISCARD);
+      return;
     } else if (typeof pattern === "string") {
       this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern));
       this.addDiagnostic({ name: pattern });
-    } else if ("type" in pattern) {
-      switch (pattern.type) {
-        case "arrayPattern":
-          this.assignNamesInArrayPattern(pattern, { isArgumentPattern });
-          break;
-        case "objectPattern":
-          this.assignNamesInObjectPattern(pattern, { isArgumentPattern });
-          break;
-        default:
-          throw kperror("invalidPattern", ["pattern", pattern]);
-      }
-    } else if ("name" in pattern) {
-      if ("schema" in pattern) {
+      return;
+    }
+    switch (pattern.type) {
+      case "arrayPattern":
+        this.assignNamesInArrayPattern(pattern, { isArgumentPattern });
+        break;
+      case "objectPattern":
+        this.assignNamesInObjectPattern(pattern, { isArgumentPattern });
+        break;
+      case "checked":
         this.validate(pattern.schema, { isArgument, isArgumentPattern });
-      }
-      this.assignNames(pattern.name);
+        this.assignNames(pattern.name, { isArgument });
+        break;
+      default:
+        throw kperror("invalidPattern", ["pattern", pattern]);
     }
   }
 

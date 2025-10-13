@@ -1,5 +1,6 @@
 import {
   arrayPattern,
+  checked,
   literal,
   objectPattern,
   optional as optionalNode,
@@ -1439,13 +1440,11 @@ function toArrayNamePattern(param) {
   } else if ("defaultValue" in param) {
     const { defaultValue, ...rest } = param;
     return optionalNode(toNamePattern(rest), defaultValue);
+  } else if ("type" in param) {
+    const { type, ...rest } = param;
+    return checked(toNamePattern(rest), type);
   } else {
-    const result = { ...param };
-    if ("type" in result) {
-      result.schema = result.type;
-      delete result.type;
-    }
-    return result;
+    throw new Error(`Invalid array name pattern: ${param}`);
   }
 }
 
@@ -1457,26 +1456,22 @@ function toObjectNamePattern(param) {
   } else if ("defaultValue" in param) {
     const { defaultValue, ...rest } = param;
     return [param.name, optionalNode(toNamePattern(rest), defaultValue)];
+  } else if ("type" in param) {
+    const { type, ...rest } = param;
+    return [param.name, checked(toNamePattern(rest), type)];
   } else {
-    const result = { ...param };
-    if ("type" in result) {
-      result.schema = result.type;
-      delete result.type;
-    }
-    return [result.name, result];
+    throw new Error(`Invalid object name pattern: ${param}`);
   }
 }
 
 function toNamePattern(param) {
   if (typeof param === "string") {
     return param;
+  } else if ("type" in param) {
+    const { type, ...rest } = param;
+    return checked(toNamePattern(rest), type);
   } else {
-    const result = { ...param };
-    if ("type" in result) {
-      result.schema = result.type;
-      delete result.type;
-    }
-    return result;
+    return param.name;
   }
 }
 

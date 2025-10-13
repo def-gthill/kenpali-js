@@ -79,19 +79,14 @@ function desugarBlock(expression) {
 function desugarNamePattern(pattern) {
   if (typeof pattern === "string") {
     return pattern;
-  } else if ("type" in pattern) {
-    switch (pattern.type) {
-      case "arrayPattern":
-        return arrayPattern(...pattern.names.map(desugarNamePatternElement));
-      case "objectPattern":
-        return objectPattern(
-          ...pattern.entries.map(desugarObjectPatternElement)
-        );
-      default:
-        throw new Error(`Invalid name pattern type ${pattern.type}`);
-    }
-  } else if ("name" in pattern) {
-    return { ...pattern, name: desugarNamePattern(pattern.name) };
+  }
+  switch (pattern.type) {
+    case "arrayPattern":
+      return arrayPattern(...pattern.names.map(desugarNamePatternElement));
+    case "objectPattern":
+      return objectPattern(...pattern.entries.map(desugarObjectPatternElement));
+    default:
+      throw new Error(`Invalid name pattern type ${pattern.type}`);
   }
 }
 
