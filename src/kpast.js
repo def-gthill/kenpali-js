@@ -84,8 +84,32 @@ export function group(expression) {
   return { type: "group", expression };
 }
 
-export function pipeline(start, ...calls) {
-  return { type: "pipeline", start, calls };
+export function pipeline(start, ...steps) {
+  return { type: "pipeline", start, steps };
+}
+
+export function args(args, namedArgs) {
+  return { type: "args", args, namedArgs };
+}
+
+export function pipeArgs(callee, args, namedArgs) {
+  return { type: "pipeArgs", callee, args, namedArgs };
+}
+
+export function pipeDot(index) {
+  return { type: "pipeDot", index };
+}
+
+export function pipe(callee) {
+  return { type: "pipe", callee };
+}
+
+export function at(index) {
+  return { type: "at", index };
+}
+
+export function bang() {
+  return { type: "bang" };
 }
 
 export function arraySpread(expression) {
@@ -106,107 +130,241 @@ export function objectRest(name) {
 
 //#endregion
 
-export function transformTree(expression, handlers) {
-  function transformExpression(node) {
-    return transformTree(node, handlers);
-  }
-
-  function transformNode(handlerName, defaultHandler) {
-    if (handlerName in handlers) {
-      return handlers[handlerName](
-        expression,
-        transformExpression,
-        defaultHandler
-      );
-    } else {
-      return defaultHandler(expression);
+export class TreeTransformer {
+  transformExpression(expression) {
+    if (
+      expression === null ||
+      typeof expression !== "object" ||
+      !("type" in expression)
+    ) {
+      return this.transformOtherExpression(expression);
+    }
+    switch (expression.type) {
+      case "literal":
+        return this.transformLiteral(expression);
+      case "array":
+        return this.transformArray(expression);
+      case "object":
+        return this.transformObject(expression);
+      case "name":
+        return this.transformName(expression);
+      case "block":
+        return this.transformBlock(expression);
+      case "function":
+        return this.transformFunction(expression);
+      case "call":
+        return this.transformCall(expression);
+      case "index":
+        return this.transformIndex(expression);
+      case "catch":
+        return this.transformCatch(expression);
+      default:
+        return this.transformOtherExpression(expression);
     }
   }
 
-  if (
-    expression === null ||
-    typeof expression !== "object" ||
-    !("type" in expression)
-  ) {
-    return transformNode("handleOther", (node) => node);
+  transformLiteral(expression) {
+    return expression;
   }
-  switch (expression.type) {
-    case "literal":
-      return transformNode("handleLiteral", (node) => node);
-    case "array":
-      return transformNode("handleArray", (node) => ({
-        ...node,
-        elements: node.elements.map((element) => {
-          if (element.type === "spread") {
-            return spread(transformExpression(element.value));
-          } else {
-            return transformExpression(element);
-          }
-        }),
-      }));
-    case "object":
-      return transformNode("handleObject", (node) => ({
-        ...node,
-        entries: node.entries.map((element) => {
-          if (element.type === "spread") {
-            return spread(transformExpression(element.value));
-          } else {
-            const [key, value] = element;
-            return [
-              typeof key === "string" ? key : transformExpression(key),
-              transformExpression(value),
-            ];
-          }
-        }),
-      }));
-    case "name":
-      return transformNode("handleName", (node) => node);
-    case "block":
-      return transformNode("handleBlock", (node) => ({
-        ...node,
-        defs: node.defs.map(([name, value]) => [
-          typeof name === "string" ? name : transformExpression(name),
-          transformExpression(value),
-        ]),
-        result: transformExpression(node.result),
-      }));
-    case "function":
-      return transformNode("handleFunction", (node) => ({
-        ...node,
-        body: transformExpression(node.body),
-      }));
-    case "call":
-      return transformNode("handleCall", (node) => ({
-        ...node,
-        callee: transformExpression(node.callee),
-        args: (node.args ?? []).map((element) => {
-          if (element.type === "spread") {
-            return spread(transformExpression(element.value));
-          } else {
-            return transformExpression(element);
-          }
-        }),
-        namedArgs: (node.namedArgs ?? []).map((element) => {
-          if (element.type === "spread") {
-            return spread(transformExpression(element.value));
-          } else {
-            const [name, value] = element;
-            return [name, transformExpression(value)];
-          }
-        }),
-      }));
-    case "index":
-      return transformNode("handleIndex", (node) => ({
-        ...node,
-        collection: transformExpression(node.collection),
-        index: transformExpression(node.index),
-      }));
-    case "catch":
-      return transformNode("handleCatch", (node) => ({
-        ...node,
-        expression: transformExpression(node.expression),
-      }));
-    default:
-      return transformNode("handleOther", (node) => node);
+
+  transformArray(expression) {
+    return array(
+      ...expression.elements.map((element) =>
+        this.transformArrayElement(element)
+      )
+    );
+  }
+
+  transformArrayElement(element) {
+    if (element.type === "spread") {
+      return this.transformSpreadArrayElement(element);
+    } else {
+      return this.transformOtherArrayElement(element);
+    }
+  }
+
+  transformSpreadArrayElement(element) {
+    return spread(this.transformExpression(element.value));
+  }
+
+  transformOtherArrayElement(element) {
+    return this.transformExpression(element);
+  }
+
+  transformObject(expression) {
+    return object(
+      ...expression.entries.map((entry) => this.transformObjectElement(entry))
+    );
+  }
+
+  transformObjectElement(element) {
+    if (element.type === "spread") {
+      return this.transformSpreadObjectElement(element);
+    } else if (Array.isArray(element)) {
+      return this.transformEntryObjectElement(element);
+    } else {
+      return this.transformOtherObjectElement(element);
+    }
+  }
+
+  transformSpreadObjectElement(element) {
+    return spread(this.transformExpression(element.value));
+  }
+
+  transformEntryObjectElement(element) {
+    return [
+      this.transformExpression(element[0]),
+      this.transformExpression(element[1]),
+    ];
+  }
+
+  transformOtherObjectElement(element) {
+    return this.transformExpression(element);
+  }
+
+  transformName(expression) {
+    return expression;
+  }
+
+  transformBlock(expression) {
+    return block(
+      ...expression.defs.map((def) => this.transformDef(def)),
+      this.transformExpression(expression.result)
+    );
+  }
+
+  transformDef(def) {
+    const [name, value] = def;
+    if (name === null) {
+      return [null, this.transformExpression(value)];
+    } else {
+      return [this.transformNamePattern(name), this.transformExpression(value)];
+    }
+  }
+
+  transformNamePattern(name) {
+    if (typeof name === "string") {
+      return this.transformStringPattern(name);
+    }
+    switch (name.type) {
+      case "arrayPattern":
+        return this.transformArrayPattern(name);
+      case "objectPattern":
+        return this.transformObjectPattern(name);
+      case "checked":
+        return this.transformChecked(name);
+      case "optional":
+        return this.transformOptional(name);
+      default:
+        return this.transformOtherNamePattern(name);
+    }
+  }
+
+  transformStringPattern(name) {
+    return name;
+  }
+
+  transformArrayPattern(pattern) {
+    return arrayPattern(
+      ...pattern.names.map((name) => this.transformArrayPatternElement(name))
+    );
+  }
+
+  transformArrayPatternElement(element) {
+    if (element.type === "rest") {
+      return this.transformRestArrayPatternElement(element);
+    } else {
+      return this.transformOtherArrayPatternElement(element);
+    }
+  }
+
+  transformRestArrayPatternElement(element) {
+    return rest(this.transformNamePattern(element.name));
+  }
+
+  transformOtherArrayPatternElement(element) {
+    return this.transformNamePattern(element);
+  }
+
+  transformObjectPattern(pattern) {
+    return objectPattern(
+      ...pattern.entries.map((entry) =>
+        this.transformObjectPatternElement(entry)
+      )
+    );
+  }
+
+  transformObjectPatternElement(element) {
+    if (element.type === "rest") {
+      return this.transformRestObjectPatternElement(element);
+    } else if (Array.isArray(element)) {
+      return this.transformEntryObjectPatternElement(element);
+    } else {
+      return this.transformOtherObjectPatternElement(element);
+    }
+  }
+
+  transformRestObjectPatternElement(element) {
+    return rest(this.transformNamePattern(element.name));
+  }
+
+  transformEntryObjectPatternElement(element) {
+    return [element[0], this.transformNamePattern(element[1])];
+  }
+
+  transformOtherObjectPatternElement(element) {
+    return element;
+  }
+
+  transformChecked(element) {
+    return checked(this.transformNamePattern(element.name), element.schema);
+  }
+
+  transformOptional(element) {
+    return optional(
+      this.transformNamePattern(element.name),
+      this.transformExpression(element.defaultValue)
+    );
+  }
+
+  transformOtherNamePattern(element) {
+    return element;
+  }
+
+  transformFunction(expression) {
+    return function_(
+      this.transformExpression(expression.body),
+      (expression.params ?? []).map((param) =>
+        this.transformArrayPatternElement(param)
+      ),
+      (expression.namedParams ?? []).map((param) =>
+        this.transformObjectPatternElement(param)
+      )
+    );
+  }
+
+  transformCall(expression) {
+    return call(
+      this.transformExpression(expression.callee),
+      (expression.args ?? []).map((arg) => this.transformArrayElement(arg)),
+      (expression.namedArgs ?? []).map((arg) =>
+        this.transformObjectElement(arg)
+      )
+    );
+  }
+
+  transformIndex(expression) {
+    return index(
+      this.transformExpression(expression.collection),
+      this.transformExpression(expression.index)
+    );
+  }
+
+  transformCatch(expression) {
+    return catch_(this.transformExpression(expression.expression));
+  }
+
+  transformOtherExpression(expression) {
+    return expression;
   }
 }

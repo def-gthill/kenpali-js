@@ -6,7 +6,7 @@ import {
   arrayPattern,
   object,
   objectPattern,
-  transformTree,
+  TreeTransformer,
 } from "./kpast.js";
 import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
@@ -1128,8 +1128,9 @@ function addModulesToLibrary(library, modules) {
   return result;
 }
 
-class LibraryFilter {
+class LibraryFilter extends TreeTransformer {
   constructor(library, expression) {
+    super();
     this.libraryExpressions = [...library];
     this.allExpressions = [...library, ["<main>", expression]];
     this.libraryByName = new Map(
@@ -1142,7 +1143,7 @@ class LibraryFilter {
   filter() {
     for (let i = 0; i < this.allExpressions.length; i++) {
       this.currentUsage = this.usage[i];
-      this.resolveExpression(this.allExpressions[i][1]);
+      this.transformExpression(this.allExpressions[i][1]);
     }
     const grey = new Set([this.allExpressions.length - 1]);
     const black = new Set();
@@ -1159,46 +1160,40 @@ class LibraryFilter {
     return new Map(this.libraryExpressions.filter((_, i) => black.has(i)));
   }
 
-  resolveExpression(expression) {
-    const outerThis = this;
-    transformTree(expression, {
-      handleName(node) {
-        if (node.from) {
-          const fullName = `${node.from}/${node.name}`;
-          if (outerThis.libraryByName.has(fullName)) {
-            outerThis.currentUsage.add(outerThis.libraryByName.get(fullName));
-          }
-          return;
-        }
+  transformName(expression) {
+    this.resolveName(expression);
+    return super.transformName(expression);
+  }
 
-        for (const scope of outerThis.activeScopes) {
-          if (scope.has(node.name)) {
-            return;
-          }
-        }
+  resolveName(expression) {
+    if (expression.from) {
+      const fullName = `${expression.from}/${expression.name}`;
+      if (this.libraryByName.has(fullName)) {
+        this.currentUsage.add(this.libraryByName.get(fullName));
+      }
+      return;
+    }
 
-        if (outerThis.libraryByName.has(node.name)) {
-          outerThis.currentUsage.add(outerThis.libraryByName.get(node.name));
-        }
-      },
-      handleBlock(node, transformExpression) {
-        const scope = new Set();
-        for (const statement of node.defs) {
-          if (Array.isArray(statement)) {
-            const [name, _] = statement;
-            scope.add(name);
-          }
-        }
-        outerThis.activeScopes.push(scope);
-        for (const statement of node.defs) {
-          if (Array.isArray(statement)) {
-            const [_, value] = statement;
-            transformExpression(value);
-          }
-        }
-        transformExpression(node.result);
-        outerThis.activeScopes.pop();
-      },
-    });
+    for (const scope of this.activeScopes) {
+      if (scope.has(expression.name)) {
+        return;
+      }
+    }
+
+    if (this.libraryByName.has(expression.name)) {
+      this.currentUsage.add(this.libraryByName.get(expression.name));
+    }
+  }
+
+  transformBlock(expression) {
+    const scope = new Set();
+    for (const statement of expression.defs) {
+      const [name, _] = statement;
+      scope.add(name);
+    }
+    this.activeScopes.push(scope);
+    const result = super.transformBlock(expression);
+    this.activeScopes.pop();
+    return result;
   }
 }

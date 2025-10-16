@@ -3,6 +3,8 @@ import desugar from "../src/desugar.js";
 import {
   array,
   arraySpread,
+  at,
+  bang,
   block,
   call,
   catch_,
@@ -12,6 +14,7 @@ import {
   literal,
   name,
   object,
+  pipe,
   pipeline,
   spread,
 } from "../src/kpast.js";
@@ -42,18 +45,18 @@ test("A simple array desugars to itself", (t) => {
 });
 
 test("A forward pipe desugars to a function call", (t) => {
-  const expression = pipeline(name("x"), ["PIPE", name("f")]);
+  const expression = pipeline(name("x"), pipe(name("f")));
   const result = desugar(expression);
   t.deepEqual(result, call(name("f"), [name("x")]));
 });
 
 test("A bang operator desugars to a catching node", (t) => {
-  const expression = pipeline(name("x"), ["BANG"]);
+  const expression = pipeline(name("x"), bang());
   const result = desugar(expression);
   t.deepEqual(result, catch_(name("x")));
 });
 
-const pipeSugared = pipeline(name("x"), ["PIPE", name("f")]);
+const pipeSugared = pipeline(name("x"), pipe(name("f")));
 const pipeDesugared = call(name("f"), [name("x")]);
 
 test("Desugaring propagates through arrays", (t) => {
@@ -87,11 +90,7 @@ test("Desugaring propagates through function definitions", (t) => {
 });
 
 test("Desugaring propagates through pipelines", (t) => {
-  const expression = pipeline(
-    pipeSugared,
-    ["PIPE", pipeSugared],
-    ["AT", pipeSugared]
-  );
+  const expression = pipeline(pipeSugared, pipe(pipeSugared), at(pipeSugared));
   const result = desugar(expression);
   t.deepEqual(
     result,

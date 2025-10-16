@@ -1,208 +1,286 @@
 import {
-  array,
-  arrayPattern,
-  block,
+  args,
+  arrayRest,
+  at,
   call,
   catch_,
-  function_,
+  group,
   index,
-  object,
-  objectPattern,
-  optional,
+  objectRest,
+  pipe,
+  pipeArgs,
+  pipeDot,
+  pipeline,
   rest,
   spread,
-  transformTree,
+  TreeTransformer,
 } from "./kpast.js";
 
 export default function desugar(expression) {
-  return transformTree(expression, {
-    handleArray(node, transformExpression) {
-      return array(
-        ...node.elements.map((element) => {
-          if (element.type === "arraySpread") {
-            return spread(transformExpression(element.expression));
-          } else {
-            return transformExpression(element);
-          }
-        })
-      );
-    },
-    handleObject(node, transformExpression) {
-      return object(
-        ...node.entries.map((element) => {
-          if (element.type === "objectSpread") {
-            return spread(transformExpression(element.expression));
-          } else if (element.type === "name") {
-            return [element.name, element];
-          } else {
-            const [key, value] = element;
-            return [
-              desugarProperty(key, transformExpression),
-              transformExpression(value),
-            ];
-          }
-        })
-      );
-    },
-    handleBlock(node, transformExpression) {
-      return block(
-        ...node.defs.map(([name, value]) => [
-          name ? desugarNamePattern(name, transformExpression) : name,
-          transformExpression(value),
-        ]),
-        transformExpression(node.result)
-      );
-    },
-    handleFunction(node, transformExpression) {
-      return function_(
-        transformExpression(node.body),
-        desugarArrayPattern(node.params ?? [], transformExpression),
-        desugarObjectPattern(node.namedParams ?? [], transformExpression)
-      );
-    },
-    handleOther(node, transformExpression) {
-      switch (node.type) {
-        case "group":
-          return desugarGroup(node, transformExpression);
-        case "pipeline":
-          return desugarPipeline(node, transformExpression);
-        default:
-          return node;
-      }
-    },
-  });
+  let result = expression;
+
+  // Kenpali Code uses different syntax for spreads in arrays than for spreads in objects.
+  // This step converts both to the single `spread` node mandated by Kenpali JSON.
+  result = removeSpecializedSpreads(result);
+
+  // Kenpali Code uses different syntax for rest elements in arrays than for rest elements in objects.
+  // This step converts both to the single `rest` node mandated by Kenpali JSON.
+  result = removeSpecializedRests(result);
+
+  // This step converts Kenpali's pipeline syntax into ordinary function calls
+  // and operators.
+  result = convertPipelines(result);
+
+  // Kenpali Code has a few shortcuts for object syntax that we need to expand to
+  // match the Kenpali JSON standard.
+  result = normalizeObjectSyntax(result);
+
+  // This step replaces expressions in parentheses with their contents.
+  // Normally this could be done *first*—the AST inherently encodes
+  // precedence, so there's no need to alter it with parentheses. But
+  // in Kenpali, some syntactic sugar has a parent node reaching into
+  // child nodes and changing them. Putting a child node in a group can be
+  // used to block that effect, so the groups need to stay around
+  // through the desugaring process.
+  result = removeGroups(result);
+
+  return result;
 }
 
-function desugarArrayElements(elements, transformExpression) {
-  return elements.map((element) => {
+// Version of transformTree that also recurses into sugar nodes.
+// This makes it possible to split desugaring into several
+// largely independent steps.
+class SugaredTreeTransformer extends TreeTransformer {
+  transformArrayElement(element) {
     if (element.type === "arraySpread") {
-      return spread(transformExpression(element.expression));
+      return arraySpread(this.transformExpression(element.value));
     } else {
-      return transformExpression(element);
+      return super.transformArrayElement(element);
     }
-  });
-}
+  }
 
-function desugarObjectEntries(entries, transformExpression) {
-  return entries.map((element) => {
+  transformObjectElement(element) {
     if (element.type === "objectSpread") {
-      return spread(transformExpression(element.expression));
+      return objectSpread(this.transformExpression(element.value));
     } else {
-      const [key, value] = element;
-      return [
-        desugarProperty(key, transformExpression),
-        transformExpression(value),
-      ];
+      return super.transformObjectElement(element);
     }
-  });
-}
-
-function desugarNamePattern(pattern, transformExpression) {
-  if (typeof pattern === "string") {
-    return pattern;
   }
-  switch (pattern.type) {
-    case "arrayPattern":
-      return arrayPattern(
-        ...pattern.names.map((element) =>
-          desugarNamePatternElement(element, transformExpression)
-        )
-      );
-    case "objectPattern":
-      return objectPattern(
-        ...pattern.entries.map((element) =>
-          desugarObjectPatternElement(element, transformExpression)
-        )
-      );
-    default:
-      throw new Error(`Invalid name pattern type ${pattern.type}`);
+
+  transformArrayPatternElement(element) {
+    if (element.type === "arrayRest") {
+      return arrayRest(this.transformNamePattern(element.name));
+    } else {
+      return super.transformArrayPatternElement(element);
+    }
   }
-}
 
-function desugarArrayPattern(pattern, transformExpression) {
-  return pattern.map((element) =>
-    desugarNamePatternElement(element, transformExpression)
-  );
-}
-
-function desugarObjectPattern(pattern, transformExpression) {
-  return pattern.map((element) =>
-    desugarObjectPatternElement(element, transformExpression)
-  );
-}
-
-function desugarObjectPatternElement(element, transformExpression) {
-  if (element.type === "objectRest") {
-    return rest(desugarNamePattern(element.name, transformExpression));
-  } else {
-    const [key, name] = element;
-    return [
-      desugarNamePattern(key, transformExpression),
-      desugarNamePatternElement(name, transformExpression),
-    ];
+  transformObjectPatternElement(element) {
+    if (element.type === "objectRest") {
+      return objectRest(this.transformNamePattern(element.name));
+    } else {
+      return super.transformObjectPatternElement(element);
+    }
   }
-}
 
-function desugarNamePatternElement(element, transformExpression) {
-  if (typeof element === "object" && element.type === "arrayRest") {
-    return rest(desugarNamePattern(element.name, transformExpression));
-  } else if (typeof element === "object" && element.type === "optional") {
-    return optional(
-      desugarNamePattern(element.name, transformExpression),
-      transformExpression(element.defaultValue)
+  transformOtherExpression(expression) {
+    if (
+      expression === null ||
+      typeof expression !== "object" ||
+      !("type" in expression)
+    ) {
+      return super.transformOtherExpression(expression);
+    }
+    switch (expression.type) {
+      case "group":
+        return this.transformGroup(expression);
+      case "pipeline":
+        return this.transformPipeline(expression);
+      default:
+        return super.transformOtherExpression(expression);
+    }
+  }
+
+  transformGroup(expression) {
+    return group(this.transformExpression(expression.expression));
+  }
+
+  transformPipeline(expression) {
+    return pipeline(
+      this.transformExpression(expression.start),
+      ...expression.steps.map((step) => this.transformPipelineStep(step))
     );
-  } else {
-    return desugarNamePattern(element, transformExpression);
   }
-}
 
-function desugarGroup(expression, transformExpression) {
-  return transformExpression(expression.expression);
-}
-
-function desugarProperty(expression, transformExpression) {
-  if (expression.type === "name") {
-    return expression.name;
-  } else if (expression.type === "literal") {
-    return expression.value;
-  } else {
-    return transformExpression(expression);
-  }
-}
-
-function desugarPipeline(expression, transformExpression) {
-  let axis = transformExpression(expression.start);
-  for (const [op, ...target] of expression.calls) {
-    if (op === "CALL") {
-      const [allArgs] = target;
-      const { args, namedArgs } = allArgs;
-      axis = call(
-        axis,
-        desugarArrayElements(args, transformExpression),
-        desugarObjectEntries(namedArgs, transformExpression)
-      );
-    } else if (op === "PIPECALL") {
-      const [callee, allArgs] = target;
-      const { args, namedArgs } = allArgs;
-      axis = call(
-        transformExpression(callee),
-        [axis, ...desugarArrayElements(args, transformExpression)],
-        desugarObjectEntries(namedArgs, transformExpression)
-      );
-    } else if (op === "PIPEDOT") {
-      const [propertyName] = target;
-      axis = index(axis, propertyName);
-    } else if (op === "PIPE") {
-      const [callee] = target;
-      axis = call(transformExpression(callee), [axis]);
-    } else if (op === "AT") {
-      const [i] = target;
-      axis = index(axis, transformExpression(i));
-    } else if (op === "BANG") {
-      axis = catch_(axis);
-    } else {
-      throw new Error(`Invalid pipeline op ${op}`);
+  transformPipelineStep(step) {
+    switch (step.type) {
+      case "args":
+        return this.transformArgsStep(step);
+      case "pipeArgs":
+        return this.transformPipeArgsStep(step);
+      case "pipeDot":
+        return this.transformPipeDotStep(step);
+      case "pipe":
+        return this.transformPipeStep(step);
+      case "at":
+        return this.transformAtStep(step);
+      case "bang":
+        return this.transformBangStep(step);
+      default:
+        return this.transformOtherStep(step);
     }
   }
-  return axis;
+
+  transformArgsStep(step) {
+    return args(
+      step.args.map((arg) => this.transformArrayElement(arg)),
+      step.namedArgs.map((arg) => this.transformObjectElement(arg))
+    );
+  }
+
+  transformPipeArgsStep(step) {
+    return pipeArgs(
+      this.transformExpression(step.callee),
+      step.args.map((arg) => this.transformArrayElement(arg)),
+      step.namedArgs.map((arg) => this.transformObjectElement(arg))
+    );
+  }
+
+  transformPipeDotStep(step) {
+    return pipeDot(this.transformExpression(step.index));
+  }
+
+  transformPipeStep(step) {
+    return pipe(this.transformExpression(step.callee));
+  }
+
+  transformAtStep(step) {
+    return at(this.transformExpression(step.index));
+  }
+
+  transformBangStep(step) {
+    return step;
+  }
+
+  transformOtherStep(step) {
+    return step;
+  }
+}
+
+class SpecializedSpreadRemover extends SugaredTreeTransformer {
+  transformArrayElement(element) {
+    if (element.type === "arraySpread") {
+      return spread(element.expression);
+    } else {
+      return super.transformArrayElement(element);
+    }
+  }
+
+  transformObjectElement(element) {
+    if (element.type === "objectSpread") {
+      return spread(element.expression);
+    } else {
+      return super.transformObjectElement(element);
+    }
+  }
+}
+
+const specializedSpreadRemover = new SpecializedSpreadRemover();
+
+function removeSpecializedSpreads(expression) {
+  return specializedSpreadRemover.transformExpression(expression);
+}
+
+class SpecializedRestRemover extends SugaredTreeTransformer {
+  transformArrayPatternElement(element) {
+    if (element.type === "arrayRest") {
+      return rest(element.name);
+    } else {
+      return super.transformArrayPatternElement(element);
+    }
+  }
+
+  transformObjectPatternElement(element) {
+    if (element.type === "objectRest") {
+      return rest(element.name);
+    } else {
+      return super.transformObjectPatternElement(element);
+    }
+  }
+}
+
+const specializedRestRemover = new SpecializedRestRemover();
+
+function removeSpecializedRests(expression) {
+  return specializedRestRemover.transformExpression(expression);
+}
+
+class PipelineTransformer extends SugaredTreeTransformer {
+  transformPipeline(pipeline) {
+    let axis = pipeline.start;
+    for (const step of pipeline.steps) {
+      switch (step.type) {
+        case "args":
+          axis = call(axis, step.args, step.namedArgs);
+          break;
+        case "pipeArgs":
+          axis = call(step.callee, [axis, ...step.args], step.namedArgs);
+          break;
+        case "pipeDot":
+          axis = index(axis, step.index);
+          break;
+        case "pipe":
+          axis = call(step.callee, [axis]);
+          break;
+        case "at":
+          axis = index(axis, step.index);
+          break;
+        case "bang":
+          axis = catch_(axis);
+          break;
+        default:
+          throw new Error(`Invalid pipeline step type "${step.type}"`);
+      }
+    }
+    return this.transformExpression(axis);
+  }
+}
+
+const pipelineTransformer = new PipelineTransformer();
+
+function convertPipelines(expression) {
+  return pipelineTransformer.transformExpression(expression);
+}
+
+class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
+  transformObjectElement(element) {
+    if (element.type === "name") {
+      return this.transformEntryObjectElement([element.name, element]);
+    } else {
+      return super.transformObjectElement(element);
+    }
+  }
+  transformEntryObjectElement([key, value]) {
+    const transformedKey =
+      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+    return super.transformEntryObjectElement([transformedKey, value]);
+  }
+}
+
+const objectSyntaxNormalizer = new ObjectSyntaxNormalizer();
+
+function normalizeObjectSyntax(expression) {
+  return objectSyntaxNormalizer.transformExpression(expression);
+}
+
+class GroupRemover extends SugaredTreeTransformer {
+  transformGroup(expression) {
+    return this.transformExpression(expression.expression);
+  }
+}
+
+const groupRemover = new GroupRemover();
+
+function removeGroups(expression) {
+  return groupRemover.transformExpression(expression);
 }

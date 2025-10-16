@@ -1,9 +1,12 @@
 import desugar from "./desugar.js";
 import {
+  args,
   array,
   arrayPattern,
   arrayRest,
   arraySpread,
+  at,
+  bang,
   block,
   function_,
   group,
@@ -15,6 +18,9 @@ import {
   objectRest,
   objectSpread,
   optional,
+  pipe,
+  pipeArgs,
+  pipeDot,
   pipeline,
 } from "./kpast.js";
 import kplex from "./kplex.js";
@@ -250,8 +256,8 @@ function parsePointFreePipeline(parser, start) {
 function parsePipelineStep(parser, start) {
   return parseAnyOf(
     "pipelineStep",
-    parseCall,
-    parsePipeCall,
+    parseArgs,
+    parsePipeArgs,
     parsePipeDot,
     parsePipe,
     parseAt,
@@ -259,41 +265,47 @@ function parsePipelineStep(parser, start) {
   )(parser, start);
 }
 
-function parseCall(parser, start) {
-  return convert(parseArgumentList, (list) => ["CALL", list])(parser, start);
-}
-
-function parsePipeCall(parser, start) {
-  return parseAllOf("pipeCall", [
-    parseSingle("PIPE", () => "PIPECALL"),
-    parseTightPipeline,
-    parseArgumentList,
-  ])(parser, start);
-}
-
-function parsePipeDot(parser, start) {
-  return parseAllOf("pipeDot", [
-    parseSingle("PIPE_DOT", () => "PIPEDOT"),
-    convert(parseName, (name) => literal(name.name)),
-  ])(parser, start);
-}
-
-function parsePipe(parser, start) {
-  return parseAllOf("pipe", [
-    parseSingle("PIPE", () => "PIPE"),
-    parseTightPipeline,
-  ])(parser, start);
-}
-
-function parseAt(parser, start) {
-  return parseAllOf("at", [parseSingle("AT", () => "AT"), parseTightPipeline])(
+function parseArgs(parser, start) {
+  return convert(parseArgumentList, (list) => args(list.args, list.namedArgs))(
     parser,
     start
   );
 }
 
+function parsePipeArgs(parser, start) {
+  return parseAllOf(
+    "pipeCall",
+    [consume("PIPE", "expectedPipe"), parseTightPipeline, parseArgumentList],
+    (callee, { args, namedArgs }) => pipeArgs(callee, args, namedArgs)
+  )(parser, start);
+}
+
+function parsePipeDot(parser, start) {
+  return parseAllOf(
+    "pipeDot",
+    [consume("PIPE_DOT", "expectedPipeDot"), parseName],
+    (name) => pipeDot(literal(name.name))
+  )(parser, start);
+}
+
+function parsePipe(parser, start) {
+  return parseAllOf(
+    "pipe",
+    [consume("PIPE", "expectedPipe"), parseTightPipeline],
+    (callee) => pipe(callee)
+  )(parser, start);
+}
+
+function parseAt(parser, start) {
+  return parseAllOf(
+    "at",
+    [consume("AT", "expectedAt"), parseTightPipeline],
+    (index) => at(index)
+  )(parser, start);
+}
+
 function parseBang(parser, start) {
-  return parseSingle("BANG", () => ["BANG"])(parser, start);
+  return convert(consume("BANG", "expectedBang"), () => bang())(parser, start);
 }
 
 function parseArrowFunction(parser, start) {

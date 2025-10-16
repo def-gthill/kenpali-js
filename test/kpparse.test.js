@@ -1,12 +1,16 @@
 import test from "ava";
 import {
+  args,
   array,
   arraySpread,
+  at,
+  bang,
   group,
   literal,
   name,
   object,
   objectSpread,
+  pipe,
   pipeline,
 } from "../src/kpast.js";
 import { kpcatch } from "../src/kperror.js";
@@ -43,13 +47,7 @@ test("A pipeline parses to a pipeline node", (t) => {
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(
-      name("a"),
-      ["PIPE", name("b")],
-      ["BANG"],
-      ["AT", name("c")],
-      ["BANG"]
-    )
+    pipeline(name("a"), pipe(name("b")), bang(), at(name("c")), bang())
   );
 });
 
@@ -64,13 +62,10 @@ test("An array spread operator in an argument list parses to an arraySpread node
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(name("foo"), [
-      "CALL",
-      {
-        args: [literal(1), arraySpread(name("bar")), literal(3)],
-        namedArgs: [],
-      },
-    ])
+    pipeline(
+      name("foo"),
+      args([literal(1), arraySpread(name("bar")), literal(3)], [])
+    )
   );
 });
 
@@ -88,13 +83,10 @@ test("An object spread operator in an argument list parses to an objectSpread no
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(name("foo"), [
-      "CALL",
-      {
-        args: [],
-        namedArgs: [[name("question"), literal(42)], objectSpread(name("foo"))],
-      },
-    ])
+    pipeline(
+      name("foo"),
+      args([], [[name("question"), literal(42)], objectSpread(name("foo"))])
+    )
   );
 });
 
