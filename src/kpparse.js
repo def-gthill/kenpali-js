@@ -194,15 +194,11 @@ function parseObjectPatternElement(parser, start) {
 function parseObjectPatternSimple(parser, start) {
   return parseAnyOf(
     "objectPatternSimple",
-    parseAllOf(
-      "objectPatternEntry",
-      [
-        parseAssignable,
-        consume("COLON", "missingKeyTargetSeparator"),
-        parseNamePattern,
-      ],
-      (name, pattern) => [name.name, pattern]
-    ),
+    parseAllOf("objectPatternEntry", [
+      parseAssignable,
+      consume("COLON", "missingKeyTargetSeparator"),
+      parseNamePattern,
+    ]),
     parseObjectPatternPropertyName
   )(parser, start);
 }

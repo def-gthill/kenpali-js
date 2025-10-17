@@ -112,6 +112,10 @@ export function bang() {
   return { type: "bang" };
 }
 
+export function objectKey(key) {
+  return { type: "objectKey", key };
+}
+
 export function arraySpread(expression) {
   return { type: "arraySpread", expression };
 }
@@ -308,8 +312,8 @@ export class TreeTransformer {
     return rest(this.transformNamePattern(element.name));
   }
 
-  transformEntryObjectPatternElement(element) {
-    return [element[0], this.transformNamePattern(element[1])];
+  transformEntryObjectPatternElement([key, pattern]) {
+    return [this.transformExpression(key), this.transformNamePattern(pattern)];
   }
 
   transformOtherObjectPatternElement(element) {

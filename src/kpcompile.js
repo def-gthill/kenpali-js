@@ -580,7 +580,11 @@ class Compiler {
         rest = entry.name;
       } else {
         const [key, name] = entry;
-        this.addInstruction(op.VALUE, key);
+        if (typeof key === "string") {
+          this.addInstruction(op.VALUE, key);
+        } else {
+          this.compileExpression(key);
+        }
         if (typeof name === "object" && name.type === "optional") {
           this.compileExpression(name.defaultValue);
           this.addInstruction(op.OBJECT_POP_OR_DEFAULT);

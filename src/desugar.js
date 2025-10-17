@@ -265,6 +265,11 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
       key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
     return super.transformEntryObjectElement([transformedKey, value]);
   }
+  transformEntryObjectPatternElement([key, pattern]) {
+    const transformedKey =
+      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+    return super.transformEntryObjectPatternElement([transformedKey, pattern]);
+  }
 }
 
 const objectSyntaxNormalizer = new ObjectSyntaxNormalizer();
