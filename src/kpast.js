@@ -23,6 +23,9 @@ export function checked(name, schema) {
 }
 
 export function optional(name, defaultValue) {
+  if (name === undefined) {
+    throw new Error("WTF?");
+  }
   return { type: "optional", name, defaultValue };
 }
 
@@ -82,6 +85,18 @@ export function catch_(expression) {
 
 export function group(expression) {
   return { type: "group", expression };
+}
+
+export function rawFunction(params, body) {
+  return { type: "rawFunction", params, body };
+}
+
+export function rawParamList(params) {
+  return { type: "rawParamList", params };
+}
+
+export function paramList(posParams, namedParams) {
+  return { type: "paramList", posParams, namedParams };
 }
 
 export function pipeline(start, ...steps) {

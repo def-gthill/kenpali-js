@@ -25,6 +25,8 @@ import {
   pipeDot,
   pipeline,
   rawArgList,
+  rawFunction,
+  rawParamList,
 } from "./kpast.js";
 import kplex from "./kplex.js";
 import { deepToKpobject } from "./kpobject.js";
@@ -144,17 +146,25 @@ function parseArrayPattern(parser, start) {
 function parseArrayPatternElement(parser, start) {
   return parseAnyOf(
     "arrayPatternElement",
-    parseAllOf(
-      "arrayPatternDefault",
-      [parseNamePattern, consume("EQUALS", "expectedDefault"), parseAssignable],
-      (name, defaultValue) => optional(name, defaultValue)
-    ),
-    parseAllOf(
-      "arrayPatternRest",
-      [consume("STAR", "expectedRest"), parseNamePattern],
-      (pattern) => arrayRest(pattern)
-    ),
+    parseArrayPatternOptional,
+    parseArrayPatternRest,
     parseNamePattern
+  )(parser, start);
+}
+
+function parseArrayPatternOptional(parser, start) {
+  return parseAllOf(
+    "arrayPatternOptional",
+    [parseNamePattern, consume("EQUALS", "expectedDefault"), parseAssignable],
+    optional
+  )(parser, start);
+}
+
+function parseArrayPatternRest(parser, start) {
+  return parseAllOf(
+    "arrayPatternRest",
+    [consume("STAR", "expectedRest"), parseNamePattern],
+    (pattern) => arrayRest(pattern)
   )(parser, start);
 }
 
@@ -176,41 +186,57 @@ function parseObjectPattern(parser, start) {
 function parseObjectPatternElement(parser, start) {
   return parseAnyOf(
     "objectPatternElement",
-    parseAllOf(
-      "objectPatternDefault",
-      [
-        parseObjectPatternSimple,
-        consume("EQUALS", "expectedDefault"),
-        parseAssignable,
-      ],
-      ([key, name], defaultValue) => [key, optional(name, defaultValue)]
-    ),
-    parseAllOf(
-      "objectPatternRest",
-      [consume("DOUBLE_STAR", "expectedRest"), parseNamePattern],
-      (pattern) => objectRest(pattern)
-    ),
-    parseObjectPatternSimple
+    parseObjectPatternOptional,
+    parseObjectPatternSimple,
+    parseObjectPatternRest
+  )(parser, start);
+}
+
+function parseObjectPatternOptional(parser, start) {
+  return parseAllOf(
+    "objectPatternOptional",
+    [
+      parseObjectPatternSimple,
+      consume("EQUALS", "expectedDefault"),
+      parseAssignable,
+    ],
+    optional
   )(parser, start);
 }
 
 function parseObjectPatternSimple(parser, start) {
   return parseAnyOf(
     "objectPatternSimple",
-    parseAllOf("objectPatternEntry", [
-      parseAssignable,
-      consume("COLON", "missingKeyTargetSeparator"),
-      parseNamePattern,
-    ]),
-    parseObjectPatternPropertyName
+    parseObjectPatternEntry,
+    parseObjectPatternKeyName
   )(parser, start);
 }
 
-function parseObjectPatternPropertyName(parser, start) {
+function parseObjectPatternEntry(parser, start) {
   return parseAllOf(
-    "objectPatternName",
+    "objectPatternEntry",
+    [
+      parseAssignable,
+      consume("COLON", "missingKeyTargetSeparator"),
+      parseNamePattern,
+    ],
+    entry
+  )(parser, start);
+}
+
+function parseObjectPatternKeyName(parser, start) {
+  return parseAllOf(
+    "objectPatternKeyName",
     [parseName, consume("COLON", "expectedPropertyName")],
-    (name) => [name.name, name.name]
+    keyName
+  )(parser, start);
+}
+
+function parseObjectPatternRest(parser, start) {
+  return parseAllOf(
+    "objectPatternRest",
+    [consume("DOUBLE_STAR", "expectedRest"), parseNamePattern],
+    (pattern) => objectRest(pattern)
   )(parser, start);
 }
 
@@ -272,7 +298,7 @@ function parsePipeArgs(parser, start) {
   return parseAllOf(
     "pipeCall",
     [consume("PIPE", "expectedPipe"), parseTightPipeline, parseArgumentList],
-    (callee, args) => pipeArgs(callee, args)
+    pipeArgs
   )(parser, start);
 }
 
@@ -288,7 +314,7 @@ function parsePipe(parser, start) {
   return parseAllOf(
     "pipe",
     [consume("PIPE", "expectedPipe"), parseTightPipeline],
-    (callee) => pipe(callee)
+    pipe
   )(parser, start);
 }
 
@@ -296,12 +322,12 @@ function parseAt(parser, start) {
   return parseAllOf(
     "at",
     [consume("AT", "expectedAt"), parseTightPipeline],
-    (index) => at(index)
+    at
   )(parser, start);
 }
 
 function parseBang(parser, start) {
-  return convert(consume("BANG", "expectedBang"), () => bang())(parser, start);
+  return convert(consume("BANG", "expectedBang"), bang)(parser, start);
 }
 
 function parseArrowFunction(parser, start) {
@@ -312,7 +338,7 @@ function parseArrowFunction(parser, start) {
       consume("ARROW", "expectedArrowFunction"),
       parseAssignable,
     ],
-    (params, body) => function_(body, params.posParams, params.namedParams)
+    rawFunction
   )(parser, start);
 }
 
@@ -327,30 +353,15 @@ function parseParameterList(parser, start) {
       }),
       consume("CLOSE_PAREN", "unclosedParameters"),
     ],
-    (params) => {
-      const result = {};
-      const posParams = params
-        .filter((param) => "positional" in param)
-        .map((param) => param.positional);
-      if (posParams.length > 0) {
-        result.posParams = posParams;
-      }
-      const namedParams = params
-        .filter((param) => "named" in param)
-        .map((param) => param.named);
-      if (namedParams.length > 0) {
-        result.namedParams = namedParams;
-      }
-      return result;
-    }
+    rawParamList
   )(parser, start);
 }
 
 function parseParameter(parser, start) {
   return parseAnyOf(
     "parameter",
-    convert(parseObjectPatternElement, (pattern) => ({ named: pattern })),
-    convert(parseArrayPatternElement, (pattern) => ({ positional: pattern }))
+    parseObjectPatternElement,
+    parseArrayPatternElement
   )(parser, start);
 }
 

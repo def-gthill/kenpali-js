@@ -7,15 +7,19 @@ import {
   call,
   catch_,
   entry,
+  function_,
   group,
   index,
   keyName,
   objectRest,
   objectSpread,
+  optional,
+  paramList,
   pipe,
   pipeArgs,
   pipeDot,
   pipeline,
+  rawFunction,
   rest,
   spread,
   TreeTransformer,
@@ -34,6 +38,10 @@ export default function desugar(expression) {
   // Kenpali Code uses different syntax for rest elements in arrays than for rest elements in objects.
   // This step converts both to the single `rest` node mandated by Kenpali JSON.
   result = removeSpecializedRests(result);
+
+  // This step converts Kenpali's function syntax, with mixed positional and named parameters,
+  // into Kenpali JSON's function syntax, with separate positional and named parameter lists.
+  result = convertRawFunctions(result);
 
   // This step converts Kenpali's pipeline syntax into ordinary function calls
   // and operators.
@@ -83,7 +91,12 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 
   transformArrayPatternElement(element) {
-    if (element.type === "arrayRest") {
+    if (element.type === "optional") {
+      return optional(
+        this.transformArrayPatternElement(element.name),
+        this.transformExpression(element.defaultValue)
+      );
+    } else if (element.type === "arrayRest") {
       return arrayRest(this.transformNamePattern(element.name));
     } else {
       return super.transformArrayPatternElement(element);
@@ -91,10 +104,33 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 
   transformObjectPatternElement(element) {
-    if (element.type === "objectRest") {
+    if (element.type === "optional") {
+      return optional(
+        this.transformObjectPatternElement(element.name),
+        this.transformExpression(element.defaultValue)
+      );
+    } else if (element.type === "objectRest") {
       return objectRest(this.transformNamePattern(element.name));
+    } else if (element.type === "keyName") {
+      return keyName(this.transformName(element.key));
+    } else if (element.type === "entry") {
+      return entry(
+        this.transformExpression(element.key),
+        this.transformNamePattern(element.value)
+      );
     } else {
       return super.transformObjectPatternElement(element);
+    }
+  }
+
+  transformOptional(element) {
+    if (element.name.type === "keyName" || element.name.type === "entry") {
+      return optional(
+        this.transformObjectPatternElement(element.name),
+        this.transformExpression(element.defaultValue)
+      );
+    } else {
+      return super.transformOptional(element);
     }
   }
 
@@ -109,6 +145,8 @@ class SugaredTreeTransformer extends TreeTransformer {
     switch (expression.type) {
       case "group":
         return this.transformGroup(expression);
+      case "rawFunction":
+        return this.transformRawFunction(expression);
       case "pipeline":
         return this.transformPipeline(expression);
       default:
@@ -118,6 +156,20 @@ class SugaredTreeTransformer extends TreeTransformer {
 
   transformGroup(expression) {
     return group(this.transformExpression(expression.expression));
+  }
+
+  transformRawFunction(expression) {
+    return rawFunction(
+      paramList(
+        expression.params.posParams.map((param) =>
+          this.transformArrayPatternElement(param)
+        ),
+        expression.params.namedParams.map((param) =>
+          this.transformObjectPatternElement(param)
+        )
+      ),
+      this.transformExpression(expression.body)
+    );
   }
 
   transformPipeline(expression) {
@@ -187,6 +239,34 @@ class SugaredTreeTransformer extends TreeTransformer {
 }
 
 class MixedListSplitter extends SugaredTreeTransformer {
+  transformRawFunction(expression) {
+    return super.transformRawFunction(
+      rawFunction(
+        paramList(...this.splitParamList(expression.params.params)),
+        expression.body
+      )
+    );
+  }
+
+  splitParamList(params) {
+    const posParams = [];
+    const namedParams = [];
+    for (const param of params) {
+      if (
+        (param.type === "optional" &&
+          (param.name.type === "keyName" || param.name.type === "entry")) ||
+        param.type === "objectRest" ||
+        param.type === "keyName" ||
+        param.type === "entry"
+      ) {
+        namedParams.push(param);
+      } else {
+        posParams.push(param);
+      }
+    }
+    return [posParams, namedParams];
+  }
+
   transformArgsStep(step) {
     return super.transformArgsStep(
       args(argList(...this.splitArgList(step.args.args)))
@@ -271,6 +351,24 @@ function removeSpecializedRests(expression) {
   return specializedRestRemover.transformExpression(expression);
 }
 
+class RawFunctionConverter extends SugaredTreeTransformer {
+  transformRawFunction(expression) {
+    return super.transformFunction(
+      function_(
+        expression.body,
+        expression.params.posParams,
+        expression.params.namedParams
+      )
+    );
+  }
+}
+
+const rawFunctionConverter = new RawFunctionConverter();
+
+function convertRawFunctions(expression) {
+  return rawFunctionConverter.transformExpression(expression);
+}
+
 class PipelineTransformer extends SugaredTreeTransformer {
   transformPipeline(pipeline) {
     let axis = pipeline.start;
@@ -322,11 +420,40 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
       return super.transformObjectElement(element);
     }
   }
+
   transformEntryObjectElement([key, value]) {
     const transformedKey =
       key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
     return super.transformEntryObjectElement([transformedKey, value]);
   }
+
+  transformObjectPatternElement(element) {
+    if (element.type === "optional") {
+      const inner = this.transformObjectPatternElement(element.name);
+      if (Array.isArray(inner)) {
+        const [key, pattern] = inner;
+        return this.transformEntryObjectPatternElement([
+          key,
+          optional(pattern, element.defaultValue),
+        ]);
+      } else {
+        return [inner, optional(inner, element.defaultValue)];
+      }
+    } else if (element.type === "keyName") {
+      return this.transformEntryObjectPatternElement([
+        element.key.name,
+        element.key.name,
+      ]);
+    } else if (element.type === "entry") {
+      return this.transformEntryObjectPatternElement([
+        element.key,
+        element.value,
+      ]);
+    } else {
+      return super.transformObjectPatternElement(element);
+    }
+  }
+
   transformEntryObjectPatternElement([key, pattern]) {
     const transformedKey =
       key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
