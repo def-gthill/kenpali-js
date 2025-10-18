@@ -7,6 +7,7 @@ import {
   at,
   call,
   catch_,
+  constantFunction,
   entry,
   function_,
   group,
@@ -147,6 +148,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformGroup(expression);
       case "arrow":
         return this.transformArrow(expression);
+      case "constantFunction":
+        return this.transformConstantFunction(expression);
       case "pipeline":
         return this.transformPipeline(expression);
       default:
@@ -170,6 +173,10 @@ class SugaredTreeTransformer extends TreeTransformer {
       ),
       this.transformExpression(expression.body)
     );
+  }
+
+  transformConstantFunction(expression) {
+    return constantFunction(this.transformExpression(expression.body));
   }
 
   transformPipeline(expression) {
@@ -353,13 +360,17 @@ function removeSpecializedRests(expression) {
 
 class FunctionSyntaxConverter extends SugaredTreeTransformer {
   transformArrow(expression) {
-    return super.transformFunction(
+    return this.transformFunction(
       function_(
         expression.body,
         expression.params.posParams,
         expression.params.namedParams
       )
     );
+  }
+
+  transformConstantFunction(expression) {
+    return this.transformFunction(function_(expression.body));
   }
 }
 

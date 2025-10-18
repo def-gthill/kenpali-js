@@ -9,6 +9,7 @@ import {
   at,
   bang,
   block,
+  constantFunction,
   entry,
   function_,
   group,
@@ -236,7 +237,7 @@ function parseObjectPatternRest(parser, start) {
   return parseAllOf(
     "objectPatternRest",
     [consume("DOUBLE_STAR", "expectedRest"), parseNamePattern],
-    (pattern) => objectRest(pattern)
+    objectRest
   )(parser, start);
 }
 
@@ -254,7 +255,7 @@ function parseConstantFunction(parser, start) {
   return parseAllOf(
     "constantFunction",
     [consume("DOLLAR", "expectedConstantFunction"), parseAssignable],
-    (body) => function_(body)
+    constantFunction
   )(parser, start);
 }
 

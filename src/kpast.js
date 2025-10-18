@@ -99,6 +99,14 @@ export function paramList(posParams, namedParams) {
   return { type: "paramList", posParams, namedParams };
 }
 
+export function constantFunction(body) {
+  return { type: "constantFunction", body };
+}
+
+export function pointFreePipeline(...steps) {
+  return { type: "pointFreePipeline", steps };
+}
+
 export function pipeline(start, ...steps) {
   return { type: "pipeline", start, steps };
 }
