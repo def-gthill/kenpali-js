@@ -6,7 +6,8 @@
   "types": "index.d.ts",
   "type": "module",
   "scripts": {
-    "test": "ava"
+    "test": "ava",
+    "bootstrap": "node src/kp.js compile kenpali.kpc --use compiler.kpc --use parser.kpc"
   },
   "author": "Graham Hill",
   "license": "MIT",

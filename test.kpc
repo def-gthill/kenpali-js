@@ -1,0 +1,25 @@
+primesUpTo = (max) => (
+  {numbers: 2 | to(max), index: 1}
+  | build(
+    ({index:, numbers:}) => {
+      numbers: numbers | where(
+        (n) => n | equals(numbers @ index) | or(
+          $ n | isDivisibleBy(numbers @ index) | not
+        )
+      ),
+      index: index | up,
+    }
+  )
+  | while(({index:, numbers:}) => index | isAtMost(numbers | length))
+  | last
+  |.numbers
+);
+rows = primesUpTo(10);
+cols = primesUpTo(10);
+rows | transform((row) => (
+  cols | transform((col) => (
+    [row, col]
+  ))
+))
+| flatten
+| toArray
