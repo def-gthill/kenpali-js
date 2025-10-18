@@ -3,6 +3,7 @@ import {
   args,
   arrayRest,
   arraySpread,
+  arrow,
   at,
   call,
   catch_,
@@ -19,7 +20,6 @@ import {
   pipeArgs,
   pipeDot,
   pipeline,
-  rawFunction,
   rest,
   spread,
   TreeTransformer,
@@ -39,9 +39,9 @@ export default function desugar(expression) {
   // This step converts both to the single `rest` node mandated by Kenpali JSON.
   result = removeSpecializedRests(result);
 
-  // This step converts Kenpali's function syntax, with mixed positional and named parameters,
-  // into Kenpali JSON's function syntax, with separate positional and named parameter lists.
-  result = convertRawFunctions(result);
+  // This step converts Kenpali's function syntax, with its mixed arguments and
+  // shorthand for common function types, to Kenpali JSON's function syntax.
+  result = convertFunctionSyntax(result);
 
   // This step converts Kenpali's pipeline syntax into ordinary function calls
   // and operators.
@@ -145,8 +145,8 @@ class SugaredTreeTransformer extends TreeTransformer {
     switch (expression.type) {
       case "group":
         return this.transformGroup(expression);
-      case "rawFunction":
-        return this.transformRawFunction(expression);
+      case "arrow":
+        return this.transformArrow(expression);
       case "pipeline":
         return this.transformPipeline(expression);
       default:
@@ -158,8 +158,8 @@ class SugaredTreeTransformer extends TreeTransformer {
     return group(this.transformExpression(expression.expression));
   }
 
-  transformRawFunction(expression) {
-    return rawFunction(
+  transformArrow(expression) {
+    return arrow(
       paramList(
         expression.params.posParams.map((param) =>
           this.transformArrayPatternElement(param)
@@ -239,9 +239,9 @@ class SugaredTreeTransformer extends TreeTransformer {
 }
 
 class MixedListSplitter extends SugaredTreeTransformer {
-  transformRawFunction(expression) {
-    return super.transformRawFunction(
-      rawFunction(
+  transformArrow(expression) {
+    return super.transformArrow(
+      arrow(
         paramList(...this.splitParamList(expression.params.params)),
         expression.body
       )
@@ -351,8 +351,8 @@ function removeSpecializedRests(expression) {
   return specializedRestRemover.transformExpression(expression);
 }
 
-class RawFunctionConverter extends SugaredTreeTransformer {
-  transformRawFunction(expression) {
+class FunctionSyntaxConverter extends SugaredTreeTransformer {
+  transformArrow(expression) {
     return super.transformFunction(
       function_(
         expression.body,
@@ -363,10 +363,10 @@ class RawFunctionConverter extends SugaredTreeTransformer {
   }
 }
 
-const rawFunctionConverter = new RawFunctionConverter();
+const functionSyntaxConverter = new FunctionSyntaxConverter();
 
-function convertRawFunctions(expression) {
-  return rawFunctionConverter.transformExpression(expression);
+function convertFunctionSyntax(expression) {
+  return functionSyntaxConverter.transformExpression(expression);
 }
 
 class PipelineTransformer extends SugaredTreeTransformer {

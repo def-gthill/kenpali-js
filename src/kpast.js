@@ -87,12 +87,12 @@ export function group(expression) {
   return { type: "group", expression };
 }
 
-export function rawFunction(params, body) {
-  return { type: "rawFunction", params, body };
+export function arrow(params, body) {
+  return { type: "arrow", params, body };
 }
 
-export function rawParamList(params) {
-  return { type: "rawParamList", params };
+export function mixedParamList(params) {
+  return { type: "mixedParamList", params };
 }
 
 export function paramList(posParams, namedParams) {
@@ -103,8 +103,8 @@ export function pipeline(start, ...steps) {
   return { type: "pipeline", start, steps };
 }
 
-export function rawArgList(args) {
-  return { type: "rawArgList", args };
+export function mixedArgList(args) {
+  return { type: "mixedArgList", args };
 }
 
 export function argList(posArgs, namedArgs) {

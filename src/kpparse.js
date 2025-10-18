@@ -5,6 +5,7 @@ import {
   arrayPattern,
   arrayRest,
   arraySpread,
+  arrow,
   at,
   bang,
   block,
@@ -14,6 +15,8 @@ import {
   index,
   keyName,
   literal,
+  mixedArgList,
+  mixedParamList,
   name,
   object,
   objectPattern,
@@ -24,9 +27,6 @@ import {
   pipeArgs,
   pipeDot,
   pipeline,
-  rawArgList,
-  rawFunction,
-  rawParamList,
 } from "./kpast.js";
 import kplex from "./kplex.js";
 import { deepToKpobject } from "./kpobject.js";
@@ -338,7 +338,7 @@ function parseArrowFunction(parser, start) {
       consume("ARROW", "expectedArrowFunction"),
       parseAssignable,
     ],
-    rawFunction
+    arrow
   )(parser, start);
 }
 
@@ -353,7 +353,7 @@ function parseParameterList(parser, start) {
       }),
       consume("CLOSE_PAREN", "unclosedParameters"),
     ],
-    rawParamList
+    mixedParamList
   )(parser, start);
 }
 
@@ -376,7 +376,7 @@ function parseArgumentList(parser, start) {
       }),
       consume("CLOSE_PAREN", "unclosedArguments"),
     ],
-    rawArgList
+    mixedArgList
   )(parser, start);
 }
 

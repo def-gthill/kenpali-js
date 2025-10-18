@@ -8,12 +8,12 @@ import {
   entry,
   group,
   literal,
+  mixedArgList,
   name,
   object,
   objectSpread,
   pipe,
   pipeline,
-  rawArgList,
 } from "../src/kpast.js";
 import { kpcatch } from "../src/kperror.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -66,7 +66,7 @@ test("An array spread operator in an argument list parses to an arraySpread node
     result,
     pipeline(
       name("foo"),
-      args(rawArgList([literal(1), arraySpread(name("bar")), literal(3)]))
+      args(mixedArgList([literal(1), arraySpread(name("bar")), literal(3)]))
     )
   );
 });
@@ -88,7 +88,7 @@ test("An object spread operator in an argument list parses to an objectSpread no
     pipeline(
       name("foo"),
       args(
-        rawArgList([
+        mixedArgList([
           entry(name("question"), literal(42)),
           objectSpread(name("foo")),
         ])
