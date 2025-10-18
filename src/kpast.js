@@ -23,9 +23,6 @@ export function checked(name, schema) {
 }
 
 export function optional(name, defaultValue) {
-  if (name === undefined) {
-    throw new Error("WTF?");
-  }
   return { type: "optional", name, defaultValue };
 }
 

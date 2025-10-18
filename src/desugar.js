@@ -92,12 +92,7 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 
   transformArrayPatternElement(element) {
-    if (element.type === "optional") {
-      return optional(
-        this.transformArrayPatternElement(element.name),
-        this.transformExpression(element.defaultValue)
-      );
-    } else if (element.type === "arrayRest") {
+    if (element.type === "arrayRest") {
       return arrayRest(this.transformNamePattern(element.name));
     } else {
       return super.transformArrayPatternElement(element);
@@ -440,16 +435,11 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
 
   transformObjectPatternElement(element) {
     if (element.type === "optional") {
-      const inner = this.transformObjectPatternElement(element.name);
-      if (Array.isArray(inner)) {
-        const [key, pattern] = inner;
-        return this.transformEntryObjectPatternElement([
-          key,
-          optional(pattern, element.defaultValue),
-        ]);
-      } else {
-        return [inner, optional(inner, element.defaultValue)];
-      }
+      const [key, pattern] = this.transformObjectPatternElement(element.name);
+      return this.transformEntryObjectPatternElement([
+        key,
+        optional(pattern, element.defaultValue),
+      ]);
     } else if (element.type === "keyName") {
       return this.transformEntryObjectPatternElement([
         element.key.name,
