@@ -48,10 +48,10 @@ export function block(...args) {
   return { type: "block", defs, result };
 }
 
-export function function_(body, params = [], namedParams = []) {
+export function function_(body, posParams = [], namedParams = []) {
   const result = { type: "function", body };
-  if (params.length > 0) {
-    result.params = params;
+  if (posParams.length > 0) {
+    result.posParams = posParams;
   }
   if (namedParams.length > 0) {
     result.namedParams = namedParams;
@@ -59,10 +59,10 @@ export function function_(body, params = [], namedParams = []) {
   return result;
 }
 
-export function call(f, args = [], namedArgs = []) {
+export function call(f, posArgs = [], namedArgs = []) {
   const result = { type: "call", callee: f };
-  if (args.length > 0) {
-    result.args = args;
+  if (posArgs.length > 0) {
+    result.posArgs = posArgs;
   }
   if (namedArgs.length > 0) {
     result.namedArgs = namedArgs;
@@ -88,12 +88,20 @@ export function pipeline(start, ...steps) {
   return { type: "pipeline", start, steps };
 }
 
-export function args(args, namedArgs) {
-  return { type: "args", args, namedArgs };
+export function rawArgList(args) {
+  return { type: "rawArgList", args };
 }
 
-export function pipeArgs(callee, args, namedArgs) {
-  return { type: "pipeArgs", callee, args, namedArgs };
+export function argList(posArgs, namedArgs) {
+  return { type: "argList", posArgs, namedArgs };
+}
+
+export function args(args) {
+  return { type: "args", args };
+}
+
+export function pipeArgs(callee, args) {
+  return { type: "pipeArgs", callee, args };
 }
 
 export function pipeDot(index) {
@@ -112,16 +120,20 @@ export function bang() {
   return { type: "bang" };
 }
 
-export function objectKey(key) {
-  return { type: "objectKey", key };
+export function keyName(key) {
+  return { type: "keyName", key };
 }
 
-export function arraySpread(expression) {
-  return { type: "arraySpread", expression };
+export function entry(key, value) {
+  return { type: "entry", key, value };
 }
 
-export function objectSpread(expression) {
-  return { type: "objectSpread", expression };
+export function arraySpread(value) {
+  return { type: "arraySpread", value };
+}
+
+export function objectSpread(value) {
+  return { type: "objectSpread", value };
 }
 
 export function arrayRest(name) {
@@ -338,7 +350,7 @@ export class TreeTransformer {
   transformFunction(expression) {
     return function_(
       this.transformExpression(expression.body),
-      (expression.params ?? []).map((param) =>
+      (expression.posParams ?? []).map((param) =>
         this.transformArrayPatternElement(param)
       ),
       (expression.namedParams ?? []).map((param) =>
@@ -350,7 +362,7 @@ export class TreeTransformer {
   transformCall(expression) {
     return call(
       this.transformExpression(expression.callee),
-      (expression.args ?? []).map((arg) => this.transformArrayElement(arg)),
+      (expression.posArgs ?? []).map((arg) => this.transformArrayElement(arg)),
       (expression.namedArgs ?? []).map((arg) =>
         this.transformObjectElement(arg)
       )

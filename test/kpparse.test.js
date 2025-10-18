@@ -5,6 +5,7 @@ import {
   arraySpread,
   at,
   bang,
+  entry,
   group,
   literal,
   name,
@@ -12,6 +13,7 @@ import {
   objectSpread,
   pipe,
   pipeline,
+  rawArgList,
 } from "../src/kpast.js";
 import { kpcatch } from "../src/kperror.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -29,9 +31,9 @@ test("Object key syntactic sugar parses to reflect the sugar", (t) => {
   t.deepEqual(
     result,
     object(
-      [name("foo"), literal(1)],
-      [literal("bar"), literal(2)],
-      [group(name("baz")), literal(3)]
+      entry(name("foo"), literal(1)),
+      entry(literal("bar"), literal(2)),
+      entry(group(name("baz")), literal(3))
     )
   );
 });
@@ -64,7 +66,7 @@ test("An array spread operator in an argument list parses to an arraySpread node
     result,
     pipeline(
       name("foo"),
-      args([literal(1), arraySpread(name("bar")), literal(3)], [])
+      args(rawArgList([literal(1), arraySpread(name("bar")), literal(3)]))
     )
   );
 });
@@ -74,7 +76,7 @@ test("An object spread operator parses to an objectSpread node", (t) => {
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    object([name("question"), literal(42)], objectSpread(name("foo")))
+    object(entry(name("question"), literal(42)), objectSpread(name("foo")))
   );
 });
 
@@ -85,7 +87,12 @@ test("An object spread operator in an argument list parses to an objectSpread no
     result,
     pipeline(
       name("foo"),
-      args([], [[name("question"), literal(42)], objectSpread(name("foo"))])
+      args(
+        rawArgList([
+          entry(name("question"), literal(42)),
+          objectSpread(name("foo")),
+        ])
+      )
     )
   );
 });

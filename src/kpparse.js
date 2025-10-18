@@ -8,9 +8,11 @@ import {
   at,
   bang,
   block,
+  entry,
   function_,
   group,
   index,
+  keyName,
   literal,
   name,
   object,
@@ -22,6 +24,7 @@ import {
   pipeArgs,
   pipeDot,
   pipeline,
+  rawArgList,
 } from "./kpast.js";
 import kplex from "./kplex.js";
 import { deepToKpobject } from "./kpobject.js";
@@ -262,17 +265,14 @@ function parsePipelineStep(parser, start) {
 }
 
 function parseArgs(parser, start) {
-  return convert(parseArgumentList, (list) => args(list.args, list.namedArgs))(
-    parser,
-    start
-  );
+  return convert(parseArgumentList, args)(parser, start);
 }
 
 function parsePipeArgs(parser, start) {
   return parseAllOf(
     "pipeCall",
     [consume("PIPE", "expectedPipe"), parseTightPipeline, parseArgumentList],
-    (callee, { args, namedArgs }) => pipeArgs(callee, args, namedArgs)
+    (callee, args) => pipeArgs(callee, args)
   )(parser, start);
 }
 
@@ -312,7 +312,7 @@ function parseArrowFunction(parser, start) {
       consume("ARROW", "expectedArrowFunction"),
       parseAssignable,
     ],
-    (params, body) => function_(body, params.params, params.namedParams)
+    (params, body) => function_(body, params.posParams, params.namedParams)
   )(parser, start);
 }
 
@@ -333,7 +333,7 @@ function parseParameterList(parser, start) {
         .filter((param) => "positional" in param)
         .map((param) => param.positional);
       if (posParams.length > 0) {
-        result.params = posParams;
+        result.posParams = posParams;
       }
       const namedParams = params
         .filter((param) => "named" in param)
@@ -365,51 +365,15 @@ function parseArgumentList(parser, start) {
       }),
       consume("CLOSE_PAREN", "unclosedArguments"),
     ],
-    (args) => {
-      const posArgs = args.filter(
-        (argument) =>
-          !(Array.isArray(argument) || argument.type === "objectSpread")
-      );
-      const namedArgs = args.filter(
-        (argument) =>
-          Array.isArray(argument) || argument.type === "objectSpread"
-      );
-      return { args: posArgs, namedArgs };
-    }
+    rawArgList
   )(parser, start);
 }
 
 function parseArgument(parser, start) {
   return parseAnyOf(
     "argument",
-    parseNamedArgument,
-    parsePositionalArgument,
-    parseArraySpread,
-    parseObjectSpread
-  )(parser, start);
-}
-
-function parsePositionalArgument(parser, start) {
-  return parseAssignable(parser, start);
-}
-
-function parseNamedArgument(parser, start) {
-  return parseAnyOf(
-    "namedArgument",
-    parseAllOf(
-      "namedArgumentEntry",
-      [
-        parseAssignable,
-        consume("COLON", "expectedNamedArgument"),
-        parseAssignable,
-      ],
-      (name, value) => [name, value]
-    ),
-    parseAllOf(
-      "namedArgumentName",
-      [parseName, consume("COLON", "expectedNamedArgument")],
-      (name) => [name, name]
-    )
+    parseObjectElement,
+    parseArrayElement
   )(parser, start);
 }
 
@@ -507,17 +471,29 @@ function parseObject(parser, start) {
 function parseObjectElement(parser, start) {
   return parseAnyOf(
     "objectElement",
-    parseAllOf("objectEntry", [
+    parseObjectEntry,
+    parseObjectKeyName,
+    parseObjectSpread
+  )(parser, start);
+}
+
+function parseObjectEntry(parser, start) {
+  return parseAllOf(
+    "objectEntry",
+    [
       parseAssignable,
       consume("COLON", "missingKeyValueSeparator"),
       parseAssignable,
-    ]),
-    parseAllOfFlat(
-      "objectName",
-      [parseName, consume("COLON", "missingKeyValueSeparator")],
-      (args) => args
-    ),
-    parseObjectSpread
+    ],
+    entry
+  )(parser, start);
+}
+
+function parseObjectKeyName(parser, start) {
+  return parseAllOf(
+    "objectKeyName",
+    [parseName, consume("COLON", "missingKeyValueSeparator")],
+    keyName
   )(parser, start);
 }
 
@@ -536,16 +512,20 @@ function parseLiteral(parser, start) {
 function parseName(parser, start) {
   return parseAnyOf(
     "name",
-    parseAllOf(
-      "nameInModule",
-      [
-        parseSingle("NAME", (token) => token.text),
-        consume("SLASH", "expectedNameInModule"),
-        parseSingle("NAME", (token) => token.text),
-      ],
-      (module, nameInModule) => name(nameInModule, module)
-    ),
+    parseNameInModule,
     parseSingle("NAME", (token) => name(token.text))
+  )(parser, start);
+}
+
+function parseNameInModule(parser, start) {
+  return parseAllOf(
+    "nameInModule",
+    [
+      parseSingle("NAME", (token) => token.text),
+      consume("SLASH", "expectedNameInModule"),
+      parseSingle("NAME", (token) => token.text),
+    ],
+    (module, nameInModule) => name(nameInModule, module)
   )(parser, start);
 }
 

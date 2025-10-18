@@ -615,7 +615,7 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(name);
-    const paramPattern = arrayPattern(...(expression.params ?? []));
+    const paramPattern = arrayPattern(...(expression.posParams ?? []));
     const namedParamPattern = objectPattern(...(expression.namedParams ?? []));
     if (paramPattern.names.length > 0) {
       this.declareNames(paramPattern);
@@ -675,7 +675,7 @@ class Compiler {
       this.logNodeStart("Starting call");
     }
     this.compileExpression(expression.callee);
-    this.compileExpression(array(...(expression.args ?? [])));
+    this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
     this.addInstruction(op.PUSH, -2);
     this.addInstruction(op.CALL);

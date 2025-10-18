@@ -1,12 +1,17 @@
 import {
+  argList,
   args,
   arrayRest,
+  arraySpread,
   at,
   call,
   catch_,
+  entry,
   group,
   index,
+  keyName,
   objectRest,
+  objectSpread,
   pipe,
   pipeArgs,
   pipeDot,
@@ -18,6 +23,9 @@ import {
 
 export default function desugar(expression) {
   let result = expression;
+
+  // This step splits argument and parameter lists into positional and named elements.
+  result = splitMixedLists(result);
 
   // Kenpali Code uses different syntax for spreads in arrays than for spreads in objects.
   // This step converts both to the single `spread` node mandated by Kenpali JSON.
@@ -62,6 +70,13 @@ class SugaredTreeTransformer extends TreeTransformer {
   transformObjectElement(element) {
     if (element.type === "objectSpread") {
       return objectSpread(this.transformExpression(element.value));
+    } else if (element.type === "keyName") {
+      return keyName(this.transformName(element.key));
+    } else if (element.type === "entry") {
+      return entry(
+        this.transformExpression(element.key),
+        this.transformExpression(element.value)
+      );
     } else {
       return super.transformObjectElement(element);
     }
@@ -133,16 +148,20 @@ class SugaredTreeTransformer extends TreeTransformer {
 
   transformArgsStep(step) {
     return args(
-      step.args.map((arg) => this.transformArrayElement(arg)),
-      step.namedArgs.map((arg) => this.transformObjectElement(arg))
+      argList(
+        step.args.posArgs.map((arg) => this.transformArrayElement(arg)),
+        step.args.namedArgs.map((arg) => this.transformObjectElement(arg))
+      )
     );
   }
 
   transformPipeArgsStep(step) {
     return pipeArgs(
       this.transformExpression(step.callee),
-      step.args.map((arg) => this.transformArrayElement(arg)),
-      step.namedArgs.map((arg) => this.transformObjectElement(arg))
+      argList(
+        step.args.posArgs.map((arg) => this.transformArrayElement(arg)),
+        step.args.namedArgs.map((arg) => this.transformObjectElement(arg))
+      )
     );
   }
 
@@ -167,10 +186,47 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 }
 
+class MixedListSplitter extends SugaredTreeTransformer {
+  transformArgsStep(step) {
+    return super.transformArgsStep(
+      args(argList(...this.splitArgList(step.args.args)))
+    );
+  }
+
+  transformPipeArgsStep(step) {
+    return super.transformPipeArgsStep(
+      pipeArgs(step.callee, argList(...this.splitArgList(step.args.args)))
+    );
+  }
+
+  splitArgList(args) {
+    const posArgs = [];
+    const namedArgs = [];
+    for (const arg of args) {
+      if (
+        arg.type === "objectSpread" ||
+        arg.type === "keyName" ||
+        arg.type === "entry"
+      ) {
+        namedArgs.push(arg);
+      } else {
+        posArgs.push(arg);
+      }
+    }
+    return [posArgs, namedArgs];
+  }
+}
+
+const mixedListSplitter = new MixedListSplitter();
+
+function splitMixedLists(expression) {
+  return mixedListSplitter.transformExpression(expression);
+}
+
 class SpecializedSpreadRemover extends SugaredTreeTransformer {
   transformArrayElement(element) {
     if (element.type === "arraySpread") {
-      return spread(element.expression);
+      return spread(element.value);
     } else {
       return super.transformArrayElement(element);
     }
@@ -178,7 +234,7 @@ class SpecializedSpreadRemover extends SugaredTreeTransformer {
 
   transformObjectElement(element) {
     if (element.type === "objectSpread") {
-      return spread(element.expression);
+      return spread(element.value);
     } else {
       return super.transformObjectElement(element);
     }
@@ -221,10 +277,14 @@ class PipelineTransformer extends SugaredTreeTransformer {
     for (const step of pipeline.steps) {
       switch (step.type) {
         case "args":
-          axis = call(axis, step.args, step.namedArgs);
+          axis = call(axis, step.args.posArgs, step.args.namedArgs);
           break;
         case "pipeArgs":
-          axis = call(step.callee, [axis, ...step.args], step.namedArgs);
+          axis = call(
+            step.callee,
+            [axis, ...step.args.posArgs],
+            step.args.namedArgs
+          );
           break;
         case "pipeDot":
           axis = index(axis, step.index);
@@ -254,8 +314,10 @@ function convertPipelines(expression) {
 
 class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
   transformObjectElement(element) {
-    if (element.type === "name") {
-      return this.transformEntryObjectElement([element.name, element]);
+    if (element.type === "keyName") {
+      return this.transformEntryObjectElement([element.key.name, element.key]);
+    } else if (element.type === "entry") {
+      return this.transformEntryObjectElement([element.key, element.value]);
     } else {
       return super.transformObjectElement(element);
     }
