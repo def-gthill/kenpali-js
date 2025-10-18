@@ -27,10 +27,8 @@ import {
   equals,
   isArray,
   isBoolean,
-  isBuiltin,
   isError,
   isFunction,
-  isGiven,
   isNumber,
   isObject,
   isSequence,
@@ -346,17 +344,11 @@ const rawBuiltins = [
   builtin("isObject", { params: ["value"] }, function ([value]) {
     return isObject(value);
   }),
-  builtin("isBuiltin", { params: ["value"] }, function ([value]) {
-    return isBuiltin(value);
-  }),
-  builtin("isGiven", { params: ["value"] }, function ([value]) {
-    return isGiven(value);
+  builtin("isFunction", { params: ["value"] }, function ([value]) {
+    return isFunction(value);
   }),
   builtin("isError", { params: ["value"] }, function ([value]) {
     return isError(value);
-  }),
-  builtin("isFunction", { params: ["value"] }, function ([value]) {
-    return isFunction(value);
   }),
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
@@ -1385,7 +1377,7 @@ const rawBuiltins = [
 ];
 
 export function builtin(name, paramSpec, f, methods = []) {
-  f.builtinName = name;
+  f.functionName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
@@ -1699,5 +1691,5 @@ function validateReturn(value, schema) {
 }
 
 export function loadBuiltins() {
-  return kpobject(...rawBuiltins.map((f) => [f.builtinName, f]));
+  return kpobject(...rawBuiltins.map((f) => [f.functionName, f]));
 }

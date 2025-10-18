@@ -12,10 +12,8 @@ export function typeOf(value) {
     return "stream";
   } else if (isObject(value)) {
     return "object";
-  } else if (isBuiltin(value)) {
-    return "builtin";
-  } else if (isGiven(value)) {
-    return "given";
+  } else if (isFunction(value)) {
+    return "function";
   } else if (isError(value)) {
     return "error";
   } else {
@@ -47,27 +45,27 @@ export function isStream(value) {
   return value instanceof Stream;
 }
 
-export function isBuiltin(value) {
-  return (
-    typeof value === "function" ||
-    (isJsObjectWithProperty(value, "target") && value.isBuiltin)
-  );
+export function isObject(value) {
+  return value instanceof Map;
 }
 
-export function isGiven(value) {
-  return isJsObjectWithProperty(value, "target") && !value.isBuiltin;
+export function isFunction(value) {
+  return isPlatformFunction(value) || isNaturalFunction(value);
 }
 
 export function isError(value) {
   return isJsObjectWithProperty(value, "error");
 }
 
-export function isObject(value) {
-  return value instanceof Map;
+export function isPlatformFunction(value) {
+  return (
+    typeof value === "function" ||
+    (isJsObjectWithProperty(value, "target") && value.isPlatform)
+  );
 }
 
-export function isFunction(value) {
-  return isBuiltin(value) || isGiven(value);
+export function isNaturalFunction(value) {
+  return isJsObjectWithProperty(value, "target") && !value.isPlatform;
 }
 
 export function isSequence(value) {
@@ -131,9 +129,9 @@ export function toString(value) {
         .join(", ") +
       "}"
     );
-  } else if (isGiven(value)) {
+  } else if (isNaturalFunction(value)) {
     return `function ${value.name}`;
-  } else if (isBuiltin(value)) {
+  } else if (isPlatformFunction(value)) {
     return `function ${functionName(value)}`;
   } else if (isError(value)) {
     return [
@@ -146,7 +144,7 @@ export function toString(value) {
 }
 
 export function functionName(f) {
-  return f.builtinName ?? f.name ?? "<anonymous>";
+  return f.functionName ?? f.name ?? "<anonymous>";
 }
 
 function isValidName(string) {

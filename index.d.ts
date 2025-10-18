@@ -32,12 +32,12 @@ export type Callback = (
 
 export interface CompiledFunction {
   name: string;
-  isBuiltin: boolean;
+  isPlatform: boolean;
 }
 
-export type Builtin = CompiledFunction & { isBuiltin: true };
+export type PlatformFunction = CompiledFunction & { isPlatform: true };
 
-export type Given = CompiledFunction & { isBuiltin: false };
+export type NaturalFunction = CompiledFunction & { isPlatform: false };
 
 export type KpFunction = Callback | CompiledFunction;
 
@@ -66,10 +66,8 @@ export type TypeSchema =
   | "array"
   | "stream"
   | "object"
-  | "builtin"
-  | "given"
-  | "error"
   | "function"
+  | "error"
   | "sequence";
 
 export interface EitherSchema {
@@ -94,17 +92,13 @@ export type TypeToValue<T extends TypeSchema> = T extends "null"
             ? Stream
             : T extends "object"
               ? KpObject
-              : T extends "builtin"
-                ? Builtin
-                : T extends "given"
-                  ? Given
-                  : T extends "error"
-                    ? KpError
-                    : T extends "function"
-                      ? KpFunction
-                      : T extends "sequence"
-                        ? Sequence
-                        : KpValue;
+              : T extends "function"
+                ? KpFunction
+                : T extends "error"
+                  ? KpError
+                  : T extends "sequence"
+                    ? Sequence
+                    : KpValue;
 
 export interface TypeWithWhereSchema<T extends TypeSchema = TypeSchema> {
   type: T;
@@ -184,7 +178,7 @@ export function toKpFunction(
   f: (
     args: KpValue[],
     namedArgs: Record<string, KpValue>,
-    kpcallback: Kpcallback
+    kpcallback: KpCallback
   ) => KpValue
 ): Callback;
 export function kpcatch<T>(f: () => T): T | KpError;
@@ -212,28 +206,28 @@ export function validateErrorTo(
 export function toString(value: KpValue): string;
 export function isError(value: unknown): value is KpError;
 
-export type Kpcallback = (
+export type KpCallback = (
   callee: KpValue,
   args: KpArray,
   namedArgs: KpObject
 ) => KpValue;
 
 export type DebugLog = (message: string) => void;
-export type GetMethod = (methodName: string) => Builtin;
+export type GetMethod = (methodName: string) => PlatformFunction;
 export type VmContext = {
-  kpcallback: Kpcallback;
+  kpcallback: KpCallback;
   debugLog: DebugLog;
   getMethod: GetMethod;
 };
 
-export type BuiltinImpl = (args: KpArray, context: VmContext) => KpValue;
+export type FunctionImpl = (args: KpArray, context: VmContext) => KpValue;
 export type MethodImpl = (
   args: [any, ...KpArray],
   context: VmContext
 ) => KpValue;
 
-export type BuiltinSpec = BuiltinImpl & {
-  builtinName: string;
+export type FunctionSpec = FunctionImpl & {
+  functionName: string;
   methods?: MethodSpec[];
 };
 
@@ -244,9 +238,9 @@ export type MethodSpec = MethodImpl & {
 export function builtin(
   name: string,
   paramSpec: ParamSpec,
-  f: BuiltinImpl,
+  f: FunctionImpl,
   methods?: MethodSpec[]
-): BuiltinSpec;
+): FunctionSpec;
 export function method(
   name: string,
   paramSpec: ParamSpec,

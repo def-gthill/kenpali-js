@@ -11,13 +11,13 @@ import {
   functionName,
   isArray,
   isBoolean,
-  isBuiltin,
   isError,
   isFunction,
-  isGiven,
+  isNaturalFunction,
   isNull,
   isNumber,
   isObject,
+  isPlatformFunction,
   isSequence,
   isStream,
   isString,
@@ -566,7 +566,7 @@ export class Vm {
     }
     this.stack.push(
       new Function(diagnostic.name, this.program, target, {
-        isBuiltin: diagnostic.isBuiltin,
+        isPlatform: diagnostic.isPlatform,
       })
     );
   }
@@ -604,7 +604,7 @@ export class Vm {
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
       this.callGiven(callee);
-    } else if (isBuiltin(callee)) {
+    } else if (isPlatformFunction(callee)) {
       this.callBuiltin(callee);
     } else {
       this.throw_(kperror("notCallable", ["value", callee]));
@@ -758,7 +758,7 @@ export class Vm {
     if (methods && methods.has(name)) {
       const target = this.functions.get(`${constructorName}/${name}`);
       return new Function(`${constructorName}/${name}`, this.program, target, {
-        isBuiltin: true,
+        isPlatform: true,
       });
     }
     throw new Error(`Method ${constructorName}/${name} not found`);
@@ -953,7 +953,7 @@ export class Vm {
       this.logInstruction("IS_BUILTIN");
     }
     const value = this.stack.pop();
-    this.stack.push(isBuiltin(value));
+    this.stack.push(isPlatformFunction(value));
   }
 
   runIsGiven() {
@@ -961,7 +961,7 @@ export class Vm {
       this.logInstruction("IS_GIVEN");
     }
     const value = this.stack.pop();
-    this.stack.push(isGiven(value));
+    this.stack.push(isNaturalFunction(value));
   }
 
   runIsError() {
@@ -1076,11 +1076,11 @@ function extractMethods(functions) {
 }
 
 class Function {
-  constructor(name, program, target, { isBuiltin }) {
+  constructor(name, program, target, { isPlatform }) {
     this.name = name;
     this.program = program;
     this.target = target;
-    this.isBuiltin = isBuiltin;
+    this.isPlatform = isPlatform;
     this.closure = [];
   }
 }

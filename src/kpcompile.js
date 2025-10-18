@@ -12,7 +12,7 @@ import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
 import { either } from "./validate.js";
-import { isBuiltin, isObject, isString } from "./values.js";
+import { isObject, isPlatformFunction, isString } from "./values.js";
 
 export function kpcompileJson(
   json,
@@ -98,7 +98,7 @@ class Compiler {
 
   compileLibrary() {
     for (const [name, libraryFunction] of this.library) {
-      if (isBuiltin(libraryFunction)) {
+      if (isPlatformFunction(libraryFunction)) {
         this.compileBuiltin(name, libraryFunction);
         if (libraryFunction.methods) {
           for (const method of libraryFunction.methods) {
@@ -378,7 +378,7 @@ class Compiler {
         this.addMark({ functionName: fullName });
         this.addDiagnostic({
           name: fullName,
-          isBuiltin: true,
+          isPlatform: true,
         });
         return true;
       } else {
@@ -447,7 +447,7 @@ class Compiler {
       this.addMark({ functionName: expression.name });
       this.addDiagnostic({
         name: expression.name,
-        isBuiltin: true,
+        isPlatform: true,
       });
       return true;
     } else {
@@ -651,7 +651,7 @@ class Compiler {
       this.addDiagnostic({
         name,
         number: finishedFunction.number,
-        isBuiltin: false,
+        isPlatform: false,
       });
       for (const upvalue of finishedFunction.upvalues) {
         this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
