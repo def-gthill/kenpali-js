@@ -5,6 +5,7 @@ import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
+import { stringClass } from "../src/values.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("Evaluating null returns an error", (t) => {
@@ -54,7 +55,7 @@ test("Names in modules can be accessed", (t) => {
     "bar",
     builtin(
       "bar",
-      { params: [{ name: "name", type: "string" }] },
+      { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);
@@ -71,7 +72,7 @@ test("Local names don't shadow names in modules", (t) => {
     "bar",
     builtin(
       "bar",
-      { params: [{ name: "name", type: "string" }] },
+      { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);
@@ -85,7 +86,7 @@ test("Functions in modules have type checking applied", (t) => {
     "bar",
     builtin(
       "bar",
-      { params: [{ name: "name", type: "string" }] },
+      { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);
@@ -94,6 +95,6 @@ test("Functions in modules have type checking applied", (t) => {
   );
   assertIsError(t, result, "wrongArgumentType", {
     value: 42,
-    expectedType: "string",
+    expectedType: "String",
   });
 });

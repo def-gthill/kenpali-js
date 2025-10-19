@@ -47,11 +47,13 @@ export const IS_STRING = 33;
 export const IS_ARRAY = 34;
 export const IS_STREAM = 51;
 export const IS_OBJECT = 35;
-export const IS_BUILTIN = 36;
-export const IS_GIVEN = 37;
-export const IS_ERROR = 38;
 export const IS_FUNCTION = 39;
+export const IS_ERROR = 38;
+export const IS_CLASS = 53;
+export const IS_PROTOCOL = 54;
 export const IS_SEQUENCE = 40;
+export const IS_TYPE = 55;
+export const IS_INSTANCE = 56;
 export const ERROR_IF_INVALID = 42;
 
 export function disassemble(program) {
@@ -114,11 +116,13 @@ class Disassembler {
     this.instructionTable[IS_ARRAY] = this.disassembleIsArray;
     this.instructionTable[IS_STREAM] = this.disassembleIsStream;
     this.instructionTable[IS_OBJECT] = this.disassembleIsObject;
-    this.instructionTable[IS_BUILTIN] = this.disassembleIsBuiltin;
-    this.instructionTable[IS_GIVEN] = this.disassembleIsGiven;
-    this.instructionTable[IS_ERROR] = this.disassembleIsError;
     this.instructionTable[IS_FUNCTION] = this.disassembleIsFunction;
+    this.instructionTable[IS_ERROR] = this.disassembleIsError;
+    this.instructionTable[IS_CLASS] = this.disassembleIsClass;
+    this.instructionTable[IS_PROTOCOL] = this.disassembleIsProtocol;
     this.instructionTable[IS_SEQUENCE] = this.disassembleIsSequence;
+    this.instructionTable[IS_TYPE] = this.disassembleIsType;
+    this.instructionTable[IS_INSTANCE] = this.disassembleIsInstance;
     this.instructionTable[ERROR_IF_INVALID] = this.disassembleErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -341,24 +345,32 @@ class Disassembler {
     return "IS_OBJECT";
   }
 
-  disassembleIsBuiltin() {
-    return "IS_BUILTIN";
-  }
-
-  disassembleIsGiven() {
-    return "IS_GIVEN";
+  disassembleIsFunction() {
+    return "IS_FUNCTION";
   }
 
   disassembleIsError() {
     return "IS_ERROR";
   }
 
-  disassembleIsFunction() {
-    return "IS_FUNCTION";
+  disassembleIsClass() {
+    return "IS_CLASS";
+  }
+
+  disassembleIsProtocol() {
+    return "IS_PROTOCOL";
   }
 
   disassembleIsSequence() {
     return "IS_SEQUENCE";
+  }
+
+  disassembleIsType() {
+    return "IS_TYPE";
+  }
+
+  disassembleIsInstance() {
+    return "IS_INSTANCE";
   }
 
   disassembleErrorIfInvalid() {

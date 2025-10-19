@@ -166,6 +166,11 @@ export function objectRest(name) {
 
 //#endregion
 
+// Used internally when the value is already known.
+export function value(value) {
+  return { type: "value", value };
+}
+
 export class TreeTransformer {
   transformExpression(expression) {
     if (

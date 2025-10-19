@@ -1,4 +1,9 @@
-import { indexArray, indexMapping, toArray } from "./builtins.js";
+import {
+  indexArray,
+  indexInstance,
+  indexMapping,
+  toArray,
+} from "./builtins.js";
 import * as op from "./instructions.js";
 import kperror, { kpcatch, transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
@@ -6,21 +11,30 @@ import validate, {
   argumentError,
   argumentPatternError,
   either,
+  wrongType,
 } from "./validate.js";
 import {
   functionName,
+  instanceProtocol,
   isArray,
   isBoolean,
+  isClass,
   isError,
   isFunction,
-  isNaturalFunction,
+  isInstance,
   isNull,
   isNumber,
   isObject,
   isPlatformFunction,
+  isProtocol,
   isSequence,
   isStream,
   isString,
+  isType,
+  numberClass,
+  objectClass,
+  sequenceProtocol,
+  stringClass,
   toString,
 } from "./values.js";
 
@@ -138,11 +152,13 @@ export class Vm {
     this.instructionTable[op.IS_ARRAY] = this.runIsArray;
     this.instructionTable[op.IS_STREAM] = this.runIsStream;
     this.instructionTable[op.IS_OBJECT] = this.runIsObject;
-    this.instructionTable[op.IS_BUILTIN] = this.runIsBuiltin;
-    this.instructionTable[op.IS_GIVEN] = this.runIsGiven;
-    this.instructionTable[op.IS_ERROR] = this.runIsError;
     this.instructionTable[op.IS_FUNCTION] = this.runIsFunction;
+    this.instructionTable[op.IS_ERROR] = this.runIsError;
+    this.instructionTable[op.IS_CLASS] = this.runIsClass;
+    this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
     this.instructionTable[op.IS_SEQUENCE] = this.runIsSequence;
+    this.instructionTable[op.IS_TYPE] = this.runIsType;
+    this.instructionTable[op.IS_INSTANCE] = this.runIsInstance;
     this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -776,12 +792,13 @@ export class Vm {
       this.indexStream(collection, index);
     } else if (isObject(collection)) {
       this.indexObject(collection, index);
+    } else if (isInstance(collection)) {
+      this.indexInstance(collection, index);
     } else {
       this.throw_(
-        kperror(
-          "wrongType",
-          ["value", collection],
-          ["expectedType", either("sequence", "object")]
+        wrongType(
+          collection,
+          either(sequenceProtocol, objectClass, instanceProtocol)
         )
       );
     }
@@ -789,9 +806,7 @@ export class Vm {
 
   indexArray(array, index) {
     if (!isNumber(index)) {
-      this.throw_(
-        kperror("wrongType", ["value", index], ["expectedType", "number"])
-      );
+      this.throw_(wrongType(index, numberClass));
       return;
     }
     const result = kpcatch(() => indexArray(array, index));
@@ -849,20 +864,29 @@ export class Vm {
         console.log(`Return to ${this.cursor} from stream indexing`);
       }
     } else {
-      this.throw_(
-        kperror("wrongType", ["value", index], ["expectedType", "number"])
-      );
+      this.throw_(wrongType(index, numberClass));
     }
   }
 
   indexObject(object, index) {
     if (!isString(index)) {
-      this.throw_(
-        kperror("wrongType", ["value", index], ["expectedType", "string"])
-      );
+      this.throw_(wrongType(index, stringClass));
       return;
     }
     const result = kpcatch(() => indexMapping(object, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
+  }
+
+  indexInstance(instance, index) {
+    if (!isString(index)) {
+      this.throw_(wrongType(index, stringClass));
+      return;
+    }
+    const result = kpcatch(() => indexInstance(instance, index));
     if (isError(result)) {
       this.throw_(result);
       return;
@@ -948,20 +972,12 @@ export class Vm {
     this.stack.push(isObject(value));
   }
 
-  runIsBuiltin() {
+  runIsFunction() {
     if (this.trace) {
-      this.logInstruction("IS_BUILTIN");
+      this.logInstruction("IS_FUNCTION");
     }
     const value = this.stack.pop();
-    this.stack.push(isPlatformFunction(value));
-  }
-
-  runIsGiven() {
-    if (this.trace) {
-      this.logInstruction("IS_GIVEN");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isNaturalFunction(value));
+    this.stack.push(isFunction(value));
   }
 
   runIsError() {
@@ -972,12 +988,20 @@ export class Vm {
     this.stack.push(isError(value));
   }
 
-  runIsFunction() {
+  runIsClass() {
     if (this.trace) {
-      this.logInstruction("IS_FUNCTION");
+      this.logInstruction("IS_CLASS");
     }
     const value = this.stack.pop();
-    this.stack.push(isFunction(value));
+    this.stack.push(isClass(value));
+  }
+
+  runIsProtocol() {
+    if (this.trace) {
+      this.logInstruction("IS_PROTOCOL");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isProtocol(value));
   }
 
   runIsSequence() {
@@ -986,6 +1010,22 @@ export class Vm {
     }
     const value = this.stack.pop();
     this.stack.push(isSequence(value));
+  }
+
+  runIsType() {
+    if (this.trace) {
+      this.logInstruction("IS_TYPE");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isType(value));
+  }
+
+  runIsInstance() {
+    if (this.trace) {
+      this.logInstruction("IS_INSTANCE");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isInstance(value));
   }
 
   runErrorIfInvalid() {

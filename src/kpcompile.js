@@ -12,7 +12,27 @@ import kperror from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
 import { either } from "./validate.js";
-import { isObject, isPlatformFunction, isString } from "./values.js";
+import {
+  anyProtocol,
+  arrayClass,
+  booleanClass,
+  Class,
+  classClass,
+  errorClass,
+  functionClass,
+  instanceProtocol,
+  isObject,
+  isPlatformFunction,
+  nullClass,
+  numberClass,
+  objectClass,
+  Protocol,
+  protocolClass,
+  sequenceProtocol,
+  streamClass,
+  stringClass,
+  typeProtocol,
+} from "./values.js";
 
 export function kpcompileJson(
   json,
@@ -97,16 +117,18 @@ class Compiler {
   }
 
   compileLibrary() {
-    for (const [name, libraryFunction] of this.library) {
-      if (isPlatformFunction(libraryFunction)) {
-        this.compileBuiltin(name, libraryFunction);
-        if (libraryFunction.methods) {
-          for (const method of libraryFunction.methods) {
+    for (const [name, value] of this.library) {
+      if (isPlatformFunction(value)) {
+        this.compileBuiltin(name, value);
+        if (value.methods) {
+          for (const method of value.methods) {
             this.compileMethod(name, method);
           }
         }
+      } else if (value.type === "function") {
+        this.compileExpression(value, name);
       } else {
-        this.compileExpression(libraryFunction, name);
+        // Not a function, nothing to compile.
       }
     }
   }
@@ -300,6 +322,9 @@ class Compiler {
       case "catch":
         this.compileCatch(expression);
         break;
+      case "value":
+        this.compileValue(expression);
+        break;
       default:
         throw kperror("notAnExpression", ["value", expression]);
     }
@@ -443,12 +468,16 @@ class Compiler {
 
   resolveInLibrary(expression) {
     if (this.libraryNames.has(expression.name)) {
-      this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionName: expression.name });
-      this.addDiagnostic({
-        name: expression.name,
-        isPlatform: true,
-      });
+      if (this.library.get(expression.name).type === "value") {
+        this.addInstruction(op.VALUE, this.library.get(expression.name).value);
+      } else {
+        this.addInstruction(op.FUNCTION, 0);
+        this.addMark({ functionName: expression.name });
+        this.addDiagnostic({
+          name: expression.name,
+          isPlatform: true,
+        });
+      }
       return true;
     } else {
       return false;
@@ -546,7 +575,7 @@ class Compiler {
   }
 
   assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
-    this.validate(either("array", "stream"));
+    this.validate(either(arrayClass, streamClass));
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
     for (let i = 0; i < pattern.names.length; i++) {
@@ -572,7 +601,7 @@ class Compiler {
   }
 
   assignNamesInObjectPattern(pattern, { isArgumentPattern }) {
-    this.validate("object");
+    this.validate(objectClass);
     this.addInstruction(op.OBJECT_COPY);
     let rest = null;
     for (const entry of pattern.entries) {
@@ -706,6 +735,10 @@ class Compiler {
     this.setInstruction(catchIndex - 1, jumpIndex - catchIndex);
   }
 
+  compileValue(expression) {
+    this.addInstruction(op.VALUE, expression.value);
+  }
+
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
     this.validateRecursive(schema);
     this.addInstruction(op.VALUE, schema);
@@ -714,7 +747,7 @@ class Compiler {
   }
 
   validateRecursive(schema) {
-    if (isString(schema)) {
+    if (schema instanceof Class || schema instanceof Protocol) {
       this.validateTypeSchema(schema);
     } else if (isObject(schema)) {
       if (schema.has("either")) {
@@ -731,32 +764,48 @@ class Compiler {
     }
   }
 
-  typeValidationInstructions = {
-    null: op.IS_NULL,
-    boolean: op.IS_BOOLEAN,
-    number: op.IS_NUMBER,
-    string: op.IS_STRING,
-    array: op.IS_ARRAY,
-    stream: op.IS_STREAM,
-    object: op.IS_OBJECT,
-    builtin: op.IS_BUILTIN,
-    given: op.IS_GIVEN,
-    error: op.IS_ERROR,
-    function: op.IS_FUNCTION,
-    sequence: op.IS_SEQUENCE,
-  };
-
   validateTypeSchema(schema) {
-    if (schema === "any") {
+    if (schema === anyProtocol) {
       this.addInstruction(op.VALUE, true);
       return;
     }
     this.addInstruction(op.ALIAS);
-    const instruction = this.typeValidationInstructions[schema];
-    if (instruction === undefined) {
+    const instruction = this.getTypeValidationInstruction(schema);
+    this.addInstruction(instruction);
+  }
+
+  getTypeValidationInstruction(schema) {
+    if (schema === nullClass) {
+      return op.IS_NULL;
+    } else if (schema === booleanClass) {
+      return op.IS_BOOLEAN;
+    } else if (schema === numberClass) {
+      return op.IS_NUMBER;
+    } else if (schema === stringClass) {
+      return op.IS_STRING;
+    } else if (schema === arrayClass) {
+      return op.IS_ARRAY;
+    } else if (schema === streamClass) {
+      return op.IS_STREAM;
+    } else if (schema === objectClass) {
+      return op.IS_OBJECT;
+    } else if (schema === functionClass) {
+      return op.IS_FUNCTION;
+    } else if (schema === errorClass) {
+      return op.IS_ERROR;
+    } else if (schema === classClass) {
+      return op.IS_CLASS;
+    } else if (schema === protocolClass) {
+      return op.IS_PROTOCOL;
+    } else if (schema === sequenceProtocol) {
+      return op.IS_SEQUENCE;
+    } else if (schema === typeProtocol) {
+      return op.IS_TYPE;
+    } else if (schema === instanceProtocol) {
+      return op.IS_INSTANCE;
+    } else {
       this.invalidSchema(schema);
     }
-    this.addInstruction(instruction);
   }
 
   validateEitherSchema(schema) {
@@ -804,7 +853,7 @@ class Compiler {
     this.validateTypeSchema(schema.get("type"));
     failIfFalse();
 
-    if (schema.get("type") === "array") {
+    if (schema.get("type") === arrayClass) {
       if (schema.has("shape")) {
         this.validateArrayShape(schema.get("shape"));
         failIfFalse();
@@ -813,7 +862,7 @@ class Compiler {
         this.validateArrayElements(schema.get("elements"));
         failIfFalse();
       }
-    } else if (schema.get("type") === "object") {
+    } else if (schema.get("type") === objectClass) {
       if (schema.has("shape")) {
         this.validateObjectShape(schema.get("shape"));
         failIfFalse();

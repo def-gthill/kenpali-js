@@ -5,6 +5,7 @@ import {
   objectPattern,
   optional as optionalNode,
   rest,
+  value,
 } from "./kpast.js";
 import kperror, { transformError } from "./kperror.js";
 import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
@@ -24,18 +25,36 @@ import validate, {
   tupleLike,
 } from "./validate.js";
 import {
+  anyProtocol,
+  arrayClass,
+  booleanClass,
+  classClass,
+  classOf,
   equals,
+  errorClass,
+  functionClass,
+  instanceProtocol,
   isArray,
   isBoolean,
+  isClass,
   isError,
   isFunction,
   isNumber,
   isObject,
+  isProtocol,
   isSequence,
   isStream,
   isString,
+  isType,
+  nullClass,
+  numberClass,
+  objectClass,
+  protocolClass,
+  sequenceProtocol,
+  streamClass,
+  stringClass,
   toString,
-  typeOf,
+  typeProtocol,
 } from "./values.js";
 
 const rawBuiltins = [
@@ -46,7 +65,7 @@ const rawBuiltins = [
         "value",
         {
           name: "name",
-          type: either("string", "null"),
+          type: either(stringClass, nullClass),
           defaultValue: literal(null),
         },
       ],
@@ -62,7 +81,7 @@ const rawBuiltins = [
   ),
   builtin(
     "plus",
-    { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
+    { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc + value, 0);
     }
@@ -71,8 +90,8 @@ const rawBuiltins = [
     "minus",
     {
       params: [
-        { name: "a", type: "number" },
-        { name: "b", type: "number" },
+        { name: "a", type: numberClass },
+        { name: "b", type: numberClass },
       ],
     },
     function ([a, b]) {
@@ -81,20 +100,24 @@ const rawBuiltins = [
   ),
   builtin(
     "negative",
-    { params: [{ name: "n", type: "number" }] },
+    { params: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return -n;
     }
   ),
-  builtin("up", { params: [{ name: "n", type: "number" }] }, function ([n]) {
+  builtin("up", { params: [{ name: "n", type: numberClass }] }, function ([n]) {
     return n + 1;
   }),
-  builtin("down", { params: [{ name: "n", type: "number" }] }, function ([n]) {
-    return n - 1;
-  }),
+  builtin(
+    "down",
+    { params: [{ name: "n", type: numberClass }] },
+    function ([n]) {
+      return n - 1;
+    }
+  ),
   builtin(
     "times",
-    { params: [{ rest: { name: "numbers", type: arrayOf("number") } }] },
+    { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc * value, 1);
     }
@@ -103,8 +126,8 @@ const rawBuiltins = [
     "dividedBy",
     {
       params: [
-        { name: "a", type: "number" },
-        { name: "b", type: "number" },
+        { name: "a", type: numberClass },
+        { name: "b", type: numberClass },
       ],
     },
     function ([a, b]) {
@@ -113,7 +136,7 @@ const rawBuiltins = [
   ),
   builtin(
     "oneOver",
-    { params: [{ name: "x", type: "number" }] },
+    { params: [{ name: "x", type: numberClass }] },
     function ([x]) {
       return 1 / x;
     }
@@ -122,8 +145,8 @@ const rawBuiltins = [
     "quotientBy",
     {
       params: [
-        { name: "a", type: "number" },
-        { name: "b", type: "number" },
+        { name: "a", type: numberClass },
+        { name: "b", type: numberClass },
       ],
     },
     function ([a, b]) {
@@ -134,8 +157,8 @@ const rawBuiltins = [
     "remainderBy",
     {
       params: [
-        { name: "a", type: "number" },
-        { name: "b", type: "number" },
+        { name: "a", type: numberClass },
+        { name: "b", type: numberClass },
       ],
     },
     function ([a, b]) {
@@ -145,7 +168,7 @@ const rawBuiltins = [
   builtin(
     "toCodePoints",
     {
-      params: [{ name: "string", type: "string" }],
+      params: [{ name: "string", type: stringClass }],
     },
     function ([string]) {
       return [...string].map((char) => char.codePointAt(0));
@@ -154,7 +177,7 @@ const rawBuiltins = [
   builtin(
     "fromCodePoints",
     {
-      params: [{ name: "codePoints", type: arrayOf("number") }],
+      params: [{ name: "codePoints", type: arrayOf(numberClass) }],
     },
     function ([codePoints]) {
       return String.fromCodePoint(...codePoints);
@@ -163,26 +186,26 @@ const rawBuiltins = [
   builtin(
     "join",
     {
-      params: [{ name: "strings", type: either("array", "stream") }],
+      params: [{ name: "strings", type: either(arrayClass, streamClass) }],
       namedParams: [
         {
           name: "on",
-          type: "string",
+          type: stringClass,
           defaultValue: literal(""),
         },
       ],
     },
     function ([strings, on]) {
       const array = toArray(strings);
-      validateArgument(array, arrayOf("string"));
+      validateArgument(array, arrayOf(stringClass));
       return array.join(on);
     }
   ),
   builtin(
     "split",
     {
-      params: [{ name: "string", type: "string" }],
-      namedParams: [{ name: "on", type: "string" }],
+      params: [{ name: "string", type: stringClass }],
+      namedParams: [{ name: "on", type: stringClass }],
     },
     function ([string, on]) {
       return string.split(on);
@@ -195,12 +218,18 @@ const rawBuiltins = [
     "isLessThan",
     {
       params: [
-        { name: "a", type: either("number", "string", "boolean", "array") },
-        { name: "b", type: either("number", "string", "boolean", "array") },
+        {
+          name: "a",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
+        {
+          name: "b",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
       ],
     },
     function ([a, b]) {
-      validateArgument(b, typeOf(a));
+      validateArgument(b, classOf(a));
       return compare(a, b) < 0;
     }
   ),
@@ -208,12 +237,18 @@ const rawBuiltins = [
     "isAtMost",
     {
       params: [
-        { name: "a", type: either("number", "string", "boolean", "array") },
-        { name: "b", type: either("number", "string", "boolean", "array") },
+        {
+          name: "a",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
+        {
+          name: "b",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
       ],
     },
     function ([a, b]) {
-      validateArgument(b, typeOf(a));
+      validateArgument(b, classOf(a));
       return compare(a, b) <= 0;
     }
   ),
@@ -221,12 +256,18 @@ const rawBuiltins = [
     "isMoreThan",
     {
       params: [
-        { name: "a", type: either("number", "string", "boolean", "array") },
-        { name: "b", type: either("number", "string", "boolean", "array") },
+        {
+          name: "a",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
+        {
+          name: "b",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
       ],
     },
     function ([a, b]) {
-      validateArgument(b, typeOf(a));
+      validateArgument(b, classOf(a));
       return compare(a, b) > 0;
     }
   ),
@@ -234,12 +275,18 @@ const rawBuiltins = [
     "isAtLeast",
     {
       params: [
-        { name: "a", type: either("number", "string", "boolean", "array") },
-        { name: "b", type: either("number", "string", "boolean", "array") },
+        {
+          name: "a",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
+        {
+          name: "b",
+          type: either(numberClass, stringClass, booleanClass, arrayClass),
+        },
       ],
     },
     function ([a, b]) {
-      validateArgument(b, typeOf(a));
+      validateArgument(b, classOf(a));
       return compare(a, b) >= 0;
     }
   ),
@@ -247,8 +294,8 @@ const rawBuiltins = [
     "and",
     {
       params: [
-        { name: "first", type: "boolean" },
-        { rest: { name: "rest", type: arrayOf("function") } },
+        { name: "first", type: booleanClass },
+        { rest: { name: "rest", type: arrayOf(functionClass) } },
       ],
     },
     function ([first, rest], { kpcallback }) {
@@ -257,7 +304,7 @@ const rawBuiltins = [
       }
       for (const f of rest) {
         const condition = kpcallback(f, [], kpobject());
-        validateReturn(condition, "boolean");
+        validateReturn(condition, booleanClass);
         if (!condition) {
           return false;
         }
@@ -269,8 +316,8 @@ const rawBuiltins = [
     "or",
     {
       params: [
-        { name: "first", type: "boolean" },
-        { rest: { name: "rest", type: arrayOf("function") } },
+        { name: "first", type: booleanClass },
+        { rest: { name: "rest", type: arrayOf(functionClass) } },
       ],
     },
     function ([first, rest], { kpcallback }) {
@@ -279,7 +326,7 @@ const rawBuiltins = [
       }
       for (const f of rest) {
         const condition = kpcallback(f, [], kpobject());
-        validateReturn(condition, "boolean");
+        validateReturn(condition, booleanClass);
         if (condition) {
           return true;
         }
@@ -287,11 +334,29 @@ const rawBuiltins = [
       return false;
     }
   ),
-  builtin("not", { params: [{ name: "x", type: "boolean" }] }, function ([x]) {
-    return !x;
-  }),
-  builtin("typeOf", { params: ["value"] }, function ([value]) {
-    return typeOf(value);
+  builtin(
+    "not",
+    { params: [{ name: "x", type: booleanClass }] },
+    function ([x]) {
+      return !x;
+    }
+  ),
+  constant("Null", value(nullClass)),
+  constant("Boolean", value(booleanClass)),
+  constant("Number", value(numberClass)),
+  constant("String", value(stringClass)),
+  constant("Array", value(arrayClass)),
+  constant("Stream", value(streamClass)),
+  constant("Object", value(objectClass)),
+  constant("Function", value(functionClass)),
+  constant("Error", value(errorClass)),
+  constant("Class", value(classClass)),
+  constant("Protocol", value(protocolClass)),
+  constant("Sequence", value(sequenceProtocol)),
+  constant("Type", value(typeProtocol)),
+  constant("Any", value(anyProtocol)),
+  builtin("classOf", { params: ["value"] }, function ([value]) {
+    return classOf(value);
   }),
   builtin("isNull", { params: ["value"] }, function ([value]) {
     return value === null;
@@ -304,7 +369,7 @@ const rawBuiltins = [
   }),
   builtin(
     "toNumber",
-    { params: [{ name: "value", type: either("string", "number") }] },
+    { params: [{ name: "value", type: either(stringClass, numberClass) }] },
     function ([value]) {
       if (isNumber(value)) {
         return value;
@@ -326,7 +391,7 @@ const rawBuiltins = [
   }),
   builtin(
     "toArray",
-    { params: [{ name: "value", type: "sequence" }] },
+    { params: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toArray(value);
     }
@@ -336,7 +401,7 @@ const rawBuiltins = [
   }),
   builtin(
     "toStream",
-    { params: [{ name: "value", type: "sequence" }] },
+    { params: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toStream(value);
     }
@@ -350,16 +415,25 @@ const rawBuiltins = [
   builtin("isError", { params: ["value"] }, function ([value]) {
     return isError(value);
   }),
+  builtin("isClass", { params: ["value"] }, function ([value]) {
+    return isClass(value);
+  }),
+  builtin("isProtocol", { params: ["value"] }, function ([value]) {
+    return isProtocol(value);
+  }),
   builtin("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
+  }),
+  builtin("isType", { params: ["value"] }, function ([value]) {
+    return isType(value);
   }),
   builtin(
     "if",
     {
-      params: [{ name: "condition", type: "boolean" }],
+      params: [{ name: "condition", type: booleanClass }],
       namedParams: [
-        { name: "then", type: "function" },
-        { name: "else", type: "function" },
+        { name: "then", type: functionClass },
+        { name: "else", type: functionClass },
       ],
     },
     function ([condition, then, else_], { kpcallback }) {
@@ -378,16 +452,16 @@ const rawBuiltins = [
         {
           rest: {
             name: "conditions",
-            type: arrayOf(tupleLike(["function", "function"])),
+            type: arrayOf(tupleLike([functionClass, functionClass])),
           },
         },
       ],
-      namedParams: [{ name: "else", type: "function" }],
+      namedParams: [{ name: "else", type: functionClass }],
     },
     function ([value, conditions, else_], { kpcallback }) {
       for (const [condition, result] of conditions) {
         const conditionResult = kpcallback(condition, [value], kpobject());
-        validateReturn(conditionResult, "boolean");
+        validateReturn(conditionResult, booleanClass);
         if (conditionResult) {
           return kpcallback(result, [value], kpobject());
         }
@@ -398,7 +472,7 @@ const rawBuiltins = [
   builtin(
     "build",
     {
-      params: ["start", { name: "next", type: "function" }],
+      params: ["start", { name: "next", type: functionClass }],
     },
     function ([start, next], { kpcallback }) {
       function streamFrom(state) {
@@ -419,8 +493,8 @@ const rawBuiltins = [
     "newStream",
     {
       namedParams: [
-        { name: "value", type: "function" },
-        { name: "next", type: "function" },
+        { name: "value", type: functionClass },
+        { name: "next", type: functionClass },
       ],
     },
     function ([value, next], { kpcallback }) {
@@ -437,8 +511,11 @@ const rawBuiltins = [
     "at",
     {
       params: [
-        { name: "collection", type: either("sequence", "object") },
-        { name: "index", type: either("number", "string") },
+        {
+          name: "collection",
+          type: either(sequenceProtocol, objectClass, instanceProtocol),
+        },
+        { name: "index", type: either(numberClass, stringClass) },
       ],
       namedParams: [optionalFunctionParameter("default")],
     },
@@ -461,7 +538,7 @@ const rawBuiltins = [
           );
         }
         return indexStream(collection, index, default_, kpcallback);
-      } else {
+      } else if (isObject(collection)) {
         if (!isString(index)) {
           throw kperror(
             "wrongType",
@@ -470,12 +547,21 @@ const rawBuiltins = [
           );
         }
         return indexMapping(collection, index, default_, kpcallback);
+      } else {
+        if (!isString(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "string"]
+          );
+        }
+        return indexInstance(collection, index, default_, kpcallback);
       }
     }
   ),
   builtin(
     "length",
-    { params: [{ name: "sequence", type: "sequence" }] },
+    { params: [{ name: "sequence", type: sequenceProtocol }] },
     function ([sequence]) {
       if (isStream(sequence)) {
         return toArray(sequence).length;
@@ -487,11 +573,11 @@ const rawBuiltins = [
   builtin(
     "sort",
     {
-      params: [{ name: "sequence", type: "sequence" }],
+      params: [{ name: "sequence", type: sequenceProtocol }],
       namedParams: [
         {
           name: "by",
-          type: either("function", "null"),
+          type: either(functionClass, nullClass),
           defaultValue: literal(null),
         },
       ],
@@ -516,8 +602,8 @@ const rawBuiltins = [
     "forEach",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "action", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "action", type: functionClass },
       ],
     },
     function ([sequence, action], { kpcallback }) {
@@ -532,8 +618,8 @@ const rawBuiltins = [
     "transform",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "f", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "f", type: functionClass },
       ],
     },
     function ([sequence, f], { kpcallback }) {
@@ -558,8 +644,8 @@ const rawBuiltins = [
   builtin(
     "running",
     {
-      params: [{ name: "sequence", type: "sequence" }],
-      namedParams: ["start", { name: "next", type: "function" }],
+      params: [{ name: "sequence", type: sequenceProtocol }],
+      namedParams: ["start", { name: "next", type: functionClass }],
     },
     function ([in_, start, next], { kpcallback }) {
       const inStream = toStream(in_);
@@ -590,8 +676,8 @@ const rawBuiltins = [
     "keepFirst",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "n", type: "number" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "n", type: numberClass },
       ],
     },
     function ([sequence, n]) {
@@ -622,8 +708,8 @@ const rawBuiltins = [
     "dropFirst",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "n", type: "number", defaultValue: literal(1) },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "n", type: numberClass, defaultValue: literal(1) },
       ],
     },
     function ([sequence, n]) {
@@ -650,8 +736,8 @@ const rawBuiltins = [
     "while",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "condition", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "condition", type: functionClass },
       ],
     },
     function ([sequence, condition], { kpcallback }) {
@@ -666,7 +752,7 @@ const rawBuiltins = [
           [current.value()],
           kpobject()
         );
-        validateReturn(conditionSatisfied, "boolean");
+        validateReturn(conditionSatisfied, booleanClass);
         if (!conditionSatisfied) {
           return emptyStream();
         }
@@ -687,8 +773,8 @@ const rawBuiltins = [
     "continueIf",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "condition", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "condition", type: functionClass },
       ],
     },
     function ([sequence, condition], { kpcallback }) {
@@ -703,7 +789,7 @@ const rawBuiltins = [
           [current.value()],
           kpobject()
         );
-        validateReturn(conditionSatisfied, "boolean");
+        validateReturn(conditionSatisfied, booleanClass);
         return stream({
           value() {
             return current.value();
@@ -723,8 +809,8 @@ const rawBuiltins = [
     "where",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "condition", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "condition", type: functionClass },
       ],
     },
     function ([sequence, condition], { kpcallback }) {
@@ -739,7 +825,7 @@ const rawBuiltins = [
             [current.value()],
             kpobject()
           );
-          validateReturn(conditionSatisfied, "boolean");
+          validateReturn(conditionSatisfied, booleanClass);
           return conditionSatisfied;
         }
 
@@ -767,7 +853,9 @@ const rawBuiltins = [
   builtin(
     "zip",
     {
-      params: [{ rest: { name: "sequences", type: arrayOf("sequence") } }],
+      params: [
+        { rest: { name: "sequences", type: arrayOf(sequenceProtocol) } },
+      ],
     },
     function ([sequences]) {
       const streams = sequences.map(toStream);
@@ -794,8 +882,8 @@ const rawBuiltins = [
     "unzip",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "numStreams", type: "number", defaultValue: literal(2) },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "numStreams", type: numberClass, defaultValue: literal(2) },
       ],
     },
     function ([sequence, numStreams]) {
@@ -821,7 +909,7 @@ const rawBuiltins = [
   ),
   builtin(
     "flatten",
-    { params: [{ name: "sequences", type: "sequence" }] },
+    { params: [{ name: "sequences", type: sequenceProtocol }] },
     function ([sequences]) {
       const outer = toStream(sequences);
 
@@ -833,7 +921,7 @@ const rawBuiltins = [
             return emptyStream();
           }
           const innerResult = outer.value();
-          validateReturn(innerResult, either("array", "stream"));
+          validateReturn(innerResult, either(arrayClass, streamClass));
           inner = toStream(innerResult);
           outer = outer.next();
         }
@@ -854,8 +942,8 @@ const rawBuiltins = [
     "dissect",
     {
       params: [
-        { name: "sequence", type: "sequence" },
-        { name: "condition", type: "function" },
+        { name: "sequence", type: sequenceProtocol },
+        { name: "condition", type: functionClass },
       ],
     },
     function ([sequence, condition], { kpcallback }) {
@@ -870,7 +958,7 @@ const rawBuiltins = [
             [current.value()],
             kpobject()
           );
-          validateReturn(conditionSatisfied, "boolean");
+          validateReturn(conditionSatisfied, booleanClass);
           return conditionSatisfied;
         }
 
@@ -902,7 +990,7 @@ const rawBuiltins = [
   ),
   builtin(
     "keys",
-    { params: [{ name: "object", type: "object" }] },
+    { params: [{ name: "object", type: objectClass }] },
     function ([object]) {
       return [...object.keys()];
     }
@@ -913,7 +1001,7 @@ const rawBuiltins = [
       params: [
         {
           name: "value",
-          type: either("array", "stream", "error"),
+          type: either(arrayClass, streamClass, errorClass),
         },
       ],
     },
@@ -922,14 +1010,16 @@ const rawBuiltins = [
         return toKpobject(value);
       }
       const array = toArray(value);
-      validateArgument(array, arrayOf(tupleLike(["string", "any"])));
+      validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
       return kpobject(...array);
     }
   ),
   builtin(
     "newSet",
     {
-      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      params: [
+        { name: "elements", type: arrayClass, defaultValue: literal([]) },
+      ],
     },
     function ([elements], { getMethod }) {
       const keys = elements.map(toKey);
@@ -956,7 +1046,7 @@ const rawBuiltins = [
       params: [
         {
           name: "entries",
-          type: arrayOf(tupleLike(["any", "any"])),
+          type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
           defaultValue: literal([]),
         },
       ],
@@ -1027,7 +1117,9 @@ const rawBuiltins = [
   builtin(
     "mutableArray",
     {
-      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      params: [
+        { name: "elements", type: arrayClass, defaultValue: literal([]) },
+      ],
     },
     function ([elements], { getMethod }) {
       const array = [...elements];
@@ -1058,7 +1150,7 @@ const rawBuiltins = [
       method(
         "set",
         {
-          params: [{ name: "index", type: "number" }, "element"],
+          params: [{ name: "index", type: numberClass }, "element"],
         },
         function ([self, index, element]) {
           setArray(self.array, index, element, self.object);
@@ -1068,7 +1160,7 @@ const rawBuiltins = [
       method(
         "storeAt",
         {
-          params: ["element", { name: "index", type: "number" }],
+          params: ["element", { name: "index", type: numberClass }],
         },
         function ([self, element, index]) {
           setArray(self.array, index, element, self.object);
@@ -1078,7 +1170,7 @@ const rawBuiltins = [
       method(
         "at",
         {
-          params: [{ name: "index", type: "number" }],
+          params: [{ name: "index", type: numberClass }],
           namedParams: [optionalFunctionParameter("default")],
         },
         function ([self, index, default_], { kpcallback }) {
@@ -1117,7 +1209,9 @@ const rawBuiltins = [
   builtin(
     "mutableSet",
     {
-      params: [{ name: "elements", type: "array", defaultValue: literal([]) }],
+      params: [
+        { name: "elements", type: arrayClass, defaultValue: literal([]) },
+      ],
     },
     function ([elements], { getMethod }) {
       const keys = elements.map(toKey);
@@ -1167,7 +1261,7 @@ const rawBuiltins = [
       params: [
         {
           name: "entries",
-          type: arrayOf(tupleLike(["any", "any"])),
+          type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
           defaultValue: literal([]),
         },
       ],
@@ -1285,11 +1379,11 @@ const rawBuiltins = [
   builtin(
     "is",
     {
-      params: [{ name: "type", type: "string" }],
+      params: [{ name: "type", type: typeProtocol }],
       namedParams: [
         {
           name: "where",
-          type: either("function", "null"),
+          type: either(functionClass, nullClass),
           defaultValue: literal(null),
         },
       ],
@@ -1308,7 +1402,7 @@ const rawBuiltins = [
       namedParams: [
         {
           name: "where",
-          type: either("function", "null"),
+          type: either(functionClass, nullClass),
           defaultValue: literal(null),
         },
       ],
@@ -1330,11 +1424,11 @@ const rawBuiltins = [
     "objectOf",
     {
       namedParams: [
-        { name: "keys", defaultValue: literal("string") },
+        { name: "keys", defaultValue: value(stringClass) },
         "values",
         {
           name: "where",
-          type: either("function", "null"),
+          type: either(functionClass, nullClass),
           defaultValue: literal(null),
         },
       ],
@@ -1367,7 +1461,7 @@ const rawBuiltins = [
   builtin(
     "error",
     {
-      params: [{ name: "type", type: "string" }],
+      params: [{ name: "type", type: stringClass }],
       namedParams: [{ rest: "details" }],
     },
     function ([type, details]) {
@@ -1375,6 +1469,10 @@ const rawBuiltins = [
     }
   ),
 ];
+
+export function constant(name, value) {
+  return [name, value];
+}
 
 export function builtin(name, paramSpec, f, methods = []) {
   f.functionName = name;
@@ -1409,7 +1507,7 @@ export function bindMethod(self, method) {
 function optionalFunctionParameter(name) {
   return {
     name,
-    type: either("function", "null"),
+    type: either(functionClass, nullClass),
     defaultValue: literal(null),
   };
 }
@@ -1476,9 +1574,15 @@ function compare(a, b) {
       if (i >= b.length) {
         return 1;
       }
-      validateArgument(a[i], either("number", "string", "boolean", "array"));
-      validateArgument(b[i], either("number", "string", "boolean", "array"));
-      validateArgument(b[i], typeOf(a[i]));
+      validateArgument(
+        a[i],
+        either(numberClass, stringClass, booleanClass, arrayClass)
+      );
+      validateArgument(
+        b[i],
+        either(numberClass, stringClass, booleanClass, arrayClass)
+      );
+      validateArgument(b[i], classOf(a[i]));
       const elementCompare = compare(a[i], b[i]);
       if (elementCompare !== 0) {
         return elementCompare;
@@ -1648,6 +1752,22 @@ export function indexMapping(
   }
 }
 
+export function indexInstance(
+  instance,
+  index,
+  default_,
+  kpcallback,
+  valueForError = instance
+) {
+  if (index in instance.properties) {
+    return instance.properties[index];
+  } else if (default_) {
+    return kpcallback(default_, [], kpobject());
+  } else {
+    throw kperror("missingProperty", ["value", valueForError], ["key", index]);
+  }
+}
+
 export function fromString(string) {
   return toValue(kpparse(string));
 }
@@ -1691,5 +1811,9 @@ function validateReturn(value, schema) {
 }
 
 export function loadBuiltins() {
-  return kpobject(...rawBuiltins.map((f) => [f.functionName, f]));
+  return kpobject(
+    ...rawBuiltins.map((builtin) =>
+      typeof builtin === "function" ? [builtin.functionName, builtin] : builtin
+    )
+  );
 }

@@ -1,23 +1,72 @@
-import { kpoEntries } from "./kpobject.js";
+import { kpoEntries, toKpobject } from "./kpobject.js";
 import { Stream } from "./stream.js";
+
+//#region Type objects
+
+export class Instance {
+  constructor(properties) {
+    this.properties = properties;
+  }
+}
+
+export class Class extends Instance {
+  constructor(name) {
+    super({ name });
+  }
+}
+
+export class Protocol extends Instance {
+  constructor(name) {
+    super({ name });
+  }
+}
+
+export const nullClass = new Class("Null");
+export const booleanClass = new Class("Boolean");
+export const numberClass = new Class("Number");
+export const stringClass = new Class("String");
+export const arrayClass = new Class("Array");
+export const streamClass = new Class("Stream");
+export const objectClass = new Class("Object");
+export const functionClass = new Class("Function");
+export const errorClass = new Class("Error");
+export const classClass = new Class("Class");
+export const protocolClass = new Class("Protocol");
+
+export const sequenceProtocol = new Protocol("Sequence");
+export const typeProtocol = new Protocol("Type");
+export const instanceProtocol = new Protocol("Instance");
+export const anyProtocol = new Protocol("Any");
+
+//#endregion
 
 //#region Identifying types
 
-export function typeOf(value) {
-  if (value === null) {
-    return "null";
+export function classOf(value) {
+  if (isNull(value)) {
+    return nullClass;
+  } else if (isBoolean(value)) {
+    return booleanClass;
+  } else if (isNumber(value)) {
+    return numberClass;
+  } else if (isString(value)) {
+    return stringClass;
   } else if (isArray(value)) {
-    return "array";
+    return arrayClass;
   } else if (isStream(value)) {
-    return "stream";
+    return streamClass;
   } else if (isObject(value)) {
-    return "object";
+    return objectClass;
   } else if (isFunction(value)) {
-    return "function";
+    return functionClass;
   } else if (isError(value)) {
-    return "error";
+    return errorClass;
+  } else if (isClass(value)) {
+    return classClass;
+  } else if (isProtocol(value)) {
+    return protocolClass;
   } else {
-    return typeof value;
+    throw new Error(`Not a valid Kenpali value: ${value}`);
   }
 }
 
@@ -57,9 +106,17 @@ export function isError(value) {
   return isJsObjectWithProperty(value, "error");
 }
 
+export function isClass(value) {
+  return value instanceof Class;
+}
+
+export function isProtocol(value) {
+  return value instanceof Protocol;
+}
+
 export function isPlatformFunction(value) {
   return (
-    typeof value === "function" ||
+    (typeof value === "function" && !isInstance(value)) ||
     (isJsObjectWithProperty(value, "target") && value.isPlatform)
   );
 }
@@ -70,6 +127,14 @@ export function isNaturalFunction(value) {
 
 export function isSequence(value) {
   return isString(value) || isArray(value) || isStream(value);
+}
+
+export function isType(value) {
+  return isClass(value) || isProtocol(value);
+}
+
+export function isInstance(value) {
+  return value instanceof Instance;
 }
 
 function isJsObjectWithProperty(value, property) {
@@ -130,14 +195,16 @@ export function toString(value) {
       "}"
     );
   } else if (isNaturalFunction(value)) {
-    return `function ${value.name}`;
+    return `Function {name: "${value.name}"}`;
   } else if (isPlatformFunction(value)) {
-    return `function ${functionName(value)}`;
+    return `Function {name: "${functionName(value)}"}`;
   } else if (isError(value)) {
     return [
-      `error ${value.error} ${toString(value.details)}`,
+      `Error {error: "${value.error}", details: ${toString(value.details)}}`,
       ...(value.calls ?? []).map((call) => `in ${call.get("function")}`),
     ].join("\n");
+  } else if (isInstance(value)) {
+    return `${value.constructor.name} ${toString(toKpobject(value.properties))}`;
   } else {
     return JSON.stringify(value);
   }
