@@ -77,7 +77,6 @@ class Compiler {
     }
     this.expression = expression;
     this.library = filteredLibrary;
-    this.libraryNames = new Set(filteredLibrary.keys());
     this.modules = modules;
     this.trace = trace;
     this.traceLevel = 0;
@@ -397,7 +396,7 @@ class Compiler {
   resolveInModule(expression) {
     if (expression.from) {
       const fullName = `${expression.from}/${expression.name}`;
-      if (this.libraryNames.has(fullName)) {
+      if (this.library.has(fullName)) {
         this.addInstruction(op.FUNCTION, 0);
         this.addMark({ functionName: fullName });
         this.addDiagnostic({
@@ -466,21 +465,21 @@ class Compiler {
   }
 
   resolveInLibrary(expression) {
-    if (this.libraryNames.has(expression.name)) {
-      if (this.library.get(expression.name).type === "value") {
-        this.addInstruction(op.VALUE, this.library.get(expression.name).value);
-      } else {
-        this.addInstruction(op.FUNCTION, 0);
-        this.addMark({ functionName: expression.name });
-        this.addDiagnostic({
-          name: expression.name,
-          isPlatform: true,
-        });
-      }
-      return true;
-    } else {
+    const value = this.library.get(expression.name);
+    if (value === undefined) {
       return false;
     }
+    if (value.type === "value") {
+      this.addInstruction(op.VALUE, value.value);
+    } else {
+      this.addInstruction(op.FUNCTION, 0);
+      this.addMark({ functionName: expression.name });
+      this.addDiagnostic({
+        name: expression.name,
+        isPlatform: true,
+      });
+    }
+    return true;
   }
 
   compileBlock(expression) {
