@@ -1,5 +1,4 @@
 import kperror, {
-  errorType,
   foldError,
   kpcatch,
   transformError,
@@ -14,6 +13,7 @@ import {
   classOf,
   equals,
   instanceProtocol,
+  isInstance,
   isObject,
   isSequence,
   isType,
@@ -77,7 +77,7 @@ function validateEitherSchema(value, schema, kpcallback) {
 }
 
 function combineEitherErrors(value, errors) {
-  if (errors.every((err) => errorType(err) === "wrongType")) {
+  if (errors.every((err) => err.properties.type === "wrongType")) {
     return wrongType(
       value,
       either(...errors.map((err) => err.properties.details.get("expectedType")))
@@ -293,11 +293,11 @@ function withReason(err, reason) {
 }
 
 export function argumentError(err) {
-  if (errorType(err) === "badElement") {
+  if (err.properties.type === "badElement") {
     return withErrorType(err, "badArgumentValue");
-  } else if (errorType(err) === "wrongType") {
+  } else if (err.properties.type === "wrongType") {
     return withErrorType(err, "wrongArgumentType");
-  } else if (errorType(err) === "badValue") {
+  } else if (err.properties.type === "badValue") {
     return withErrorType(err, "badArgumentValue");
   } else {
     return err;
@@ -305,9 +305,9 @@ export function argumentError(err) {
 }
 
 export function returnError(err) {
-  if (errorType(err) === "wrongType") {
+  if (err.properties.type === "wrongType") {
     return withErrorType(err, "wrongReturnType");
-  } else if (errorType(err) === "badValue") {
+  } else if (err.properties.type === "badValue") {
     return withErrorType(err, "badReturnValue");
   } else {
     return err;
@@ -315,7 +315,7 @@ export function returnError(err) {
 }
 
 export function argumentPatternError(err) {
-  if (errorType(err) === "badElement") {
+  if (err.properties.type === "badElement") {
     return argumentError(err.properties.details.get("reason"));
   } else {
     return argumentError(err);

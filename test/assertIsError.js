@@ -9,7 +9,7 @@ export function assertIsError(
   expectedErrorDetails = {}
 ) {
   t.assert(isError(actual), `${toString(actual)} isn't an error object`);
-  t.is(actual.properties.error, expectedErrorName);
+  t.is(actual.properties.type, expectedErrorName);
   if (Object.keys(expectedErrorDetails).length > 0) {
     t.like(deepToJsObject(actual.properties.details), expectedErrorDetails);
   }

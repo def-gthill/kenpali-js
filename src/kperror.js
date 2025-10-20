@@ -4,8 +4,8 @@ import { Class, Instance, instanceProtocol } from "./values.js";
 export const errorClass = new Class("Error", [instanceProtocol]);
 
 export class Error extends Instance {
-  constructor(error, details, calls) {
-    super(errorClass, { error, details, calls });
+  constructor(type, details, calls) {
+    super(errorClass, { type, details, calls });
   }
 }
 
@@ -15,10 +15,6 @@ export default function kperror(type, ...details) {
 
 export function isError(value) {
   return value instanceof Error;
-}
-
-export function errorType(err) {
-  return err.properties.error;
 }
 
 export function withErrorType(err, newType, ...newDetails) {
@@ -31,7 +27,7 @@ export function withErrorType(err, newType, ...newDetails) {
 
 export function withDetails(err, ...newDetails) {
   return new Error(
-    err.properties.error,
+    err.properties.type,
     kpoMerge(err.properties.details, kpobject(...newDetails)),
     err.properties.calls
   );

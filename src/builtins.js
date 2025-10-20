@@ -1008,16 +1008,7 @@ const rawBuiltins = [
       ],
     },
     function ([value]) {
-      if (isSequence(value)) {
-        const array = toArray(value);
-        validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
-        return kpobject(...array);
-      } else {
-        return toKpobject({
-          "#class": value.class_.properties.name,
-          ...value.properties,
-        });
-      }
+      return toObject(value);
     }
   ),
   builtin(
@@ -1642,6 +1633,21 @@ export function toStream(value) {
     return toStream(toArray(value));
   } else {
     return value;
+  }
+}
+
+export function toObject(value) {
+  if (isObject(value)) {
+    return value;
+  } else if (isSequence(value)) {
+    const array = toArray(value);
+    validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
+    return kpobject(...array);
+  } else {
+    return toKpobject({
+      "#class": value.class_.properties.name,
+      ...value.properties,
+    });
   }
 }
 

@@ -3,6 +3,7 @@ import {
   indexInstance,
   indexMapping,
   toArray,
+  toObject,
 } from "./builtins.js";
 import * as op from "./instructions.js";
 import kperror, { isError, kpcatch, transformError } from "./kperror.js";
@@ -411,8 +412,6 @@ export class Vm {
     this.stack.push(value);
   }
 
-  popStream(stream) {}
-
   runArrayPopOrDefault() {
     if (this.trace) {
       this.logInstruction("ARRAY_POP_OR_DEFAULT");
@@ -540,7 +539,7 @@ export class Vm {
       this.logInstruction("OBJECT_COPY");
     }
     const object = this.stack.pop();
-    this.stack.push(kpobject(...kpoEntries(object)));
+    this.stack.push(kpobject(...kpoEntries(toObject(object))));
   }
 
   runJump() {

@@ -637,7 +637,7 @@ function parseAnyOf(nodeName, ...parsers) {
     ) {
       console.log(
         `No option for ${nodeName} matched after hitting ${
-          firstFarthestError.properties.error
+          firstFarthestError.properties.type
         } at ${posString(errorPos(firstFarthestError))}`
       );
     }
@@ -665,7 +665,7 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
         ) {
           console.log(
             `Unable to finish ${nodeName} after hitting ${
-              farthestPartial.properties.error
+              farthestPartial.properties.type
             } at ${posString(errorPos(farthestPartial))}`
           );
         }
@@ -874,7 +874,7 @@ function foundMessage(nodeName, tokens, start, farthestPartial) {
   if (farthestPartial) {
     return `Found ${nodeName} at ${posString(
       tokenPos(tokens, start)
-    )} after hitting ${farthestPartial.properties.error} at ${posString(
+    )} after hitting ${farthestPartial.properties.type} at ${posString(
       errorPos(farthestPartial)
     )}`;
   } else {

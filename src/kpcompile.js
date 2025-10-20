@@ -599,7 +599,7 @@ class Compiler {
   }
 
   assignNamesInObjectPattern(pattern, { isArgumentPattern }) {
-    this.validate(objectClass);
+    this.validate(either(objectClass, instanceProtocol));
     this.addInstruction(op.OBJECT_COPY);
     let rest = null;
     for (const entry of pattern.entries) {
