@@ -29,8 +29,9 @@ import {
   pipeDot,
   pipeline,
 } from "./kpast.js";
+import kperror, { isError } from "./kperror.js";
 import kplex from "./kplex.js";
-import { deepToKpobject } from "./kpobject.js";
+import { deepToKpobject, kpoEntries } from "./kpobject.js";
 
 export default function kpparse(code, { trace = false } = {}) {
   return desugar(kpparseSugared(code, { trace }));
@@ -56,7 +57,7 @@ export function kpparseTokens(
 ) {
   const tokenList = [...tokens];
   const parseResult = parseRoot({ tokens: tokenList, trace }, 0);
-  if ("error" in parseResult) {
+  if (isError(parseResult)) {
     throw parseResult;
   } else {
     return parseResult.ast;
@@ -584,7 +585,7 @@ function parseAnyOf(nodeName, ...parsers) {
     let success;
     for (const parser of parsers) {
       const result = parser({ tokens, trace }, start);
-      if ("error" in result) {
+      if (isError(result)) {
         errors.push(result);
       } else {
         success = result;
@@ -636,7 +637,7 @@ function parseAnyOf(nodeName, ...parsers) {
     ) {
       console.log(
         `No option for ${nodeName} matched after hitting ${
-          firstFarthestError.error
+          firstFarthestError.properties.error
         } at ${posString(errorPos(firstFarthestError))}`
       );
     }
@@ -651,7 +652,7 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
     let index = start;
     for (const parser of parsers) {
       const result = parser({ tokens, trace }, index);
-      if ("error" in result) {
+      if (isError(result)) {
         if (
           !farthestPartial ||
           comparePos(errorPos(result), errorPos(farthestPartial)) >= 0
@@ -664,7 +665,7 @@ function parseAllOf(nodeName, parsers, converter = (...args) => args) {
         ) {
           console.log(
             `Unable to finish ${nodeName} after hitting ${
-              farthestPartial.error
+              farthestPartial.properties.error
             } at ${posString(errorPos(farthestPartial))}`
           );
         }
@@ -762,7 +763,7 @@ function parseRepeatedly(
     while (elements.length < maximumCount) {
       let previousIndex = index;
       const parserResult = parser({ tokens, trace }, index);
-      if ("error" in parserResult) {
+      if (isError(parserResult)) {
         if (
           !farthestPartial ||
           comparePos(errorPos(parserResult), errorPos(farthestPartial)) >= 0
@@ -804,7 +805,7 @@ function parseRepeatedly(
       }
 
       const terminatorResult = terminator({ tokens, trace }, index);
-      if ("error" in terminatorResult) {
+      if (isError(terminatorResult)) {
         if (elements.length >= minimumCount) {
           if (finalTerminatorMandatory) {
             const error = syntaxError(errorIfTerminatorMissing, tokens, index);
@@ -846,7 +847,7 @@ function parseRepeatedly(
 function convert(parser, converter) {
   return function (parseOptions, start) {
     const result = parser(parseOptions, start);
-    if ("error" in result) {
+    if (isError(result)) {
       return result;
     }
     return { ...result, ast: converter(result.ast) };
@@ -854,7 +855,10 @@ function convert(parser, converter) {
 }
 
 function errorPos(error) {
-  return [error.details.get("line"), error.details.get("column")];
+  return [
+    error.properties.details.get("line"),
+    error.properties.details.get("column"),
+  ];
 }
 
 function tokenPos(tokens, index) {
@@ -870,7 +874,7 @@ function foundMessage(nodeName, tokens, start, farthestPartial) {
   if (farthestPartial) {
     return `Found ${nodeName} at ${posString(
       tokenPos(tokens, start)
-    )} after hitting ${farthestPartial.error} at ${posString(
+    )} after hitting ${farthestPartial.properties.error} at ${posString(
       errorPos(farthestPartial)
     )}`;
   } else {
@@ -884,12 +888,14 @@ function comparePos([lineA, columnA], [lineB, columnB]) {
 
 function syntaxError(name, tokens, offendingTokenIndex, properties) {
   const offendingToken = tokens[offendingTokenIndex];
-  return {
-    error: name,
-    details: deepToKpobject({
-      line: offendingToken.line,
-      column: offendingToken.column,
-      ...properties,
-    }),
-  };
+  return kperror(
+    name,
+    ...kpoEntries(
+      deepToKpobject({
+        line: offendingToken.line,
+        column: offendingToken.column,
+        ...properties,
+      })
+    )
+  );
 }

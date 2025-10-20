@@ -8,9 +8,10 @@ import {
   objectPattern,
   TreeTransformer,
 } from "./kpast.js";
-import kperror from "./kperror.js";
+import kperror, { errorClass } from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
+import { streamClass } from "./stream.js";
 import { either } from "./validate.js";
 import {
   anyProtocol,
@@ -18,7 +19,6 @@ import {
   booleanClass,
   Class,
   classClass,
-  errorClass,
   functionClass,
   instanceProtocol,
   isObject,
@@ -29,7 +29,6 @@ import {
   Protocol,
   protocolClass,
   sequenceProtocol,
-  streamClass,
   stringClass,
   typeProtocol,
 } from "./values.js";

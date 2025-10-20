@@ -5,8 +5,9 @@ import {
   toArray,
 } from "./builtins.js";
 import * as op from "./instructions.js";
-import kperror, { kpcatch, transformError } from "./kperror.js";
+import kperror, { isError, kpcatch, transformError } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
+import { isStream } from "./stream.js";
 import validate, {
   argumentError,
   argumentPatternError,
@@ -19,7 +20,6 @@ import {
   isArray,
   isBoolean,
   isClass,
-  isError,
   isFunction,
   isInstance,
   isNull,
@@ -28,7 +28,6 @@ import {
   isPlatformFunction,
   isProtocol,
   isSequence,
-  isStream,
   isString,
   isType,
   numberClass,
@@ -381,10 +380,10 @@ export class Vm {
       value = array.pop();
     } else {
       const stream = this.stack.pop();
-      if (!stream.isEmpty()) {
+      if (!stream.properties.isEmpty()) {
         this.pushCallFrame("$popStream");
-        value = stream.value();
-        this.stack.push(stream.next());
+        value = stream.properties.value();
+        this.stack.push(stream.properties.next());
         this.popCallFrame();
       }
     }
@@ -835,13 +834,13 @@ export class Vm {
         let last;
         let current = stream;
         let j = 0;
-        while (!current.isEmpty() && j < index) {
+        while (!current.properties.isEmpty() && j < index) {
           last = current;
-          current = current.next();
+          current = current.properties.next();
           j += 1;
         }
         if (j === index) {
-          this.stack.push(last.value());
+          this.stack.push(last.properties.value());
         } else {
           this.throw_(
             kperror(
@@ -1088,7 +1087,7 @@ export class Vm {
         this.callFrames.at(-1).stackIndex >= frame.stackIndex
       ) {
         const callFrame = this.callFrames.pop();
-        error.calls.push(kpobject(["function", callFrame.name]));
+        error.properties.calls.push(kpobject(["function", callFrame.name]));
       }
     }
     if (this.scopeFrames.length === 0) {

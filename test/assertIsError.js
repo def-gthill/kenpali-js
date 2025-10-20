@@ -1,5 +1,6 @@
+import { isError } from "../src/kperror.js";
 import { deepToJsObject } from "../src/kpobject.js";
-import { isError, toString } from "../src/values.js";
+import { toString } from "../src/values.js";
 
 export function assertIsError(
   t,
@@ -8,8 +9,8 @@ export function assertIsError(
   expectedErrorDetails = {}
 ) {
   t.assert(isError(actual), `${toString(actual)} isn't an error object`);
-  t.is(actual.error, expectedErrorName);
+  t.is(actual.properties.error, expectedErrorName);
   if (Object.keys(expectedErrorDetails).length > 0) {
-    t.like(deepToJsObject(actual.details), expectedErrorDetails);
+    t.like(deepToJsObject(actual.properties.details), expectedErrorDetails);
   }
 }

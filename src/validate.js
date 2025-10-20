@@ -80,7 +80,7 @@ function combineEitherErrors(value, errors) {
   if (errors.every((err) => errorType(err) === "wrongType")) {
     return wrongType(
       value,
-      either(...errors.map((err) => err.details.get("expectedType")))
+      either(...errors.map((err) => err.properties.details.get("expectedType")))
     );
   } else {
     return badValue(value, ["errors", errors]);
@@ -316,7 +316,7 @@ export function returnError(err) {
 
 export function argumentPatternError(err) {
   if (errorType(err) === "badElement") {
-    return argumentError(err.details.get("reason"));
+    return argumentError(err.properties.details.get("reason"));
   } else {
     return argumentError(err);
   }

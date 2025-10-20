@@ -7,10 +7,10 @@ import {
   rest,
   value,
 } from "./kpast.js";
-import kperror, { transformError } from "./kperror.js";
+import kperror, { errorClass, isError, transformError } from "./kperror.js";
 import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
-import { emptyStream, stream } from "./stream.js";
+import { emptyStream, isStream, stream, streamClass } from "./stream.js";
 import validate, {
   argumentError,
   arrayOf,
@@ -31,19 +31,17 @@ import {
   classClass,
   classOf,
   equals,
-  errorClass,
   functionClass,
   instanceProtocol,
   isArray,
   isBoolean,
   isClass,
-  isError,
   isFunction,
+  isInstance,
   isNumber,
   isObject,
   isProtocol,
   isSequence,
-  isStream,
   isString,
   isType,
   nullClass,
@@ -51,7 +49,6 @@ import {
   objectClass,
   protocolClass,
   sequenceProtocol,
-  streamClass,
   stringClass,
   toString,
   typeProtocol,
@@ -427,6 +424,9 @@ const rawBuiltins = [
   builtin("isType", { params: ["value"] }, function ([value]) {
     return isType(value);
   }),
+  builtin("isInstance", { params: ["value"] }, function ([value]) {
+    return isInstance(value);
+  }),
   builtin(
     "if",
     {
@@ -625,15 +625,15 @@ const rawBuiltins = [
     function ([sequence, f], { kpcallback }) {
       const start = toStream(sequence);
       function streamFrom(current) {
-        if (current.isEmpty()) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         } else {
           return stream({
             value() {
-              return kpcallback(f, [current.value()], kpobject());
+              return kpcallback(f, [current.properties.value()], kpobject());
             },
             next() {
-              return streamFrom(current.next());
+              return streamFrom(current.properties.next());
             },
           });
         }
@@ -655,13 +655,13 @@ const rawBuiltins = [
             return state;
           },
           next() {
-            return current.isEmpty()
+            return current.properties.isEmpty()
               ? emptyStream()
               : streamFrom(
-                  current.next(state),
+                  current.properties.next(state),
                   kpcallback(
                     next,
-                    [current.value(state)],
+                    [current.properties.value(state)],
                     kpobject(["state", state])
                   )
                 );
@@ -687,15 +687,15 @@ const rawBuiltins = [
       const start = toStream(sequence);
 
       function streamFrom(current, i) {
-        if (current.isEmpty() || i > n) {
+        if (current.properties.isEmpty() || i > n) {
           return emptyStream();
         } else {
           return stream({
             value() {
-              return current.value();
+              return current.properties.value();
             },
             next() {
-              return streamFrom(current.next(), i + 1);
+              return streamFrom(current.properties.next(), i + 1);
             },
           });
         }
@@ -723,10 +723,10 @@ const rawBuiltins = [
       let start = toStream(sequence);
 
       for (let i = 1; i <= n; i++) {
-        if (start.isEmpty()) {
+        if (start.properties.isEmpty()) {
           return emptyStream();
         }
-        start = start.next();
+        start = start.properties.next();
       }
 
       return start;
@@ -744,12 +744,12 @@ const rawBuiltins = [
       const start = toStream(sequence);
 
       function streamFrom(current) {
-        if (current.isEmpty()) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         }
         const conditionSatisfied = kpcallback(
           condition,
-          [current.value()],
+          [current.properties.value()],
           kpobject()
         );
         validateReturn(conditionSatisfied, booleanClass);
@@ -758,10 +758,10 @@ const rawBuiltins = [
         }
         return stream({
           value() {
-            return current.value();
+            return current.properties.value();
           },
           next() {
-            return streamFrom(current.next());
+            return streamFrom(current.properties.next());
           },
         });
       }
@@ -781,22 +781,22 @@ const rawBuiltins = [
       const start = toStream(sequence);
 
       function streamFrom(current) {
-        if (current.isEmpty()) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         }
         const conditionSatisfied = kpcallback(
           condition,
-          [current.value()],
+          [current.properties.value()],
           kpobject()
         );
         validateReturn(conditionSatisfied, booleanClass);
         return stream({
           value() {
-            return current.value();
+            return current.properties.value();
           },
           next() {
             return conditionSatisfied
-              ? streamFrom(current.next())
+              ? streamFrom(current.properties.next())
               : emptyStream();
           },
         });
@@ -822,27 +822,27 @@ const rawBuiltins = [
         function satisfied() {
           const conditionSatisfied = kpcallback(
             condition,
-            [current.value()],
+            [current.properties.value()],
             kpobject()
           );
           validateReturn(conditionSatisfied, booleanClass);
           return conditionSatisfied;
         }
 
-        while (!current.isEmpty() && !satisfied()) {
-          current = current.next();
+        while (!current.properties.isEmpty() && !satisfied()) {
+          current = current.properties.next();
         }
 
-        if (current.isEmpty()) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         }
 
         return stream({
           value() {
-            return current.value();
+            return current.properties.value();
           },
           next() {
-            return streamFrom(current.next());
+            return streamFrom(current.properties.next());
           },
         });
       }
@@ -861,15 +861,17 @@ const rawBuiltins = [
       const streams = sequences.map(toStream);
 
       function streamFrom(currents) {
-        if (currents.some((current) => current.isEmpty())) {
+        if (currents.some((current) => current.properties.isEmpty())) {
           return emptyStream();
         } else {
           return stream({
             value() {
-              return currents.map((current) => current.value());
+              return currents.map((current) => current.properties.value());
             },
             next() {
-              return streamFrom(currents.map((current) => current.next()));
+              return streamFrom(
+                currents.map((current) => current.properties.next())
+              );
             },
           });
         }
@@ -890,15 +892,15 @@ const rawBuiltins = [
       const inStream = toStream(sequence);
 
       function streamFrom(current, i) {
-        if (current.isEmpty()) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         } else {
           return stream({
             value() {
-              return indexCollection(current.value(), i);
+              return indexCollection(current.properties.value(), i);
             },
             next() {
-              return streamFrom(current.next(), i);
+              return streamFrom(current.properties.next(), i);
             },
           });
         }
@@ -916,21 +918,21 @@ const rawBuiltins = [
       function streamFrom(startOuter, startInner) {
         let outer = startOuter;
         let inner = startInner;
-        while (inner.isEmpty()) {
-          if (outer.isEmpty()) {
+        while (inner.properties.isEmpty()) {
+          if (outer.properties.isEmpty()) {
             return emptyStream();
           }
-          const innerResult = outer.value();
+          const innerResult = outer.properties.value();
           validateReturn(innerResult, either(arrayClass, streamClass));
           inner = toStream(innerResult);
-          outer = outer.next();
+          outer = outer.properties.next();
         }
         return stream({
           value() {
-            return inner.value();
+            return inner.properties.value();
           },
           next() {
-            return streamFrom(outer, inner.next());
+            return streamFrom(outer, inner.properties.next());
           },
         });
       }
@@ -955,21 +957,21 @@ const rawBuiltins = [
         function satisfied() {
           const conditionSatisfied = kpcallback(
             condition,
-            [current.value()],
+            [current.properties.value()],
             kpobject()
           );
           validateReturn(conditionSatisfied, booleanClass);
           return conditionSatisfied;
         }
 
-        while (!current.isEmpty() && !satisfied()) {
-          out.push(current.value());
-          current = current.next();
+        while (!current.properties.isEmpty() && !satisfied()) {
+          out.push(current.properties.value());
+          current = current.properties.next();
         }
 
-        if (!current.isEmpty()) {
-          out.push(current.value());
-          current = current.next();
+        if (!current.properties.isEmpty()) {
+          out.push(current.properties.value());
+          current = current.properties.next();
         }
 
         if (out.length > 0) {
@@ -1001,17 +1003,21 @@ const rawBuiltins = [
       params: [
         {
           name: "value",
-          type: either(arrayClass, streamClass, errorClass),
+          type: either(arrayClass, instanceProtocol),
         },
       ],
     },
     function ([value]) {
-      if (isError(value)) {
-        return toKpobject(value);
+      if (isSequence(value)) {
+        const array = toArray(value);
+        validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
+        return kpobject(...array);
+      } else {
+        return toKpobject({
+          "#class": value.class_.properties.name,
+          ...value.properties,
+        });
       }
-      const array = toArray(value);
-      validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
-      return kpobject(...array);
     }
   ),
   builtin(
@@ -1608,9 +1614,9 @@ export function toArray(value) {
   } else {
     let current = value;
     const result = [];
-    while (!current.isEmpty()) {
-      result.push(current.value());
-      current = current.next();
+    while (!current.properties.isEmpty()) {
+      result.push(current.properties.value());
+      current = current.properties.next();
     }
     return result;
   }
@@ -1712,13 +1718,13 @@ export function indexStream(
     let last;
     let current = stream;
     let j = 0;
-    while (!current.isEmpty() && j < index) {
+    while (!current.properties.isEmpty() && j < index) {
       last = current;
-      current = current.next();
+      current = current.properties.next();
       j += 1;
     }
     if (j === index) {
-      return last.value();
+      return last.properties.value();
     } else if (default_) {
       return kpcallback(default_, [], kpobject());
     } else {

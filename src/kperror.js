@@ -1,28 +1,40 @@
 import kpobject, { kpoMerge } from "./kpobject.js";
-import { isError } from "./values.js";
+import { Class, Instance, instanceProtocol } from "./values.js";
+
+export const errorClass = new Class("Error", [instanceProtocol]);
+
+export class Error extends Instance {
+  constructor(error, details, calls) {
+    super(errorClass, { error, details, calls });
+  }
+}
 
 export default function kperror(type, ...details) {
-  return { error: type, details: kpobject(...details), calls: [] };
+  return new Error(type, kpobject(...details), []);
+}
+
+export function isError(value) {
+  return value instanceof Error;
 }
 
 export function errorType(err) {
-  return err.error;
+  return err.properties.error;
 }
 
 export function withErrorType(err, newType, ...newDetails) {
-  return {
-    ...err,
-    error: newType,
-    details: kpoMerge(err.details, kpobject(...newDetails)),
-  };
+  return new Error(
+    newType,
+    kpoMerge(err.properties.details, kpobject(...newDetails)),
+    err.properties.calls
+  );
 }
 
 export function withDetails(err, ...newDetails) {
-  return {
-    ...err,
-    error: err.error,
-    details: kpoMerge(err.details, kpobject(...newDetails)),
-  };
+  return new Error(
+    err.properties.error,
+    kpoMerge(err.properties.details, kpobject(...newDetails)),
+    err.properties.calls
+  );
 }
 
 export function kpcatch(f) {

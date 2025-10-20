@@ -46,7 +46,7 @@ test("A wrong argument type error doesn't have a rest detail", (t) => {
   const code = `1 | plus("two")`;
   const result = kpcatch(() => kpeval(kpparse(code)));
   assertIsError(t, result, "wrongArgumentType");
-  t.false(result.details.has("rest"));
+  t.false(result.properties.details.has("rest"));
 });
 
 test("Errors short-circuit through the @ operator", (t) => {
