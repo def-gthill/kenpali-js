@@ -861,8 +861,10 @@ export class Vm {
       if (this.trace) {
         console.log(`Return to ${this.cursor} from stream indexing`);
       }
+    } else if (isString(index)) {
+      return this.indexInstance(stream, index);
     } else {
-      this.throw_(wrongType(index, numberClass));
+      this.throw_(wrongType(index, either(numberClass, stringClass)));
     }
   }
 

@@ -525,16 +525,16 @@ const rawBuiltins = [
           throw kperror(
             "wrongType",
             ["value", index],
-            ["expectedType", "number"]
+            ["expectedType", "Number"]
           );
         }
         return indexArray(collection, index, default_, kpcallback);
       } else if (isStream(collection)) {
-        if (!isNumber(index)) {
+        if (!(isNumber(index) || isString(index))) {
           throw kperror(
             "wrongType",
             ["value", index],
-            ["expectedType", "number"]
+            ["expectedType", "either(Number, String)"]
           );
         }
         return indexStream(collection, index, default_, kpcallback);
@@ -543,7 +543,7 @@ const rawBuiltins = [
           throw kperror(
             "wrongType",
             ["value", index],
-            ["expectedType", "string"]
+            ["expectedType", "String"]
           );
         }
         return indexMapping(collection, index, default_, kpcallback);
@@ -552,7 +552,7 @@ const rawBuiltins = [
           throw kperror(
             "wrongType",
             ["value", index],
-            ["expectedType", "string"]
+            ["expectedType", "String"]
           );
         }
         return indexInstance(collection, index, default_, kpcallback);
@@ -1456,7 +1456,7 @@ const rawBuiltins = [
     return either(...schemas);
   }),
   builtin(
-    "error",
+    "newError",
     {
       params: [{ name: "type", type: stringClass }],
       namedParams: [{ rest: "details" }],
@@ -1718,33 +1718,37 @@ export function indexStream(
   kpcallback,
   valueForError = stream
 ) {
-  if (index < 0) {
-    return indexArray(toArray(stream), index, default_, kpcallback, stream);
-  } else if (index > 0) {
-    let last;
-    let current = stream;
-    let j = 0;
-    while (!current.properties.isEmpty() && j < index) {
-      last = current;
-      current = current.properties.next();
-      j += 1;
-    }
-    if (j === index) {
-      return last.properties.value();
+  if (isNumber(index)) {
+    if (index < 0) {
+      return indexArray(toArray(stream), index, default_, kpcallback, stream);
+    } else if (index > 0) {
+      let last;
+      let current = stream;
+      let j = 0;
+      while (!current.properties.isEmpty() && j < index) {
+        last = current;
+        current = current.properties.next();
+        j += 1;
+      }
+      if (j === index) {
+        return last.properties.value();
+      } else if (default_) {
+        return kpcallback(default_, [], kpobject());
+      } else {
+        throw kperror(
+          "indexOutOfBounds",
+          ["value", valueForError],
+          ["length", j],
+          ["index", index]
+        );
+      }
     } else if (default_) {
       return kpcallback(default_, [], kpobject());
     } else {
-      throw kperror(
-        "indexOutOfBounds",
-        ["value", valueForError],
-        ["length", j],
-        ["index", index]
-      );
+      throw kperror("indexOutOfBounds", ["value", valueForError], ["index", 0]);
     }
-  } else if (default_) {
-    return kpcallback(default_, [], kpobject());
   } else {
-    throw kperror("indexOutOfBounds", ["value", valueForError], ["index", 0]);
+    return indexInstance(stream, index, default_, kpcallback, valueForError);
   }
 }
 
