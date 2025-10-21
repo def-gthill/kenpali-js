@@ -1,9 +1,12 @@
-import { kpoEntries, toKpobject } from "./kpobject.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
 
 //#region Type objects
 
 export class Instance {
-  constructor(class_, properties) {
+  constructor(class_, properties, internals = {}) {
+    for (const name in internals) {
+      this[name] = internals[name];
+    }
     this.class_ = class_;
     this.properties = properties;
   }
@@ -184,14 +187,21 @@ export function equals(a, b) {
   }
 }
 
-export function toString(value) {
+export function toString(value, kpcallback) {
   if (isArray(value)) {
-    return "[" + value.map((element) => toString(element)).join(", ") + "]";
+    return (
+      "[" +
+      value.map((element) => toString(element, kpcallback)).join(", ") +
+      "]"
+    );
   } else if (isObject(value)) {
     return (
       "{" +
       kpoEntries(value)
-        .map(([k, v]) => `${isValidName(k) ? k : `"${k}"`}: ${toString(v)}`)
+        .map(
+          ([k, v]) =>
+            `${isValidName(k) ? k : `"${k}"`}: ${toString(v, kpcallback)}`
+        )
         .join(", ") +
       "}"
     );
@@ -200,10 +210,10 @@ export function toString(value) {
   } else if (isPlatformFunction(value)) {
     return `Function {name: "${functionName(value)}"}`;
   } else if (isInstance(value)) {
-    if (hasProtocol(value.class_, displayProtocol)) {
-      return value.properties.display();
+    if (kpcallback && hasProtocol(value.class_, displayProtocol)) {
+      return kpcallback(value.properties.display, [], kpobject());
     } else {
-      return `${value.constructor.name} ${toString(toKpobject(value.properties))}`;
+      return `${value.class_.properties.name} ${toString(toKpobject(value.properties), kpcallback)}`;
     }
   } else {
     return JSON.stringify(value);

@@ -28,10 +28,13 @@ import {
   anyProtocol,
   arrayClass,
   booleanClass,
+  Class,
   classClass,
   classOf,
+  displayProtocol,
   equals,
   functionClass,
+  Instance,
   instanceProtocol,
   isArray,
   isBoolean,
@@ -67,11 +70,11 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([value, name], { debugLog }) {
+    function ([value, name], { debugLog, kpcallback }) {
       if (name) {
-        debugLog(`${name}: ${toString(value)}`);
+        debugLog(`${name}: ${toString(value, kpcallback)}`);
       } else {
-        debugLog(toString(value));
+        debugLog(toString(value, kpcallback));
       }
       return value;
     }
@@ -380,9 +383,13 @@ const rawBuiltins = [
   builtin("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
-  builtin("toString", { params: ["value"] }, function ([value]) {
-    return toString(value);
-  }),
+  builtin(
+    "toString",
+    { params: ["value"] },
+    function ([value], { kpcallback }) {
+      return toString(value, kpcallback);
+    }
+  ),
   builtin("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
   }),
@@ -1093,24 +1100,40 @@ const rawBuiltins = [
       ),
     ]
   ),
-  builtin(
-    "variable",
-    {
-      params: ["initialValue"],
+  ...builtinClass("Var", {
+    protocols: [displayProtocol],
+    constructors: {
+      newVar: {
+        params: ["initialValue"],
+        body: ([initialValue], { getMethod }) => ({
+          internals: {
+            value: initialValue,
+          },
+          properties: {
+            get: getMethod("get"),
+            set: getMethod("set"),
+            display: getMethod("display"),
+          },
+        }),
+      },
     },
-    function ([initialValue], { getMethod }) {
-      return instance({ value: initialValue }, ["get", "set"], getMethod);
+    methods: {
+      get: {
+        body: ([self]) => self.value,
+      },
+      set: {
+        params: ["newValue"],
+        body: ([self, newValue]) => {
+          self.value = newValue;
+          return newValue;
+        },
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `Var {value: ${toString(self.value, kpcallback)}}`,
+      },
     },
-    [
-      method("get", {}, function ([self]) {
-        return self.value;
-      }),
-      method("set", { params: ["newValue"] }, function ([self, newValue]) {
-        self.value = newValue;
-        return newValue;
-      }),
-    ]
-  ),
+  }),
   builtin(
     "mutableArray",
     {
@@ -1499,6 +1522,38 @@ export function instance(self, methods, getMethod) {
 export function bindMethod(self, method) {
   method.self = self;
   return method;
+}
+
+export function builtinClass(
+  name,
+  { protocols = [], constructors, methods: methodSpecs }
+) {
+  const class_ = new Class(name, [instanceProtocol, ...protocols]);
+  const methods = Object.entries(methodSpecs).map(
+    ([name, { params, namedParams, body }]) =>
+      method(name, { params, namedParams }, body)
+  );
+  return [
+    constant(name, class_),
+    ...Object.entries(constructors).map(
+      ([name, { params, namedParams, body }]) =>
+        builtin(
+          name,
+          { params, namedParams },
+          (args, { getMethod }) => {
+            const { internals, properties } = body(args, { getMethod });
+            const instance = new Instance(class_, properties, internals);
+            for (const name in properties) {
+              if ("target" in properties[name]) {
+                properties[name].self = instance;
+              }
+            }
+            return instance;
+          },
+          methods
+        )
+    ),
+  ];
 }
 
 function optionalFunctionParameter(name) {
