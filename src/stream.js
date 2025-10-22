@@ -21,11 +21,11 @@ export class Stream extends Instance {
 
 class FullStream extends Stream {
   constructor(value, next) {
-    const display = () => {
+    const display = (_args, _namedArgs, { kpcallback }) => {
       let current = this;
       const elements = [];
       while (current.savedValue !== undefined) {
-        elements.push(toString(current.savedValue));
+        elements.push(toString(current.savedValue, kpcallback));
         if (current.savedNext === undefined) {
           break;
         } else {

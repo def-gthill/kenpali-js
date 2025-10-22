@@ -1,5 +1,5 @@
 import { toKpobject } from "./kpobject.js";
-import { toString } from "./values.js";
+import { toStringSimple } from "./values.js";
 
 export const BEGIN = 0;
 export const VALUE = 1;
@@ -142,7 +142,7 @@ class Disassembler {
       let instructionString = this.disassembleInstruction();
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
-        instructionString = `${instructionStart} ${instructionString} ${toString(
+        instructionString = `${instructionStart} ${instructionString} ${toStringSimple(
           toKpobject(diagnostic)
         )}`;
       } else {
@@ -166,7 +166,7 @@ class Disassembler {
   }
 
   disassembleValue() {
-    return `VALUE ${toString(this.next())}`;
+    return `VALUE ${toStringSimple(this.next())}`;
   }
 
   disassembleAlias() {

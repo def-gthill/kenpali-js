@@ -1,6 +1,6 @@
+import { toString } from "../src/interop.js";
 import { isError } from "../src/kperror.js";
 import { deepToJsObject } from "../src/kpobject.js";
-import { toString } from "../src/values.js";
 
 export function assertIsError(
   t,

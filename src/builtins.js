@@ -54,6 +54,7 @@ import {
   sequenceProtocol,
   stringClass,
   toString,
+  toStringSimple,
   typeProtocol,
 } from "./values.js";
 
@@ -1064,32 +1065,6 @@ const rawBuiltins = [
       },
     },
   }),
-  // builtin(
-  //   "newSet",
-  //   {
-  //     params: [
-  //       { name: "elements", type: arrayClass, defaultValue: literal([]) },
-  //     ],
-  //   },
-  //   function ([elements], { getMethod }) {
-  //     const keys = elements.map(toKey);
-  //     const set = new Set(keys);
-  //     const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-  //     const self = { set, originalKeys };
-  //     return instance(self, ["size", "elements", "has"], getMethod);
-  //   },
-  //   [
-  //     method("size", {}, function ([self]) {
-  //       return self.set.size;
-  //     }),
-  //     method("elements", {}, function ([self]) {
-  //       return [...self.set.keys()].map((key) => self.originalKeys.get(key));
-  //     }),
-  //     method("has", { params: ["element"] }, function ([self, element]) {
-  //       return self.set.has(toKey(element));
-  //     }),
-  //   ]
-  // ),
   builtin(
     "newMap",
     {
@@ -1909,11 +1884,13 @@ function toValue(expression) {
 
 function toKey(value) {
   if (isString(value) || isArray(value)) {
-    return toString(value);
+    return toStringSimple(value);
   } else if (isObject(value)) {
     const keys = kpoKeys(value);
     keys.sort(compare);
-    return toString(kpobject(...keys.map((key) => [key, value.get(key)])));
+    return toStringSimple(
+      kpobject(...keys.map((key) => [key, value.get(key)]))
+    );
   } else {
     return value;
   }

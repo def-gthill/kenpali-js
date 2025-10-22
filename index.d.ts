@@ -204,7 +204,7 @@ export function validateErrorTo(
   onFailure: (error: KpError) => void
 ): void;
 export function toString(value: KpValue): string;
-export function isError(value: unknown): value is KpError;
+export function isError(value: KpValue): value is KpError;
 
 export type KpCallback = (
   callee: KpValue,

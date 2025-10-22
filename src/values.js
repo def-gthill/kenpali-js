@@ -187,6 +187,27 @@ export function equals(a, b) {
   }
 }
 
+/**
+ * Like `toString`, but throws a clear error if the value implements `Display`.
+ * Useful in places where a suitable `kpcallback` isn't available, and the
+ * argument is known to have a narrow range of types.
+ * @param value - The value to convert to a string.
+ * @returns - The string representation of the value.
+ */
+export function toStringSimple(value) {
+  return toString(value, (display, args, namedArgs) => {
+    if (typeof display === "function") {
+      // Allow a few types, like Class and Protocol, to be displayed without a callback.
+      // This is useful for disassembling.
+      return display(args, namedArgs);
+    } else {
+      throw new Error(
+        `Value of type ${classOf(display.self).properties.name} implements Display`
+      );
+    }
+  });
+}
+
 export function toString(value, kpcallback) {
   if (isArray(value)) {
     return (

@@ -74,6 +74,10 @@ export function kpvmCall(
   }).callback(kpf, posArgs, namedArgs);
 }
 
+function kpcallbackInNewSession(f, posArgs, namedArgs) {
+  return kpvmCall(f, posArgs, namedArgs, { timeLimitSeconds: 1 });
+}
+
 export class Vm {
   constructor(
     program,
@@ -186,7 +190,9 @@ export class Vm {
     this.cursor = target;
     const result = this.run();
     if (this.trace) {
-      console.log(`Returning ${toString(result)} from callback`);
+      console.log(
+        `Returning ${toString(result, kpcallbackInNewSession)} from callback`
+      );
     }
     this.scopeFrames.pop();
     this.stack.length = frameIndex;
@@ -205,7 +211,11 @@ export class Vm {
         console.log(
           `Stack: [${cutoff > 0 ? `... (${cutoff}), ` : ""}${this.stack
             .slice(cutoff)
-            .map((value) => (value === undefined ? "-" : toString(value)))
+            .map((value) =>
+              value === undefined
+                ? "-"
+                : toString(value, kpcallbackInNewSession)
+            )
             .join(", ")}]`
         );
       }
@@ -253,7 +263,7 @@ export class Vm {
   runValue() {
     const value = this.next();
     if (this.trace) {
-      this.logInstruction(`VALUE ${toString(value)}`);
+      this.logInstruction(`VALUE ${toString(value, kpcallbackInNewSession)}`);
     }
     this.stack.push(value);
   }
@@ -1075,7 +1085,7 @@ export class Vm {
 
   throw_(error) {
     if (this.trace) {
-      console.log(toString(error));
+      console.log(toString(error, kpcallbackInNewSession));
     }
     while (
       this.scopeFrames.length > 0 &&
