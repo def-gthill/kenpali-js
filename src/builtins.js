@@ -1018,32 +1018,78 @@ const rawBuiltins = [
       return toObject(value);
     }
   ),
-  builtin(
-    "newSet",
-    {
-      params: [
-        { name: "elements", type: arrayClass, defaultValue: literal([]) },
-      ],
+  ...builtinClass("Set", {
+    protocols: [displayProtocol],
+    constructors: {
+      newSet: {
+        params: [
+          { name: "elements", type: arrayClass, defaultValue: literal([]) },
+        ],
+        body: ([elements], { getMethod }) => {
+          const keys = elements.map(toKey);
+          const set = new Set(keys);
+          const originalKeys = new Map(
+            keys.map((key, i) => [key, elements[i]])
+          );
+          return {
+            internals: {
+              set,
+              originalKeys,
+            },
+            properties: {
+              size: getMethod("size"),
+              elements: getMethod("elements"),
+              has: getMethod("has"),
+              display: getMethod("display"),
+            },
+          };
+        },
+      },
     },
-    function ([elements], { getMethod }) {
-      const keys = elements.map(toKey);
-      const set = new Set(keys);
-      const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      const self = { set, originalKeys };
-      return instance(self, ["size", "elements", "has"], getMethod);
+    methods: {
+      size: {
+        body: ([self]) => self.set.size,
+      },
+      elements: {
+        body: ([self]) =>
+          [...self.set.keys()].map((key) => self.originalKeys.get(key)),
+      },
+      has: {
+        params: ["element"],
+        body: ([self, element]) => self.set.has(toKey(element)),
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `Set {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+      },
     },
-    [
-      method("size", {}, function ([self]) {
-        return self.set.size;
-      }),
-      method("elements", {}, function ([self]) {
-        return [...self.set.keys()].map((key) => self.originalKeys.get(key));
-      }),
-      method("has", { params: ["element"] }, function ([self, element]) {
-        return self.set.has(toKey(element));
-      }),
-    ]
-  ),
+  }),
+  // builtin(
+  //   "newSet",
+  //   {
+  //     params: [
+  //       { name: "elements", type: arrayClass, defaultValue: literal([]) },
+  //     ],
+  //   },
+  //   function ([elements], { getMethod }) {
+  //     const keys = elements.map(toKey);
+  //     const set = new Set(keys);
+  //     const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
+  //     const self = { set, originalKeys };
+  //     return instance(self, ["size", "elements", "has"], getMethod);
+  //   },
+  //   [
+  //     method("size", {}, function ([self]) {
+  //       return self.set.size;
+  //     }),
+  //     method("elements", {}, function ([self]) {
+  //       return [...self.set.keys()].map((key) => self.originalKeys.get(key));
+  //     }),
+  //     method("has", { params: ["element"] }, function ([self, element]) {
+  //       return self.set.has(toKey(element));
+  //     }),
+  //   ]
+  // ),
   builtin(
     "newMap",
     {
