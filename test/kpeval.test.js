@@ -1,5 +1,5 @@
 import test from "ava";
-import { builtin } from "../src/builtins.js";
+import { platformFunction } from "../src/builtins.js";
 import { block, call, function_, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
 import { kpcatch } from "../src/kperror.js";
@@ -53,7 +53,7 @@ test("Names in modules can be accessed", (t) => {
   const ast = call(name("bar", "foo"), [literal("world")]);
   const fooModule = kpobject([
     "bar",
-    builtin(
+    platformFunction(
       "bar",
       { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
@@ -70,7 +70,7 @@ test("Local names don't shadow names in modules", (t) => {
   );
   const fooModule = kpobject([
     "bar",
-    builtin(
+    platformFunction(
       "bar",
       { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
@@ -84,7 +84,7 @@ test("Functions in modules have type checking applied", (t) => {
   const ast = call(name("bar", "foo"), [literal(42)]);
   const fooModule = kpobject([
     "bar",
-    builtin(
+    platformFunction(
       "bar",
       { params: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`

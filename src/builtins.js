@@ -59,7 +59,7 @@ import {
 } from "./values.js";
 
 const rawBuiltins = [
-  builtin(
+  platformFunction(
     "debug",
     {
       params: [
@@ -80,14 +80,14 @@ const rawBuiltins = [
       return value;
     }
   ),
-  builtin(
+  platformFunction(
     "plus",
     { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc + value, 0);
     }
   ),
-  builtin(
+  platformFunction(
     "minus",
     {
       params: [
@@ -99,31 +99,35 @@ const rawBuiltins = [
       return a - b;
     }
   ),
-  builtin(
+  platformFunction(
     "negative",
     { params: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return -n;
     }
   ),
-  builtin("up", { params: [{ name: "n", type: numberClass }] }, function ([n]) {
-    return n + 1;
-  }),
-  builtin(
+  platformFunction(
+    "up",
+    { params: [{ name: "n", type: numberClass }] },
+    function ([n]) {
+      return n + 1;
+    }
+  ),
+  platformFunction(
     "down",
     { params: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return n - 1;
     }
   ),
-  builtin(
+  platformFunction(
     "times",
     { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc * value, 1);
     }
   ),
-  builtin(
+  platformFunction(
     "dividedBy",
     {
       params: [
@@ -135,14 +139,14 @@ const rawBuiltins = [
       return a / b;
     }
   ),
-  builtin(
+  platformFunction(
     "oneOver",
     { params: [{ name: "x", type: numberClass }] },
     function ([x]) {
       return 1 / x;
     }
   ),
-  builtin(
+  platformFunction(
     "quotientBy",
     {
       params: [
@@ -154,7 +158,7 @@ const rawBuiltins = [
       return Math.floor(a / b);
     }
   ),
-  builtin(
+  platformFunction(
     "remainderBy",
     {
       params: [
@@ -166,7 +170,7 @@ const rawBuiltins = [
       return ((a % b) + b) % b;
     }
   ),
-  builtin(
+  platformFunction(
     "toCodePoints",
     {
       params: [{ name: "string", type: stringClass }],
@@ -175,7 +179,7 @@ const rawBuiltins = [
       return [...string].map((char) => char.codePointAt(0));
     }
   ),
-  builtin(
+  platformFunction(
     "fromCodePoints",
     {
       params: [{ name: "codePoints", type: arrayOf(numberClass) }],
@@ -184,7 +188,7 @@ const rawBuiltins = [
       return String.fromCodePoint(...codePoints);
     }
   ),
-  builtin(
+  platformFunction(
     "join",
     {
       params: [{ name: "strings", type: either(arrayClass, streamClass) }],
@@ -202,7 +206,7 @@ const rawBuiltins = [
       return array.join(on);
     }
   ),
-  builtin(
+  platformFunction(
     "split",
     {
       params: [{ name: "string", type: stringClass }],
@@ -212,10 +216,10 @@ const rawBuiltins = [
       return string.split(on);
     }
   ),
-  builtin("equals", { params: ["a", "b"] }, function ([a, b]) {
+  platformFunction("equals", { params: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
-  builtin(
+  platformFunction(
     "isLessThan",
     {
       params: [
@@ -234,7 +238,7 @@ const rawBuiltins = [
       return compare(a, b) < 0;
     }
   ),
-  builtin(
+  platformFunction(
     "isAtMost",
     {
       params: [
@@ -253,7 +257,7 @@ const rawBuiltins = [
       return compare(a, b) <= 0;
     }
   ),
-  builtin(
+  platformFunction(
     "isMoreThan",
     {
       params: [
@@ -272,7 +276,7 @@ const rawBuiltins = [
       return compare(a, b) > 0;
     }
   ),
-  builtin(
+  platformFunction(
     "isAtLeast",
     {
       params: [
@@ -291,7 +295,7 @@ const rawBuiltins = [
       return compare(a, b) >= 0;
     }
   ),
-  builtin(
+  platformFunction(
     "and",
     {
       params: [
@@ -313,7 +317,7 @@ const rawBuiltins = [
       return true;
     }
   ),
-  builtin(
+  platformFunction(
     "or",
     {
       params: [
@@ -335,7 +339,7 @@ const rawBuiltins = [
       return false;
     }
   ),
-  builtin(
+  platformFunction(
     "not",
     { params: [{ name: "x", type: booleanClass }] },
     function ([x]) {
@@ -356,19 +360,19 @@ const rawBuiltins = [
   constant("Sequence", value(sequenceProtocol)),
   constant("Type", value(typeProtocol)),
   constant("Any", value(anyProtocol)),
-  builtin("classOf", { params: ["value"] }, function ([value]) {
+  platformFunction("classOf", { params: ["value"] }, function ([value]) {
     return classOf(value);
   }),
-  builtin("isNull", { params: ["value"] }, function ([value]) {
+  platformFunction("isNull", { params: ["value"] }, function ([value]) {
     return value === null;
   }),
-  builtin("isBoolean", { params: ["value"] }, function ([value]) {
+  platformFunction("isBoolean", { params: ["value"] }, function ([value]) {
     return isBoolean(value);
   }),
-  builtin("isNumber", { params: ["value"] }, function ([value]) {
+  platformFunction("isNumber", { params: ["value"] }, function ([value]) {
     return isNumber(value);
   }),
-  builtin(
+  platformFunction(
     "toNumber",
     { params: [{ name: "value", type: either(stringClass, numberClass) }] },
     function ([value]) {
@@ -381,61 +385,61 @@ const rawBuiltins = [
       return parseFloat(value);
     }
   ),
-  builtin("isString", { params: ["value"] }, function ([value]) {
+  platformFunction("isString", { params: ["value"] }, function ([value]) {
     return isString(value);
   }),
-  builtin(
+  platformFunction(
     "toString",
     { params: ["value"] },
     function ([value], { kpcallback }) {
       return toString(value, kpcallback);
     }
   ),
-  builtin("isArray", { params: ["value"] }, function ([value]) {
+  platformFunction("isArray", { params: ["value"] }, function ([value]) {
     return isArray(value);
   }),
-  builtin(
+  platformFunction(
     "toArray",
     { params: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toArray(value);
     }
   ),
-  builtin("isStream", { params: ["value"] }, function ([value]) {
+  platformFunction("isStream", { params: ["value"] }, function ([value]) {
     return isStream(value);
   }),
-  builtin(
+  platformFunction(
     "toStream",
     { params: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toStream(value);
     }
   ),
-  builtin("isObject", { params: ["value"] }, function ([value]) {
+  platformFunction("isObject", { params: ["value"] }, function ([value]) {
     return isObject(value);
   }),
-  builtin("isFunction", { params: ["value"] }, function ([value]) {
+  platformFunction("isFunction", { params: ["value"] }, function ([value]) {
     return isFunction(value);
   }),
-  builtin("isError", { params: ["value"] }, function ([value]) {
+  platformFunction("isError", { params: ["value"] }, function ([value]) {
     return isError(value);
   }),
-  builtin("isClass", { params: ["value"] }, function ([value]) {
+  platformFunction("isClass", { params: ["value"] }, function ([value]) {
     return isClass(value);
   }),
-  builtin("isProtocol", { params: ["value"] }, function ([value]) {
+  platformFunction("isProtocol", { params: ["value"] }, function ([value]) {
     return isProtocol(value);
   }),
-  builtin("isSequence", { params: ["value"] }, function ([value]) {
+  platformFunction("isSequence", { params: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
-  builtin("isType", { params: ["value"] }, function ([value]) {
+  platformFunction("isType", { params: ["value"] }, function ([value]) {
     return isType(value);
   }),
-  builtin("isInstance", { params: ["value"] }, function ([value]) {
+  platformFunction("isInstance", { params: ["value"] }, function ([value]) {
     return isInstance(value);
   }),
-  builtin(
+  platformFunction(
     "if",
     {
       params: [{ name: "condition", type: booleanClass }],
@@ -452,7 +456,7 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin(
+  platformFunction(
     "switch",
     {
       params: [
@@ -477,7 +481,7 @@ const rawBuiltins = [
       return kpcallback(else_, [value], kpobject());
     }
   ),
-  builtin(
+  platformFunction(
     "build",
     {
       params: ["start", { name: "next", type: functionClass }],
@@ -497,7 +501,7 @@ const rawBuiltins = [
       return streamFrom(start);
     }
   ),
-  builtin(
+  platformFunction(
     "newStream",
     {
       namedParams: [
@@ -512,10 +516,10 @@ const rawBuiltins = [
       });
     }
   ),
-  builtin("emptyStream", {}, function () {
+  platformFunction("emptyStream", {}, function () {
     return emptyStream();
   }),
-  builtin(
+  platformFunction(
     "at",
     {
       params: [
@@ -567,7 +571,7 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin(
+  platformFunction(
     "length",
     { params: [{ name: "sequence", type: sequenceProtocol }] },
     function ([sequence]) {
@@ -578,7 +582,7 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin(
+  platformFunction(
     "sort",
     {
       params: [{ name: "sequence", type: sequenceProtocol }],
@@ -606,7 +610,7 @@ const rawBuiltins = [
       }
     }
   ),
-  builtin(
+  platformFunction(
     "forEach",
     {
       params: [
@@ -622,7 +626,7 @@ const rawBuiltins = [
       return array;
     }
   ),
-  builtin(
+  platformFunction(
     "transform",
     {
       params: [
@@ -649,7 +653,7 @@ const rawBuiltins = [
       return streamFrom(start);
     }
   ),
-  builtin(
+  platformFunction(
     "running",
     {
       params: [{ name: "sequence", type: sequenceProtocol }],
@@ -680,7 +684,7 @@ const rawBuiltins = [
       return streamFrom(inStream, start);
     }
   ),
-  builtin(
+  platformFunction(
     "keepFirst",
     {
       params: [
@@ -712,7 +716,7 @@ const rawBuiltins = [
       return streamFrom(start, 1);
     }
   ),
-  builtin(
+  platformFunction(
     "dropFirst",
     {
       params: [
@@ -740,7 +744,7 @@ const rawBuiltins = [
       return start;
     }
   ),
-  builtin(
+  platformFunction(
     "while",
     {
       params: [
@@ -777,7 +781,7 @@ const rawBuiltins = [
       return streamFrom(start);
     }
   ),
-  builtin(
+  platformFunction(
     "continueIf",
     {
       params: [
@@ -813,7 +817,7 @@ const rawBuiltins = [
       return streamFrom(start);
     }
   ),
-  builtin(
+  platformFunction(
     "where",
     {
       params: [
@@ -858,7 +862,7 @@ const rawBuiltins = [
       return streamFrom(inStream);
     }
   ),
-  builtin(
+  platformFunction(
     "zip",
     {
       params: [
@@ -888,7 +892,7 @@ const rawBuiltins = [
       return streamFrom(streams);
     }
   ),
-  builtin(
+  platformFunction(
     "unzip",
     {
       params: [
@@ -917,7 +921,7 @@ const rawBuiltins = [
       return [...Array(numStreams)].map((_, i) => streamFrom(inStream, i + 1));
     }
   ),
-  builtin(
+  platformFunction(
     "flatten",
     { params: [{ name: "sequences", type: sequenceProtocol }] },
     function ([sequences]) {
@@ -948,7 +952,7 @@ const rawBuiltins = [
       return streamFrom(outer, emptyStream());
     }
   ),
-  builtin(
+  platformFunction(
     "dissect",
     {
       params: [
@@ -998,14 +1002,14 @@ const rawBuiltins = [
       return streamFrom(start);
     }
   ),
-  builtin(
+  platformFunction(
     "keys",
     { params: [{ name: "object", type: objectClass }] },
     function ([object]) {
       return [...object.keys()];
     }
   ),
-  builtin(
+  platformFunction(
     "toObject",
     {
       params: [
@@ -1019,7 +1023,7 @@ const rawBuiltins = [
       return toObject(value);
     }
   ),
-  ...builtinClass("Set", {
+  ...platformClass("Set", {
     protocols: [displayProtocol],
     constructors: {
       newSet: {
@@ -1065,63 +1069,78 @@ const rawBuiltins = [
       },
     },
   }),
-  builtin(
-    "newMap",
-    {
-      params: [
-        {
-          name: "entries",
-          type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
-          defaultValue: literal([]),
+  ...platformClass("Map", {
+    protocols: [displayProtocol],
+    constructors: {
+      newMap: {
+        params: [
+          {
+            name: "entries",
+            type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
+            defaultValue: literal([]),
+          },
+        ],
+        body: ([entries], { getMethod }) => {
+          const realEntries = entries.map(([key, value]) => [
+            toKey(key),
+            value,
+          ]);
+          const map = new Map(realEntries);
+          const originalKeys = new Map(
+            realEntries.map(([key, _], i) => [key, entries[i][0]])
+          );
+          return {
+            internals: { map, originalKeys },
+            properties: {
+              size: getMethod("size"),
+              keys: getMethod("keys"),
+              values: getMethod("values"),
+              entries: getMethod("entries"),
+              has: getMethod("has"),
+              at: getMethod("at"),
+              display: getMethod("display"),
+            },
+          };
         },
-      ],
+      },
     },
-    function ([entries], { getMethod }) {
-      const realEntries = entries.map(([key, value]) => [toKey(key), value]);
-      const map = new Map(realEntries);
-      const originalKeys = new Map(
-        realEntries.map(([key, _], i) => [key, entries[i][0]])
-      );
-      const self = { map, originalKeys };
-      return instance(
-        self,
-        ["size", "keys", "values", "entries", "has", "at"],
-        getMethod
-      );
-    },
-    [
-      method("size", {}, function ([self]) {
-        return self.map.size;
-      }),
-      method("keys", {}, function ([self]) {
-        return [...self.map.keys()].map((key) => self.originalKeys.get(key));
-      }),
-      method("values", {}, function ([self]) {
-        return [...self.map.values()];
-      }),
-      method("entries", {}, function ([self]) {
-        return [...self.map.entries()].map(([key, value]) => [
-          self.originalKeys.get(key),
-          value,
-        ]);
-      }),
-      method("has", { params: ["key"] }, function ([self, key]) {
-        return self.map.has(toKey(key));
-      }),
-      method(
-        "at",
-        {
-          params: ["key"],
-          namedParams: [optionalFunctionParameter("default")],
-        },
-        function ([self, key, default_], { kpcallback }) {
+    methods: {
+      size: {
+        body: ([self]) => self.map.size,
+      },
+      keys: {
+        body: ([self]) =>
+          [...self.map.keys()].map((key) => self.originalKeys.get(key)),
+      },
+      values: {
+        body: ([self]) => [...self.map.values()],
+      },
+      entries: {
+        body: ([self]) =>
+          [...self.map.entries()].map(([key, value]) => [
+            self.originalKeys.get(key),
+            value,
+          ]),
+      },
+      has: {
+        params: ["key"],
+        body: ([self, key]) => self.map.has(toKey(key)),
+      },
+      at: {
+        params: ["key"],
+        namedParams: [optionalFunctionParameter("default")],
+        body: ([self, key, default_], { kpcallback }) => {
           const realKey = toKey(key);
           return indexMapping(self.map, realKey, default_, kpcallback, self);
-        }
-      ),
-    ]
-  ),
-  ...builtinClass("Var", {
+        },
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `Map {entries: ${toString(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
+      },
+    },
+  }),
+  ...platformClass("Var", {
     protocols: [displayProtocol],
     constructors: {
       newVar: {
@@ -1155,254 +1174,267 @@ const rawBuiltins = [
       },
     },
   }),
-  builtin(
-    "mutableArray",
-    {
-      params: [
-        { name: "elements", type: arrayClass, defaultValue: literal([]) },
-      ],
+  ...platformClass("MutableArray", {
+    protocols: [displayProtocol],
+    constructors: {
+      newMutableArray: {
+        params: [
+          { name: "elements", type: arrayClass, defaultValue: literal([]) },
+        ],
+        body: ([elements], { getMethod }) => {
+          const array = [...elements];
+          return {
+            internals: { array },
+            properties: {
+              size: getMethod("size"),
+              elements: getMethod("elements"),
+              append: getMethod("append"),
+              set: getMethod("set"),
+              storeAt: getMethod("storeAt"),
+              at: getMethod("at"),
+              pop: getMethod("pop"),
+              clear: getMethod("clear"),
+              display: getMethod("display"),
+            },
+          };
+        },
+      },
     },
-    function ([elements], { getMethod }) {
-      const array = [...elements];
-
-      const self = { array };
-
-      const object = instance(
-        self,
-        ["size", "elements", "append", "set", "storeAt", "at", "pop", "clear"],
-        getMethod
-      );
-
-      self.object = object;
-
-      return object;
-    },
-    [
-      method("size", {}, function ([self]) {
-        return self.array.length;
-      }),
-      method("elements", {}, function ([self]) {
-        return [...self.array];
-      }),
-      method("append", { params: ["element"] }, function ([self, element]) {
-        self.array.push(element);
-        return self.object;
-      }),
-      method(
-        "set",
-        {
-          params: [{ name: "index", type: numberClass }, "element"],
+    methods: {
+      size: {
+        body: ([self]) => self.array.length,
+      },
+      elements: {
+        body: ([self]) => [...self.array],
+      },
+      append: {
+        params: ["element"],
+        body: ([self, element]) => {
+          self.array.push(element);
+          return self;
         },
-        function ([self, index, element]) {
-          setArray(self.array, index, element, self.object);
-          return self.object;
-        }
-      ),
-      method(
-        "storeAt",
-        {
-          params: ["element", { name: "index", type: numberClass }],
+      },
+      set: {
+        params: [{ name: "index", type: numberClass }, "element"],
+        body: ([self, index, element]) => {
+          setArray(self.array, index, element, self);
+          return self;
         },
-        function ([self, element, index]) {
-          setArray(self.array, index, element, self.object);
-          return self.object;
-        }
-      ),
-      method(
-        "at",
-        {
-          params: [{ name: "index", type: numberClass }],
-          namedParams: [optionalFunctionParameter("default")],
+      },
+      storeAt: {
+        params: ["element", { name: "index", type: numberClass }],
+        body: ([self, element, index]) => {
+          setArray(self.array, index, element, self);
+          return self;
         },
-        function ([self, index, default_], { kpcallback }) {
-          return indexArray(
-            self.array,
-            index,
-            default_,
-            kpcallback,
-            self.object
-          );
-        }
-      ),
-      method(
-        "pop",
-        {
-          namedParams: [optionalFunctionParameter("default")],
+      },
+      at: {
+        params: [{ name: "index", type: numberClass }],
+        namedParams: [optionalFunctionParameter("default")],
+        body: ([self, index, default_], { kpcallback }) => {
+          return indexArray(self.array, index, default_, kpcallback, self);
         },
-        function ([self, default_], { kpcallback }) {
-          const result = indexArray(
-            self.array,
-            -1,
-            default_,
-            kpcallback,
-            self.object
-          );
+      },
+      pop: {
+        namedParams: [optionalFunctionParameter("default")],
+        body: ([self, default_], { kpcallback }) => {
+          const result = indexArray(self.array, -1, default_, kpcallback, self);
           self.array.pop();
           return result;
-        }
-      ),
-      method("clear", {}, function ([self]) {
-        self.array.length = 0;
-        return self.object;
-      }),
-    ]
-  ),
-  builtin(
-    "mutableSet",
-    {
-      params: [
-        { name: "elements", type: arrayClass, defaultValue: literal([]) },
-      ],
-    },
-    function ([elements], { getMethod }) {
-      const keys = elements.map(toKey);
-      const set = new Set(keys);
-      const originalKeys = new Map(keys.map((key, i) => [key, elements[i]]));
-      const self = { set, originalKeys };
-      const object = instance(
-        self,
-        ["size", "elements", "add", "remove", "has", "clear"],
-        getMethod
-      );
-      self.object = object;
-      return object;
-    },
-    [
-      method("size", {}, function ([self]) {
-        return self.set.size;
-      }),
-      method("elements", {}, function ([self]) {
-        return [...self.set.keys()].map((key) => self.originalKeys.get(key));
-      }),
-      method("add", { params: ["element"] }, function ([self, element]) {
-        const key = toKey(element);
-        self.set.add(key);
-        self.originalKeys.set(key, element);
-        return self.object;
-      }),
-      method("remove", { params: ["element"] }, function ([self, element]) {
-        const key = toKey(element);
-        self.set.delete(key);
-        self.originalKeys.delete(key);
-        return self.object;
-      }),
-      method("has", { params: ["element"] }, function ([self, element]) {
-        return self.set.has(toKey(element));
-      }),
-      method("clear", {}, function ([self]) {
-        self.set.clear();
-        originalKeys.clear();
-        return self.object;
-      }),
-    ]
-  ),
-  builtin(
-    "mutableMap",
-    {
-      params: [
-        {
-          name: "entries",
-          type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
-          defaultValue: literal([]),
         },
-      ],
+      },
+      clear: {
+        body: ([self]) => {
+          self.array.length = 0;
+          return self;
+        },
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `MutableArray {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+      },
     },
-    function ([entries], { getMethod }) {
-      const realEntries = entries.map(([key, value]) => [toKey(key), value]);
-      const map = new Map(realEntries);
-      const originalKeys = new Map(
-        realEntries.map(([key, _], i) => [key, entries[i][0]])
-      );
-      const self = { map, originalKeys };
-      const object = instance(
-        self,
-        [
-          "size",
-          "keys",
-          "values",
-          "entries",
-          "set",
-          "storeAt",
-          "remove",
-          "has",
-          "at",
-          "clear",
+  }),
+  ...platformClass("MutableSet", {
+    protocols: [displayProtocol],
+    constructors: {
+      newMutableSet: {
+        params: [
+          { name: "elements", type: arrayClass, defaultValue: literal([]) },
         ],
-        getMethod
-      );
-      self.object = object;
-      return object;
-    },
-    [
-      method("size", {}, function ([self]) {
-        return self.map.size;
-      }),
-      method("keys", {}, function ([self]) {
-        return [...self.map.keys()].map((key) => self.originalKeys.get(key));
-      }),
-      method("values", {}, function ([self]) {
-        return [...self.map.values()];
-      }),
-      method("entries", {}, function ([self]) {
-        return [...self.map.entries()].map(([key, value]) => [
-          self.originalKeys.get(key),
-          value,
-        ]);
-      }),
-      method(
-        "set",
-        { params: ["key", "value"] },
-        function ([self, key, value]) {
-          const realKey = toKey(key);
-          self.map.set(realKey, value);
-          self.originalKeys.set(realKey, key);
-          return self.object;
-        }
-      ),
-      method(
-        "storeAt",
-        { params: ["value", "key"] },
-        function ([self, value, key]) {
-          const realKey = toKey(key);
-          self.map.set(realKey, value);
-          self.originalKeys.set(realKey, key);
-          return self.object;
-        }
-      ),
-      method("remove", { params: ["key"] }, function ([self, key]) {
-        const realKey = toKey(key);
-        self.map.delete(realKey);
-        self.originalKeys.delete(realKey);
-        return self.object;
-      }),
-      method("has", { params: ["key"] }, function ([self, key]) {
-        return self.map.has(toKey(key));
-      }),
-      method(
-        "at",
-        {
-          params: ["key"],
-          namedParams: [optionalFunctionParameter("default")],
-        },
-        function ([self, key, default_], { kpcallback }) {
-          const realKey = toKey(key);
-          return indexMapping(
-            self.map,
-            realKey,
-            default_,
-            kpcallback,
-            self.object
+        body: ([elements], { getMethod }) => {
+          const keys = elements.map(toKey);
+          const set = new Set(keys);
+          const originalKeys = new Map(
+            keys.map((key, i) => [key, elements[i]])
           );
-        }
-      ),
-      method("clear", {}, function ([self]) {
-        self.map.clear();
-        self.originalKeys.clear();
-        return self.object;
-      }),
-    ]
-  ),
-  builtin(
+          return {
+            internals: { set, originalKeys },
+            properties: {
+              size: getMethod("size"),
+              elements: getMethod("elements"),
+              add: getMethod("add"),
+              remove: getMethod("remove"),
+              has: getMethod("has"),
+              clear: getMethod("clear"),
+              display: getMethod("display"),
+            },
+          };
+        },
+      },
+    },
+    methods: {
+      size: {
+        body: ([self]) => self.set.size,
+      },
+      elements: {
+        body: ([self]) =>
+          [...self.set.keys()].map((key) => self.originalKeys.get(key)),
+      },
+      add: {
+        params: ["element"],
+        body: ([self, element]) => {
+          const key = toKey(element);
+          self.set.add(key);
+          self.originalKeys.set(key, element);
+          return self;
+        },
+      },
+      remove: {
+        params: ["element"],
+        body: ([self, element]) => {
+          const key = toKey(element);
+          self.set.delete(key);
+          self.originalKeys.delete(key);
+          return self;
+        },
+      },
+      has: {
+        params: ["element"],
+        body: ([self, element]) => self.set.has(toKey(element)),
+      },
+      clear: {
+        body: ([self]) => {
+          self.set.clear();
+          return self;
+        },
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `MutableSet {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+      },
+    },
+  }),
+  ...platformClass("MutableMap", {
+    protocols: [displayProtocol],
+    constructors: {
+      newMutableMap: {
+        params: [
+          {
+            name: "entries",
+            type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
+            defaultValue: literal([]),
+          },
+        ],
+        body: ([entries], { getMethod }) => {
+          const realEntries = entries.map(([key, value]) => [
+            toKey(key),
+            value,
+          ]);
+          const map = new Map(realEntries);
+          const originalKeys = new Map(
+            realEntries.map(([key, _], i) => [key, entries[i][0]])
+          );
+          return {
+            internals: { map, originalKeys },
+            properties: {
+              size: getMethod("size"),
+              keys: getMethod("keys"),
+              values: getMethod("values"),
+              entries: getMethod("entries"),
+              set: getMethod("set"),
+              storeAt: getMethod("storeAt"),
+              remove: getMethod("remove"),
+              has: getMethod("has"),
+              at: getMethod("at"),
+              clear: getMethod("clear"),
+              display: getMethod("display"),
+            },
+          };
+        },
+      },
+    },
+    methods: {
+      size: {
+        body: ([self]) => self.map.size,
+      },
+      keys: {
+        body: ([self]) =>
+          [...self.map.keys()].map((key) => self.originalKeys.get(key)),
+      },
+      values: {
+        body: ([self]) => [...self.map.values()],
+      },
+      entries: {
+        body: ([self]) =>
+          [...self.map.entries()].map(([key, value]) => [
+            self.originalKeys.get(key),
+            value,
+          ]),
+      },
+      set: {
+        params: ["key", "value"],
+        body: ([self, key, value]) => {
+          const realKey = toKey(key);
+          self.map.set(realKey, value);
+          self.originalKeys.set(realKey, key);
+          return self;
+        },
+      },
+      storeAt: {
+        params: ["value", "key"],
+        body: ([self, value, key]) => {
+          const realKey = toKey(key);
+          self.map.set(realKey, value);
+          self.originalKeys.set(realKey, key);
+          return self;
+        },
+      },
+      remove: {
+        params: ["key"],
+        body: ([self, key]) => {
+          const realKey = toKey(key);
+          self.map.delete(realKey);
+          self.originalKeys.delete(realKey);
+          return self;
+        },
+      },
+      has: {
+        params: ["key"],
+        body: ([self, key]) => self.map.has(toKey(key)),
+      },
+      at: {
+        params: ["key"],
+        namedParams: [optionalFunctionParameter("default")],
+        body: ([self, key, default_], { kpcallback }) => {
+          const realKey = toKey(key);
+          return indexMapping(self.map, realKey, default_, kpcallback, self);
+        },
+      },
+      clear: {
+        body: ([self]) => {
+          self.map.clear();
+          self.originalKeys.clear();
+          return self;
+        },
+      },
+      display: {
+        body: ([self], { kpcallback }) =>
+          `MutableMap {entries: ${toString(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
+      },
+    },
+  }),
+  platformFunction(
     "validate",
     { params: ["value", "schema"] },
     function ([value, schema], { kpcallback }) {
@@ -1410,14 +1442,14 @@ const rawBuiltins = [
       return true;
     }
   ),
-  builtin(
+  platformFunction(
     "matches",
     { params: ["value", "schema"] },
     function ([value, schema], { kpcallback }) {
       return matches(value, schema, kpcallback);
     }
   ),
-  builtin(
+  platformFunction(
     "is",
     {
       params: [{ name: "type", type: typeProtocol }],
@@ -1433,10 +1465,14 @@ const rawBuiltins = [
       return is(type, where);
     }
   ),
-  builtin("oneOf", { params: [{ rest: "values" }] }, function ([values]) {
-    return oneOf(values);
-  }),
-  builtin(
+  platformFunction(
+    "oneOf",
+    { params: [{ rest: "values" }] },
+    function ([values]) {
+      return oneOf(values);
+    }
+  ),
+  platformFunction(
     "arrayOf",
     {
       params: ["elementSchema"],
@@ -1452,7 +1488,7 @@ const rawBuiltins = [
       return arrayOf(elementSchema, where);
     }
   ),
-  builtin(
+  platformFunction(
     "tupleLike",
     {
       params: ["shape"],
@@ -1461,7 +1497,7 @@ const rawBuiltins = [
       return tupleLike(shape);
     }
   ),
-  builtin(
+  platformFunction(
     "objectOf",
     {
       namedParams: [
@@ -1478,7 +1514,7 @@ const rawBuiltins = [
       return objectOf(keys, values, where);
     }
   ),
-  builtin(
+  platformFunction(
     "recordLike",
     {
       params: ["shape"],
@@ -1487,7 +1523,7 @@ const rawBuiltins = [
       return recordLike(shape);
     }
   ),
-  builtin(
+  platformFunction(
     "optional",
     {
       params: ["schema"],
@@ -1496,10 +1532,14 @@ const rawBuiltins = [
       return optional(schema);
     }
   ),
-  builtin("either", { params: [{ rest: "schemas" }] }, function ([schemas]) {
-    return either(...schemas);
-  }),
-  builtin(
+  platformFunction(
+    "either",
+    { params: [{ rest: "schemas" }] },
+    function ([schemas]) {
+      return either(...schemas);
+    }
+  ),
+  platformFunction(
     "newError",
     {
       params: [{ name: "type", type: stringClass }],
@@ -1515,18 +1555,21 @@ export function constant(name, value) {
   return [name, value];
 }
 
-export function builtin(name, paramSpec, f, methods = []) {
+export function platformFunction(name, paramSpec, f) {
   f.functionName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
   }
-  if (methods.length > 0) {
-    f.methods = methods;
-  }
   return f;
 }
 
-export function method(name, paramSpec, f) {
+function platformConstructor(name, paramSpec, f, methods) {
+  const result = platformFunction(name, paramSpec, f);
+  result.methods = methods;
+  return result;
+}
+
+function platformMethod(name, paramSpec, f) {
   f.methodName = name;
   for (const property in paramSpec) {
     f[property] = paramSpec[property];
@@ -1534,31 +1577,20 @@ export function method(name, paramSpec, f) {
   return f;
 }
 
-export function instance(self, methods, getMethod) {
-  return kpobject(
-    ...methods.map((name) => [name, bindMethod(self, getMethod(name))])
-  );
-}
-
-export function bindMethod(self, method) {
-  method.self = self;
-  return method;
-}
-
-export function builtinClass(
+export function platformClass(
   name,
   { protocols = [], constructors, methods: methodSpecs }
 ) {
   const class_ = new Class(name, [instanceProtocol, ...protocols]);
   const methods = Object.entries(methodSpecs).map(
     ([name, { params, namedParams, body }]) =>
-      method(name, { params, namedParams }, body)
+      platformMethod(name, { params, namedParams }, body)
   );
   return [
     constant(name, class_),
     ...Object.entries(constructors).map(
       ([name, { params, namedParams, body }]) =>
-        builtin(
+        platformConstructor(
           name,
           { params, namedParams },
           (args, { getMethod }) => {

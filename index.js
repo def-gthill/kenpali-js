@@ -1,4 +1,4 @@
-import { builtin, instance, method } from "./src/builtins.js";
+import { platformClass, platformFunction } from "./src/builtins.js";
 import { kpcall, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
 import { foldError, isError, kpcatch } from "./src/kperror.js";
@@ -39,9 +39,7 @@ function validateErrorTo(value, schema, onFailure) {
 }
 
 export {
-  builtin,
   foldError,
-  instance,
   isError,
   kpcall,
   kpcatch,
@@ -51,7 +49,8 @@ export {
   kpparse,
   kpvm,
   matches,
-  method,
+  platformClass,
+  platformFunction,
   toKpFunction,
   toString,
   validate,

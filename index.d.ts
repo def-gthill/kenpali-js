@@ -221,33 +221,13 @@ export type VmContext = {
 };
 
 export type FunctionImpl = (args: KpArray, context: VmContext) => KpValue;
-export type MethodImpl = (
-  args: [any, ...KpArray],
-  context: VmContext
-) => KpValue;
 
 export type FunctionSpec = FunctionImpl & {
   functionName: string;
-  methods?: MethodSpec[];
-};
-
-export type MethodSpec = MethodImpl & {
-  methodName: string;
 };
 
 export function builtin(
   name: string,
   paramSpec: ParamSpec,
-  f: FunctionImpl,
-  methods?: MethodSpec[]
+  f: FunctionImpl
 ): FunctionSpec;
-export function method(
-  name: string,
-  paramSpec: ParamSpec,
-  f: MethodImpl
-): MethodSpec;
-export function instance(
-  self: any,
-  methods: string[],
-  getMethod: GetMethod
-): KpObject;
