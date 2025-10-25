@@ -6,7 +6,12 @@ import {
   toObject,
 } from "./builtins.js";
 import * as op from "./instructions.js";
-import kperror, { isError, kpcatch, transformError } from "./kperror.js";
+import kperror, {
+  isError,
+  KenpaliError,
+  kpcatch,
+  transformError,
+} from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
 import { isStream } from "./stream.js";
 import validate, {
@@ -74,7 +79,7 @@ export function kpvmCall(
   }).callback(kpf, posArgs, namedArgs);
 }
 
-function kpcallbackInNewSession(f, posArgs, namedArgs) {
+export function kpcallbackInNewSession(f, posArgs, namedArgs) {
   return kpvmCall(f, posArgs, namedArgs, { timeLimitSeconds: 1 });
 }
 
@@ -1102,7 +1107,7 @@ export class Vm {
       }
     }
     if (this.scopeFrames.length === 0) {
-      throw error;
+      throw new KenpaliError(error, kpcallbackInNewSession);
     }
     this.stack.push(error);
     this.cursor = this.scopeFrames.at(-1).recoveryIndex();

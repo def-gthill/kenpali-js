@@ -8,9 +8,10 @@ import {
   objectPattern,
   TreeTransformer,
 } from "./kpast.js";
-import kperror, { errorClass } from "./kperror.js";
+import kperror, { errorClass, isError, KenpaliError } from "./kperror.js";
 import kpobject, { kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
+import { kpcallbackInNewSession } from "./kpvm.js";
 import { streamClass } from "./stream.js";
 import { either } from "./validate.js";
 import {
@@ -47,11 +48,19 @@ export default function kpcompile(
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const library = new Map([...loadCore(), ...builtins]);
-  return new Compiler(expression, {
-    library,
-    modules,
-    trace,
-  }).compile();
+  try {
+    return new Compiler(expression, {
+      library,
+      modules,
+      trace,
+    }).compile();
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession);
+    } else {
+      throw error;
+    }
+  }
 }
 
 let coreAst = null;

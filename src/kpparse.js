@@ -32,6 +32,7 @@ import {
 import kperror, { isError } from "./kperror.js";
 import kplex from "./kplex.js";
 import { deepToKpobject, kpoEntries } from "./kpobject.js";
+import { kpcallbackInNewSession } from "./kpvm.js";
 
 export default function kpparse(code, { trace = false } = {}) {
   return desugar(kpparseSugared(code, { trace }));
@@ -65,26 +66,42 @@ export function kpparseTokens(
 }
 
 export function parseAll(parser, start) {
-  return parseAllOf(
-    "kpcode",
-    [parseExpression, consume("EOF", "unparsedInput")],
-    (ast) => ast
-  )(parser, start);
+  return wrapError(() =>
+    parseAllOf(
+      "kpcode",
+      [parseExpression, consume("EOF", "unparsedInput")],
+      (ast) => ast
+    )(parser, start)
+  );
 }
 
 export function parseModule(parser, start) {
-  return parseAllOf(
-    "module",
-    [
-      parseZeroOrMore("definitions", parseStatement, {
-        terminator: consume("SEMICOLON"),
-        errorIfTerminatorMissing: "missingDefinitionSeparator",
-        finalTerminatorMandatory: true,
-      }),
-      consume("EOF", "unparsedInput"),
-    ],
-    (definitions) => definitions
-  )(parser, start);
+  return wrapError(() =>
+    parseAllOf(
+      "module",
+      [
+        parseZeroOrMore("definitions", parseStatement, {
+          terminator: consume("SEMICOLON"),
+          errorIfTerminatorMissing: "missingDefinitionSeparator",
+          finalTerminatorMandatory: true,
+        }),
+        consume("EOF", "unparsedInput"),
+      ],
+      (definitions) => definitions
+    )(parser, start)
+  );
+}
+
+function wrapError(f) {
+  try {
+    return f();
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession, "Syntax error");
+    } else {
+      throw error;
+    }
+  }
 }
 
 function parseExpression(parser, start) {
