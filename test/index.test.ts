@@ -1,4 +1,5 @@
 import test from "ava";
+import * as tsdModule from "tsd";
 import {
   kpeval,
   kpobject,
@@ -8,6 +9,12 @@ import {
   type ExpressionNode,
   type KpValue,
 } from "../index.js";
+
+test("Negative TypeScript tests (from tsd)", async (t) => {
+  const tsd = (tsdModule as any).default.default;
+  const diagnostics = await tsd();
+  t.deepEqual(diagnostics, []);
+});
 
 test("Can construct a Kenpali object", (t) => {
   const kenpaliObject = kpobject(["name", "John"], ["age", 30]);
