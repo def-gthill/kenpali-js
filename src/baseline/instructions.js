@@ -1,6 +1,7 @@
 import { toKpobject } from "./kpobject.js";
-import { toString } from "./values.js";
+import { displaySimple } from "./values.js";
 
+export const BEGIN = 0;
 export const VALUE = 1;
 export const ALIAS = 43;
 export const DISCARD = 10;
@@ -34,19 +35,25 @@ export const CAPTURE = 22;
 export const READ_UPVALUE = 20;
 export const RETURN = 18;
 export const CALL_BUILTIN = 41;
+export const SELF = 52;
 export const INDEX = 30;
+export const THROW = 49;
 export const CATCH = 23;
+export const UNCATCH = 50;
 export const IS_NULL = 48;
 export const IS_BOOLEAN = 31;
 export const IS_NUMBER = 32;
 export const IS_STRING = 33;
 export const IS_ARRAY = 34;
+export const IS_STREAM = 51;
 export const IS_OBJECT = 35;
-export const IS_BUILTIN = 36;
-export const IS_GIVEN = 37;
-export const IS_ERROR = 38;
 export const IS_FUNCTION = 39;
+export const IS_ERROR = 38;
+export const IS_CLASS = 53;
+export const IS_PROTOCOL = 54;
 export const IS_SEQUENCE = 40;
+export const IS_TYPE = 55;
+export const IS_INSTANCE = 56;
 export const ERROR_IF_INVALID = 42;
 
 export function disassemble(program) {
@@ -54,12 +61,14 @@ export function disassemble(program) {
 }
 
 class Disassembler {
-  constructor({ instructions, diagnostics }) {
+  constructor({ instructions, diagnostics, functions }) {
     this.instructions = instructions;
     this.diagnostics = diagnostics;
+    this.functions = functions;
     this.cursor = 0;
 
     this.instructionTable = [];
+    this.instructionTable[BEGIN] = this.disassembleBegin;
     this.instructionTable[VALUE] = this.disassembleValue;
     this.instructionTable[ALIAS] = this.disassembleAlias;
     this.instructionTable[DISCARD] = this.disassembleDiscard;
@@ -95,19 +104,25 @@ class Disassembler {
     this.instructionTable[READ_UPVALUE] = this.disassembleReadUpvalue;
     this.instructionTable[RETURN] = this.disassembleReturn;
     this.instructionTable[CALL_BUILTIN] = this.disassembleCallBuiltin;
+    this.instructionTable[SELF] = this.disassembleSelf;
     this.instructionTable[INDEX] = this.disassembleIndex;
+    this.instructionTable[THROW] = this.disassembleThrow;
     this.instructionTable[CATCH] = this.disassembleCatch;
+    this.instructionTable[UNCATCH] = this.disassembleUncatch;
     this.instructionTable[IS_NULL] = this.disassembleIsNull;
     this.instructionTable[IS_BOOLEAN] = this.disassembleIsBoolean;
     this.instructionTable[IS_NUMBER] = this.disassembleIsNumber;
     this.instructionTable[IS_STRING] = this.disassembleIsString;
     this.instructionTable[IS_ARRAY] = this.disassembleIsArray;
+    this.instructionTable[IS_STREAM] = this.disassembleIsStream;
     this.instructionTable[IS_OBJECT] = this.disassembleIsObject;
-    this.instructionTable[IS_BUILTIN] = this.disassembleIsBuiltin;
-    this.instructionTable[IS_GIVEN] = this.disassembleIsGiven;
-    this.instructionTable[IS_ERROR] = this.disassembleIsError;
     this.instructionTable[IS_FUNCTION] = this.disassembleIsFunction;
+    this.instructionTable[IS_ERROR] = this.disassembleIsError;
+    this.instructionTable[IS_CLASS] = this.disassembleIsClass;
+    this.instructionTable[IS_PROTOCOL] = this.disassembleIsProtocol;
     this.instructionTable[IS_SEQUENCE] = this.disassembleIsSequence;
+    this.instructionTable[IS_TYPE] = this.disassembleIsType;
+    this.instructionTable[IS_INSTANCE] = this.disassembleIsInstance;
     this.instructionTable[ERROR_IF_INVALID] = this.disassembleErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -119,13 +134,19 @@ class Disassembler {
 
   disassemble() {
     const instructionStrings = [];
+    for (const { name, offset } of this.functions) {
+      instructionStrings.push(`Function ${name} at ${offset}`);
+    }
     while (this.cursor < this.instructions.length) {
+      const instructionStart = this.cursor;
       let instructionString = this.disassembleInstruction();
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
-        instructionString = `${instructionString} ${toString(
+        instructionString = `${instructionStart} ${instructionString} ${displaySimple(
           toKpobject(diagnostic)
         )}`;
+      } else {
+        instructionString = `${instructionStart} ${instructionString}`;
       }
       instructionStrings.push(instructionString);
     }
@@ -140,8 +161,12 @@ class Disassembler {
     return this.instructionTable[instructionType]();
   }
 
+  disassembleBegin() {
+    return "BEGIN";
+  }
+
   disassembleValue() {
-    return `VALUE ${toString(this.next())}`;
+    return `VALUE ${displaySimple(this.next())}`;
   }
 
   disassembleAlias() {
@@ -269,15 +294,27 @@ class Disassembler {
   }
 
   disassembleCallBuiltin() {
-    return "CALL_BUILTIN";
+    return `CALL_BUILTIN ${this.next()}`;
+  }
+
+  disassembleSelf() {
+    return "SELF";
   }
 
   disassembleIndex() {
     return "INDEX";
   }
 
+  disassembleThrow() {
+    return "THROW";
+  }
+
   disassembleCatch() {
     return `CATCH ${this.next()}`;
+  }
+
+  disassembleUncatch() {
+    return "UNCATCH";
   }
 
   disassembleIsNull() {
@@ -300,28 +337,40 @@ class Disassembler {
     return "IS_ARRAY";
   }
 
+  disassembleIsStream() {
+    return "IS_STREAM";
+  }
+
   disassembleIsObject() {
     return "IS_OBJECT";
-  }
-
-  disassembleIsBuiltin() {
-    return "IS_BUILTIN";
-  }
-
-  disassembleIsGiven() {
-    return "IS_GIVEN";
-  }
-
-  disassembleIsError() {
-    return "IS_ERROR";
   }
 
   disassembleIsFunction() {
     return "IS_FUNCTION";
   }
 
+  disassembleIsError() {
+    return "IS_ERROR";
+  }
+
+  disassembleIsClass() {
+    return "IS_CLASS";
+  }
+
+  disassembleIsProtocol() {
+    return "IS_PROTOCOL";
+  }
+
   disassembleIsSequence() {
     return "IS_SEQUENCE";
+  }
+
+  disassembleIsType() {
+    return "IS_TYPE";
+  }
+
+  disassembleIsInstance() {
+    return "IS_INSTANCE";
   }
 
   disassembleErrorIfInvalid() {

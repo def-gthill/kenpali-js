@@ -1,45 +1,40 @@
-import kpcompileBaseline from "./baseline/kpcompile.js";
-import kpparseBaseline from "./baseline/kpparse.js";
-import kpvmBaseline from "./baseline/kpvm.js";
-import kpcompile from "./kpcompile.js";
-import kpparse from "./kpparse.js";
-import kpvm from "./kpvm.js";
-import kpcompilePrevious from "./previous/kpcompile.js";
-import kpparsePrevious from "./previous/kpparse.js";
-import kpvmPrevious from "./previous/kpvm.js";
+import kpcompileBaseline from "../src/baseline/kpcompile.js";
+import kpparseBaseline from "../src/baseline/kpparse.js";
+import kpvmBaseline from "../src/baseline/kpvm.js";
+import kpcompile from "../src/kpcompile.js";
+import kpparse from "../src/kpparse.js";
+import kpvm from "../src/kpvm.js";
+import kpcompilePrevious from "../src/previous/kpcompile.js";
+import kpparsePrevious from "../src/previous/kpparse.js";
+import kpvmPrevious from "../src/previous/kpvm.js";
 
 const hello = `1 | to(100)
-  | transform((n) => join(["Hello, ", n | toString, "!"]))
+  | transform((n) => join(["Hello, ", n | display, "!"]))
   | joinLines`;
 const primePairs = `primesUpTo = (max) => (
-  {numbers: 2 | to(max) | toArray, index: 1} | repeat(
-    while: (state) => state @ index: | isAtMost(state @ numbers: | length),
-    next: (state) => (
-      {numbers:, index:} = state;
-      {
-        numbers: (
-          numbers
-          | where(
-            (n) => or(
-              n | equals(numbers @ index),
-              () => n | isDivisibleBy(numbers @ index) | not
-            )
-          )
-          | toArray
-        ),
-        index: increment(index),
-      }
-    )
-  ) @ numbers:
+  {numbers: 2 | to(max), index: 1}
+  | build(
+    ({index:, numbers:}) => {
+      numbers: numbers | where(
+        (n) => n | equals(numbers @ index) | or(
+          $ n | isDivisibleBy(numbers @ index) | not
+        )
+      ),
+      index: index | up,
+    }
+  )
+  | while(({index:, numbers:}) => index | isAtMost(numbers | length))
+  | last
+  |.numbers
 );
 rows = primesUpTo(10);
 cols = primesUpTo(10);
-rows | rebuild((row) => (
+rows | transform((row) => (
   cols | transform((col) => (
     [row, col]
   ))
-  | toArray
 ))
+| flatten
 | toArray
 `;
 const naiveFib = `

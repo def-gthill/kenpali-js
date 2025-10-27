@@ -9,10 +9,12 @@ export default function kpeval(
     modules = kpobject(),
     trace = false,
     timeLimitSeconds = 0,
+    debugLog = console.error,
   } = {}
 ) {
   return kpvm(kpcompile(expression, { names, modules, trace }), {
     trace,
     timeLimitSeconds,
+    debugLog,
   });
 }

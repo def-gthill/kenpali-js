@@ -1,71 +1,140 @@
 export const core = String.raw`
-sum = (numbers) => plus(*numbers);
-isDivisibleBy = (a, b) => (
-    divideWithRemainder(a, b) @ remainder: | equals(0)
-);
-absolute = (n) => n | butIf(n | isLessThan(0), () => negative(n));
-characters = (string) => (
-    1 | to(length(string)) | transform((i) => (string @ i))
-);
-splitLines = (string) => (string | split(on: "\n"));
+sum = (numbers) => plus(*toArray(numbers));
+absolute = (n) => n | butIf(n | isLessThan(0), $ negative(n));
+isDivisibleBy = (a, b) => a | remainderBy(b) | equals(0);
 joinLines = (strings) => (strings | join(on: "\n"));
-butIf = (value, condition, ifTrue) => (
-    if(toFunction(condition)(value), then: () => ifTrue(value), else: () => value)
-);
+splitLines = (string) => (string | split(on: "\n"));
 isBetween = (n, lower, upper) => (
-    n | isAtLeast(lower) | and(() => n | isAtMost(upper))
+    n | isAtLeast(lower) | and($ n | isAtMost(upper))
 );
-isEmpty = (coll) => (length(coll) | equals(0));
-dropFirst = (coll, n = 1) => slice(coll, increment(n) | to(length(coll)));
-dropLast = (coll, n = 1) => slice(coll, 1 | to(length(coll) | minus(n)));
-slice = (coll, indices) => (
-    result = indices
-        | where((index) => index | isBetween(1, coll | length))
-        | transform((index) => (coll @ index));
-    result | butIf(isString(coll), () => join(result))
+least = (sequence) => (
+    sequence
+    | running(
+        start: null,
+        next: (element, state: leastSoFar) => if(
+            leastSoFar | isNull | or(
+                $ element | isLessThan(leastSoFar)
+            ),
+            then: $ element,
+            else: $ leastSoFar,
+        )
+    )
+    | last
 );
+most = (sequence) => (
+    sequence
+    | running(
+        start: null,
+        next: (element, state: mostSoFar) => if(
+            mostSoFar | isNull | or(
+                $ element | isMoreThan(mostSoFar)
+            ),
+            then: $ element,
+            else: $ mostSoFar,
+        )
+    )
+    | last
+);
+toFunction = (value) => if(
+    value | isFunction,
+    then: $ value,
+    else: $ $ value,
+);
+butIf = (value, condition, ifTrue) => if(
+    toFunction(condition)(value),
+    then: $ ifTrue(value),
+    else: $ value,
+);
+ifs = (*conditions, else:) => null | switch(*conditions, else:);
 to = (start, end, by: = 1) => (
-    start | build(
-        while: (i) => i | isAtMost(end),
-        next: (i) => i | plus(by),
+    isNoFurtherThan = if(
+        by | isMoreThan(0),
+        then: $ isAtMost,
+        else: $ isAtLeast,
+    );
+    start
+    | build(| plus(by))
+    | while(| isNoFurtherThan(end))
+);
+toSize = (start, size) => (start | to(start | plus(size | down)));
+repeat = (value) => value | build((x) => x);
+last = (sequence) => sequence @ -1;
+keepLast = (sequence, n) => (
+    result = sequence | dropFirst(length(sequence) | minus(n));
+    result | butIf(result | isString | not, $ result | toArray)
+);
+dropLast = (sequence, n = 1) => (
+    result = sequence | keepFirst(length(sequence) | minus(n));
+    if(
+        result | isString,
+        then: $ result,
+        else: $ result | toArray,
     )
 );
-toSize = (start, size) => (start | to(start | plus(decrement(size))));
-rebuild = (array, f) => (
-    1 | build(
-        while: (i) => i | isAtMost(length(array)),
-        next: increment,
-        out: (i) => f(array @ i),
+count = (sequence, condition) => sequence | where(condition) | toArray | length;
+forAll = (sequence, condition) => (
+    sequence
+    | count((element) => (element | condition | not))
+    | equals(0)
+);
+forSome = (sequence, condition) => (
+    sequence
+    | count(condition)
+    | isMoreThan(0)
+);
+reverse = (sequence) => (
+    array = sequence | toArray;
+    array | length | to(1, by: -1)
+    | transform((i) => array @ i)
+    | toArray
+);
+group = (pairs, onGroup: = (x) => x) => (
+    result = newMutableMap();
+    pairs
+    | forEach(([key, value]) => (
+        if(
+            result.has(key),
+            then: $ result.at(key) |.append(value),
+            else: $ result.set(key, newMutableArray([value])),
+        )
+    ));
+    result.entries()
+    | transform(([key, value]) => (
+        [key, value.elements() | onGroup]
+    ))
+    | toArray
+);
+groupBy = (sequence, by, onGroup: = (x) => x) => (
+    sequence
+    | transform((element) => [by(element), element])
+    | group(onGroup: onGroup)
+);
+isEmpty = (sequence) => sequence | keepFirst(1) | length | equals(0);
+first = (sequence) => sequence @ 1;
+slice = (sequence, from:, to:) => (
+    sequence | keepFirst(to) | dropFirst(from | down)
+);
+thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
+sliding = (sequence, size) => (
+    sequence
+    | running(
+        start: [null] | repeat | keepFirst(size) | toArray,
+        next: (element, state: [first, *rest]) => [*rest, element]
     )
+    | dropFirst(size)
 );
-transform = (array, f) => array | rebuild((element) => [f(element)]);
-where = (array, condition) => array | rebuild(
-    (element) => if(condition(element), then: () => [element], else: () => [])
-);
-zip = (*arrays) => (
-    1 | build(
-        while: (i) => arrays | forAll((array) => (i | isAtMost(length(array)))),
-        next: increment,
-        out: (i) => [arrays | transform((array) => (array @ i))]
-    )
-);
-unzip = (array) => (
-    1 | to(array @ 1 | length) | transform(
-        (i) => array | transform((entry) => entry @ i)
-    )
-);
-count = (array, condition) => (array | where(condition) | length);
-forAll = (array, condition) => (array | count((element) => (element | condition | not)) | equals(0));
-forSome = (array, condition) => (array | count(condition) | isMoreThan(0));
-flatten = (array) => array | rebuild((element) => element);
-chunk = (array, size) => (
-    starts = 1 | to(length(array), by: size);
-    starts | transform((start) => (array | slice(start | toSize(size))))
+chunk = (sequence, size) => (
+    sequence
+    | zip(1 | to(size) | repeat | flatten)
+    | dissect(([element, i]) => i | equals(size))
+    | transform(| transform(([element]) => element) | toArray)
 );
 properties = (object) => (
-    object | keys | transform((key) => [key, object @ key])
+    object | keys | transform((key) => [key, object @ key]) | toArray
 );
 merge = (objects) => (
     objects | transform(properties) | flatten | toObject
 );
+itself = (x) => x;
+also = (value, action) => (action(value); value);
 `;

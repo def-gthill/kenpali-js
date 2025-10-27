@@ -1,159 +1,174 @@
 import {
-  ALIAS,
-  ARRAY_COPY,
-  ARRAY_CUT,
-  ARRAY_EXTEND,
-  ARRAY_IS_EMPTY,
-  ARRAY_POP,
-  ARRAY_POP_OR_DEFAULT,
-  ARRAY_PUSH,
-  ARRAY_REVERSE,
-  CALL,
-  CALL_BUILTIN,
-  CAPTURE,
-  CATCH,
-  CLOSURE,
-  DISCARD,
-  EMPTY_ARRAY,
-  EMPTY_OBJECT,
-  ERROR_IF_INVALID,
-  FUNCTION,
-  INDEX,
-  IS_ARRAY,
-  IS_BOOLEAN,
-  IS_BUILTIN,
-  IS_ERROR,
-  IS_FUNCTION,
-  IS_GIVEN,
-  IS_NULL,
-  IS_NUMBER,
-  IS_OBJECT,
-  IS_SEQUENCE,
-  IS_STRING,
-  JUMP,
-  JUMP_IF_FALSE,
-  JUMP_IF_TRUE,
-  OBJECT_COPY,
-  OBJECT_MERGE,
-  OBJECT_POP,
-  OBJECT_POP_OR_DEFAULT,
-  OBJECT_PUSH,
-  POP,
-  PUSH,
-  READ_LOCAL,
-  READ_UPVALUE,
-  RESERVE,
-  RETURN,
-  VALUE,
-  WRITE_LOCAL,
-} from "./instructions.js";
-import kperror, { transformError } from "./kperror.js";
+  indexArray,
+  indexInstance,
+  indexMapping,
+  toArray,
+  toObject,
+} from "./builtins.js";
+import * as op from "./instructions.js";
+import kperror, {
+  isError,
+  KenpaliError,
+  kpcatch,
+  transformError,
+} from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
+import { isStream } from "./stream.js";
 import validate, {
   argumentError,
   argumentPatternError,
   either,
+  wrongType,
 } from "./validate.js";
 import {
+  display,
+  functionName,
+  instanceProtocol,
   isArray,
   isBoolean,
-  isBuiltin,
-  isError,
+  isClass,
   isFunction,
-  isGiven,
+  isInstance,
   isNull,
   isNumber,
   isObject,
+  isPlatformFunction,
+  isProtocol,
   isSequence,
   isString,
-  toString,
+  isType,
+  numberClass,
+  objectClass,
+  sequenceProtocol,
+  stringClass,
 } from "./values.js";
 
 export default function kpvm(
   program,
-  { trace = false, timeLimitSeconds = 0 } = {}
+  {
+    trace = false,
+    timeLimitSeconds = 0,
+    stepLimit = 0,
+    debugLog = console.error,
+  } = {}
 ) {
-  return new Vm(program, { trace, timeLimitSeconds }).run();
+  return new Vm(program, {
+    trace,
+    timeLimitSeconds,
+    stepLimit,
+    debugLog,
+  }).run();
 }
 
 export function kpvmCall(
   kpf,
   posArgs,
   namedArgs,
-  { trace = false, timeLimitSeconds = 0 } = {}
+  {
+    trace = false,
+    timeLimitSeconds = 0,
+    stepLimit = 0,
+    debugLog = console.error,
+  } = {}
 ) {
-  return new Vm(kpf.program, { trace, timeLimitSeconds }).callback(
-    kpf,
-    posArgs,
-    namedArgs
-  );
+  return new Vm(kpf.program, {
+    trace,
+    timeLimitSeconds,
+    stepLimit,
+    debugLog,
+  }).callback(kpf, posArgs, namedArgs);
+}
+
+export function kpcallbackInNewSession(f, posArgs, namedArgs) {
+  return kpvmCall(f, posArgs, namedArgs, { timeLimitSeconds: 1 });
 }
 
 export class Vm {
   constructor(
-    { instructions, diagnostics = [] },
-    { trace = false, timeLimitSeconds = 0 } = {}
+    program,
+    {
+      trace = false,
+      timeLimitSeconds = 0,
+      stepLimit = 0,
+      debugLog = console.error,
+    } = {}
   ) {
+    const { instructions, diagnostics = [], functions = [] } = program;
+    this.program = program;
     this.instructions = instructions;
     this.diagnostics = diagnostics;
+    this.functions = new Map(functions.map((f) => [f.name, f.offset]));
+    this.methods = extractMethods(functions);
     this.trace = trace;
+    this.stepLimit = stepLimit;
     this.timeLimitSeconds = timeLimitSeconds;
     this.startTime = Date.now();
+    this.stepNumber = 0;
+    this.debugLog = debugLog;
 
     this.cursor = 0;
+    this.instructionStart = 0;
     this.stack = [];
     this.scopeFrames = [new ScopeFrame(0)];
     this.callFrames = [];
     this.openUpvalues = [];
 
     this.instructionTable = [];
-    this.instructionTable[VALUE] = this.runValue;
-    this.instructionTable[ALIAS] = this.runAlias;
-    this.instructionTable[DISCARD] = this.runDiscard;
-    this.instructionTable[RESERVE] = this.runReserve;
-    this.instructionTable[WRITE_LOCAL] = this.runWriteLocal;
-    this.instructionTable[READ_LOCAL] = this.runReadLocal;
-    this.instructionTable[PUSH] = this.runPush;
-    this.instructionTable[POP] = this.runPop;
-    this.instructionTable[EMPTY_ARRAY] = this.runEmptyArray;
-    this.instructionTable[ARRAY_PUSH] = this.runArrayPush;
-    this.instructionTable[ARRAY_EXTEND] = this.runArrayExtend;
-    this.instructionTable[ARRAY_REVERSE] = this.runArrayReverse;
-    this.instructionTable[ARRAY_POP] = this.runArrayPop;
-    this.instructionTable[ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
-    this.instructionTable[ARRAY_CUT] = this.runArrayCut;
-    this.instructionTable[ARRAY_COPY] = this.runArrayCopy;
-    this.instructionTable[ARRAY_IS_EMPTY] = this.runArrayIsEmpty;
-    this.instructionTable[EMPTY_OBJECT] = this.runEmptyObject;
-    this.instructionTable[OBJECT_PUSH] = this.runObjectPush;
-    this.instructionTable[OBJECT_MERGE] = this.runObjectMerge;
-    this.instructionTable[OBJECT_POP] = this.runObjectPop;
-    this.instructionTable[OBJECT_POP_OR_DEFAULT] = this.runObjectPopOrDefault;
-    this.instructionTable[OBJECT_COPY] = this.runObjectCopy;
-    this.instructionTable[JUMP] = this.runJump;
-    this.instructionTable[JUMP_IF_TRUE] = this.runJumpIfTrue;
-    this.instructionTable[JUMP_IF_FALSE] = this.runJumpIfFalse;
-    this.instructionTable[FUNCTION] = this.runFunction;
-    this.instructionTable[CLOSURE] = this.runClosure;
-    this.instructionTable[CALL] = this.runCall;
-    this.instructionTable[CAPTURE] = this.runCapture;
-    this.instructionTable[READ_UPVALUE] = this.runReadUpvalue;
-    this.instructionTable[RETURN] = this.runReturn;
-    this.instructionTable[CALL_BUILTIN] = this.runCallBuiltin;
-    this.instructionTable[INDEX] = this.runIndex;
-    this.instructionTable[CATCH] = this.runCatch;
-    this.instructionTable[IS_NULL] = this.runIsNull;
-    this.instructionTable[IS_BOOLEAN] = this.runIsBoolean;
-    this.instructionTable[IS_NUMBER] = this.runIsNumber;
-    this.instructionTable[IS_STRING] = this.runIsString;
-    this.instructionTable[IS_ARRAY] = this.runIsArray;
-    this.instructionTable[IS_OBJECT] = this.runIsObject;
-    this.instructionTable[IS_BUILTIN] = this.runIsBuiltin;
-    this.instructionTable[IS_GIVEN] = this.runIsGiven;
-    this.instructionTable[IS_ERROR] = this.runIsError;
-    this.instructionTable[IS_FUNCTION] = this.runIsFunction;
-    this.instructionTable[IS_SEQUENCE] = this.runIsSequence;
-    this.instructionTable[ERROR_IF_INVALID] = this.runErrorIfInvalid;
+    this.instructionTable[op.BEGIN] = this.runBegin;
+    this.instructionTable[op.VALUE] = this.runValue;
+    this.instructionTable[op.ALIAS] = this.runAlias;
+    this.instructionTable[op.DISCARD] = this.runDiscard;
+    this.instructionTable[op.RESERVE] = this.runReserve;
+    this.instructionTable[op.WRITE_LOCAL] = this.runWriteLocal;
+    this.instructionTable[op.READ_LOCAL] = this.runReadLocal;
+    this.instructionTable[op.PUSH] = this.runPush;
+    this.instructionTable[op.POP] = this.runPop;
+    this.instructionTable[op.EMPTY_ARRAY] = this.runEmptyArray;
+    this.instructionTable[op.ARRAY_PUSH] = this.runArrayPush;
+    this.instructionTable[op.ARRAY_EXTEND] = this.runArrayExtend;
+    this.instructionTable[op.ARRAY_REVERSE] = this.runArrayReverse;
+    this.instructionTable[op.ARRAY_POP] = this.runArrayPop;
+    this.instructionTable[op.ARRAY_POP_OR_DEFAULT] = this.runArrayPopOrDefault;
+    this.instructionTable[op.ARRAY_CUT] = this.runArrayCut;
+    this.instructionTable[op.ARRAY_COPY] = this.runArrayCopy;
+    this.instructionTable[op.ARRAY_IS_EMPTY] = this.runArrayIsEmpty;
+    this.instructionTable[op.EMPTY_OBJECT] = this.runEmptyObject;
+    this.instructionTable[op.OBJECT_PUSH] = this.runObjectPush;
+    this.instructionTable[op.OBJECT_MERGE] = this.runObjectMerge;
+    this.instructionTable[op.OBJECT_POP] = this.runObjectPop;
+    this.instructionTable[op.OBJECT_POP_OR_DEFAULT] =
+      this.runObjectPopOrDefault;
+    this.instructionTable[op.OBJECT_COPY] = this.runObjectCopy;
+    this.instructionTable[op.JUMP] = this.runJump;
+    this.instructionTable[op.JUMP_IF_TRUE] = this.runJumpIfTrue;
+    this.instructionTable[op.JUMP_IF_FALSE] = this.runJumpIfFalse;
+    this.instructionTable[op.FUNCTION] = this.runFunction;
+    this.instructionTable[op.CLOSURE] = this.runClosure;
+    this.instructionTable[op.CALL] = this.runCall;
+    this.instructionTable[op.CAPTURE] = this.runCapture;
+    this.instructionTable[op.READ_UPVALUE] = this.runReadUpvalue;
+    this.instructionTable[op.RETURN] = this.runReturn;
+    this.instructionTable[op.CALL_BUILTIN] = this.runCallBuiltin;
+    this.instructionTable[op.SELF] = this.runSelf;
+    this.instructionTable[op.INDEX] = this.runIndex;
+    this.instructionTable[op.THROW] = this.runThrow;
+    this.instructionTable[op.CATCH] = this.runCatch;
+    this.instructionTable[op.UNCATCH] = this.runUncatch;
+    this.instructionTable[op.IS_NULL] = this.runIsNull;
+    this.instructionTable[op.IS_BOOLEAN] = this.runIsBoolean;
+    this.instructionTable[op.IS_NUMBER] = this.runIsNumber;
+    this.instructionTable[op.IS_STRING] = this.runIsString;
+    this.instructionTable[op.IS_ARRAY] = this.runIsArray;
+    this.instructionTable[op.IS_STREAM] = this.runIsStream;
+    this.instructionTable[op.IS_OBJECT] = this.runIsObject;
+    this.instructionTable[op.IS_FUNCTION] = this.runIsFunction;
+    this.instructionTable[op.IS_ERROR] = this.runIsError;
+    this.instructionTable[op.IS_CLASS] = this.runIsClass;
+    this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
+    this.instructionTable[op.IS_SEQUENCE] = this.runIsSequence;
+    this.instructionTable[op.IS_TYPE] = this.runIsType;
+    this.instructionTable[op.IS_INSTANCE] = this.runIsInstance;
+    this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -167,6 +182,7 @@ export class Vm {
     this.scopeFrames.push(new ScopeFrame(frameIndex));
     this.callFrames.push(
       new CallFrame(
+        functionName(f),
         this.stack.length,
         this.instructions.length // Make run() return when this call finishes
       )
@@ -179,7 +195,9 @@ export class Vm {
     this.cursor = target;
     const result = this.run();
     if (this.trace) {
-      console.log(`Returning ${toString(result)} from callback`);
+      console.log(
+        `Returning ${display(result, kpcallbackInNewSession)} from callback`
+      );
     }
     this.scopeFrames.pop();
     this.stack.length = frameIndex;
@@ -188,13 +206,19 @@ export class Vm {
 
   run() {
     while (this.cursor < this.instructions.length) {
+      this.stepNumber += 1;
+      if (this.stepLimit > 0 && this.stepNumber >= this.stepLimit) {
+        this.throw_("stepLimitExceeded", ["stepLimit", this.stepLimit]);
+      }
       this.runInstruction();
       if (this.trace) {
         const cutoff = this.callFrames.at(-1)?.stackIndex ?? 0;
         console.log(
           `Stack: [${cutoff > 0 ? `... (${cutoff}), ` : ""}${this.stack
             .slice(cutoff)
-            .map((value) => (value === undefined ? "-" : toString(value)))
+            .map((value) =>
+              value === undefined ? "-" : display(value, kpcallbackInNewSession)
+            )
             .join(", ")}]`
         );
       }
@@ -209,11 +233,19 @@ export class Vm {
     const currentTime = Date.now();
     const elapsedTime = (currentTime - this.startTime) / 1000;
     if (elapsedTime > this.timeLimitSeconds) {
-      throw new Error(`Time limit of ${this.timeLimitSeconds} s exceeded`);
+      this.throw_(
+        kperror("timeLimitExceeded", [
+          "timeLimitSeconds",
+          this.timeLimitSeconds,
+        ])
+      );
     }
   }
 
   runInstruction() {
+    if (this.trace) {
+      this.instructionStart = this.cursor;
+    }
     const instructionType = this.next();
     if (!this.instructionTable[instructionType]) {
       throw new Error(`Unknown instruction ${instructionType}`);
@@ -221,24 +253,34 @@ export class Vm {
     this.instructionTable[instructionType]();
   }
 
+  logInstruction(message) {
+    console.log(`${this.instructionStart} ${message}`);
+  }
+
+  runBegin() {
+    if (this.trace) {
+      this.logInstruction("BEGIN");
+    }
+  }
+
   runValue() {
     const value = this.next();
     if (this.trace) {
-      console.log(`VALUE ${toString(value)}`);
+      this.logInstruction(`VALUE ${display(value, kpcallbackInNewSession)}`);
     }
     this.stack.push(value);
   }
 
   runAlias() {
     if (this.trace) {
-      console.log("ALIAS");
+      this.logInstruction("ALIAS");
     }
     this.stack.push(this.stack.at(-1));
   }
 
   runDiscard() {
     if (this.trace) {
-      console.log("DISCARD");
+      this.logInstruction("DISCARD");
     }
     this.stack.pop();
   }
@@ -246,7 +288,7 @@ export class Vm {
   runReserve() {
     const numSlots = this.next();
     if (this.trace) {
-      console.log(`RESERVE ${numSlots}`);
+      this.logInstruction(`RESERVE ${numSlots}`);
     }
     for (let i = 0; i < numSlots; i++) {
       this.stack.push(undefined);
@@ -256,7 +298,9 @@ export class Vm {
   runWriteLocal() {
     const localIndex = this.next();
     if (this.trace) {
-      console.log(`WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`);
+      this.logInstruction(
+        `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
+      );
     }
     const absoluteIndex = this.scopeFrames.at(-1).stackIndex + localIndex;
     const value = this.stack.pop();
@@ -267,7 +311,7 @@ export class Vm {
     const stepsOut = this.next();
     const localIndex = this.next();
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
       );
     }
@@ -287,7 +331,7 @@ export class Vm {
     const offset = this.next();
     const stackIndex = this.stack.length - 1 + offset;
     if (this.trace) {
-      console.log(`PUSH ${offset} (at ${stackIndex})`);
+      this.logInstruction(`PUSH ${offset} (at ${stackIndex})`);
     }
     this.scopeFrames.push(new ScopeFrame(stackIndex));
   }
@@ -295,21 +339,21 @@ export class Vm {
   runPop() {
     const frame = this.scopeFrames.pop();
     if (this.trace) {
-      console.log(`POP (at ${frame.stackIndex})`);
+      this.logInstruction(`POP (at ${frame.stackIndex})`);
     }
     this.stack.length = frame.stackIndex + 1;
   }
 
   runEmptyArray() {
     if (this.trace) {
-      console.log("EMPTY_ARRAY");
+      this.logInstruction("EMPTY_ARRAY");
     }
     this.stack.push([]);
   }
 
   runArrayPush() {
     if (this.trace) {
-      console.log("ARRAY_PUSH");
+      this.logInstruction("ARRAY_PUSH");
     }
     const value = this.stack.pop();
     this.stack.at(-1).push(value);
@@ -317,24 +361,46 @@ export class Vm {
 
   runArrayExtend() {
     if (this.trace) {
-      console.log("ARRAY_EXTEND");
+      this.logInstruction("ARRAY_EXTEND");
     }
-    const value = this.stack.pop();
-    this.stack.at(-1).push(...value);
+    const sequence = this.stack.pop();
+    let array;
+    if (isArray(sequence)) {
+      array = sequence;
+    } else {
+      this.pushCallFrame("$extendStream");
+      array = toArray(sequence);
+      this.popCallFrame();
+    }
+    this.stack.at(-1).push(...array);
   }
 
   runArrayReverse() {
     if (this.trace) {
-      console.log("ARRAY_REVERSE");
+      this.logInstruction("ARRAY_REVERSE");
     }
-    this.stack.at(-1).reverse();
+    if (isArray(this.stack.at(-1))) {
+      this.stack.at(-1).reverse();
+    }
   }
 
   runArrayPop() {
     if (this.trace) {
-      console.log("ARRAY_POP");
+      this.logInstruction("ARRAY_POP");
     }
-    const value = this.stack.at(-1).pop();
+    const array = this.stack.at(-1);
+    let value;
+    if (isArray(array)) {
+      value = array.pop();
+    } else {
+      const stream = this.stack.pop();
+      if (!stream.properties.isEmpty()) {
+        this.pushCallFrame("$popStream");
+        value = stream.properties.value();
+        this.stack.push(stream.properties.next());
+        this.popCallFrame();
+      }
+    }
     if (value === undefined) {
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
@@ -345,7 +411,7 @@ export class Vm {
           this.throw_(
             kperror(
               "missingElement",
-              ["value", value],
+              ["value", array],
               ["name", diagnostic.name]
             )
           );
@@ -361,7 +427,7 @@ export class Vm {
 
   runArrayPopOrDefault() {
     if (this.trace) {
-      console.log("ARRAY_POP_OR_DEFAULT");
+      this.logInstruction("ARRAY_POP_OR_DEFAULT");
     }
     const defaultValue = this.stack.pop();
     const value =
@@ -372,24 +438,41 @@ export class Vm {
   runArrayCut() {
     const position = this.next();
     if (this.trace) {
-      console.log(`ARRAY_CUT ${position}`);
+      this.logInstruction(`ARRAY_CUT ${position}`);
     }
-    const array = this.stack.pop();
-    this.stack.push(array.slice(0, position));
-    this.stack.push(array.slice(position));
+    const sequence = this.stack.pop();
+    if (position === 0) {
+      this.stack.push([]);
+      this.stack.push(sequence);
+    } else {
+      let array;
+      if (isArray(sequence)) {
+        array = sequence;
+      } else {
+        this.pushCallFrame("$cutStream");
+        array = toArray(sequence).reverse();
+        this.popCallFrame();
+      }
+      this.stack.push(array.slice(0, position));
+      this.stack.push(array.slice(position));
+    }
   }
 
   runArrayCopy() {
     if (this.trace) {
-      console.log("ARRAY_COPY");
+      this.logInstruction("ARRAY_COPY");
     }
     const array = this.stack.pop();
-    this.stack.push([...array]);
+    if (isArray(array)) {
+      this.stack.push([...array]);
+    } else {
+      this.stack.push(array);
+    }
   }
 
   runArrayIsEmpty() {
     if (this.trace) {
-      console.log("ARRAY_IS_EMPTY");
+      this.logInstruction("ARRAY_IS_EMPTY");
     }
     const array = this.stack.pop();
     this.stack.push(array.length === 0);
@@ -397,14 +480,14 @@ export class Vm {
 
   runEmptyObject() {
     if (this.trace) {
-      console.log("EMPTY_OBJECT");
+      this.logInstruction("EMPTY_OBJECT");
     }
     this.stack.push(kpobject());
   }
 
   runObjectPush() {
     if (this.trace) {
-      console.log("OBJECT_PUSH");
+      this.logInstruction("OBJECT_PUSH");
     }
     const value = this.stack.pop();
     const key = this.stack.pop();
@@ -413,7 +496,7 @@ export class Vm {
 
   runObjectMerge() {
     if (this.trace) {
-      console.log("OBJECT_MERGE");
+      this.logInstruction("OBJECT_MERGE");
     }
     const object = this.stack.pop();
     for (const [key, value] of object) {
@@ -423,10 +506,11 @@ export class Vm {
 
   runObjectPop() {
     if (this.trace) {
-      console.log("OBJECT_POP");
+      this.logInstruction("OBJECT_POP");
     }
     const key = this.stack.pop();
-    const value = this.stack.at(-1).get(key);
+    const collection = this.stack.at(-1);
+    const value = collection.get(key);
     if (value === undefined) {
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
@@ -435,12 +519,14 @@ export class Vm {
           return;
         } else {
           this.throw_(
-            kperror("missingProperty", ["value", value], ["key", key])
+            kperror("missingProperty", ["value", collection], ["key", key])
           );
           return;
         }
       } else {
-        this.throw_(kperror("missingProperty", ["value", value], ["key", key]));
+        this.throw_(
+          kperror("missingProperty", ["value", collection], ["key", key])
+        );
         return;
       }
     }
@@ -450,7 +536,7 @@ export class Vm {
 
   runObjectPopOrDefault() {
     if (this.trace) {
-      console.log("OBJECT_POP_OR_DEFAULT");
+      this.logInstruction("OBJECT_POP_OR_DEFAULT");
     }
     const defaultValue = this.stack.pop();
     const key = this.stack.pop();
@@ -463,16 +549,16 @@ export class Vm {
 
   runObjectCopy() {
     if (this.trace) {
-      console.log("OBJECT_COPY");
+      this.logInstruction("OBJECT_COPY");
     }
     const object = this.stack.pop();
-    this.stack.push(kpobject(...kpoEntries(object)));
+    this.stack.push(kpobject(...kpoEntries(toObject(object))));
   }
 
   runJump() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP ${distance}`);
+      this.logInstruction(`JUMP ${distance}`);
     }
     this.cursor += distance;
   }
@@ -480,7 +566,7 @@ export class Vm {
   runJumpIfTrue() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP_IF_TRUE ${distance}`);
+      this.logInstruction(`JUMP_IF_TRUE ${distance}`);
     }
     const condition = this.stack.pop();
     if (condition) {
@@ -491,7 +577,7 @@ export class Vm {
   runJumpIfFalse() {
     const distance = this.next();
     if (this.trace) {
-      console.log(`JUMP_IF_FALSE ${distance}`);
+      this.logInstruction(`JUMP_IF_FALSE ${distance}`);
     }
     const condition = this.stack.pop();
     if (!condition) {
@@ -503,15 +589,12 @@ export class Vm {
     const target = this.next();
     const diagnostic = this.getDiagnostic();
     if (this.trace) {
-      console.log(`FUNCTION ${target} (${diagnostic.name})`);
+      this.logInstruction(`FUNCTION ${target} (${diagnostic.name})`);
     }
     this.stack.push(
-      new Function(
-        diagnostic.name,
-        { instructions: this.instructions, diagnostics: this.diagnostics },
-        target,
-        { isBuiltin: diagnostic.isBuiltin }
-      )
+      new Function(diagnostic.name, this.program, target, {
+        isPlatform: diagnostic.isPlatform,
+      })
     );
   }
 
@@ -519,7 +602,7 @@ export class Vm {
     const stepsOut = this.next();
     const index = this.next();
     if (this.trace) {
-      console.log(`CLOSURE ${stepsOut} ${index}`);
+      this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
     }
     const f = this.stack.at(-1);
     let upvalue;
@@ -543,12 +626,12 @@ export class Vm {
 
   runCall() {
     if (this.trace) {
-      console.log("CALL");
+      this.logInstruction("CALL");
     }
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
       this.callGiven(callee);
-    } else if (isBuiltin(callee)) {
+    } else if (isPlatformFunction(callee)) {
       this.callBuiltin(callee);
     } else {
       this.throw_(kperror("notCallable", ["value", callee]));
@@ -556,9 +639,7 @@ export class Vm {
   }
 
   callGiven(callee) {
-    this.callFrames.push(
-      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
-    );
+    this.pushCallFrame(callee.name);
     const target = callee.target;
     if (this.trace) {
       console.log(`Jump to ${target}`);
@@ -567,27 +648,22 @@ export class Vm {
   }
 
   callBuiltin(callee) {
+    const calleeName = functionName(callee);
     if (this.trace) {
-      console.log(`Call builtin "${callee.builtinName ?? "<anonymous>"}"`);
+      console.log(`Call builtin "${calleeName}"`);
     }
-    this.callFrames.push(
-      new CallFrame(this.scopeFrames.at(-1).stackIndex, this.cursor)
-    );
+    this.pushCallFrame(calleeName);
     const namedArgs = this.stack.pop();
     const posArgs = this.stack.pop();
-    const kpcallback = (f, posArgs, namedArgs) => {
-      if (isBuiltin(f)) {
-        return f(posArgs, namedArgs, kpcallback);
-      } else {
-        return this.callback(f, posArgs, namedArgs);
-      }
-    };
+    const kpcallback = this.kpcallback.bind(this);
     try {
-      const result = callee(posArgs, namedArgs, kpcallback);
+      const result = callee(posArgs, namedArgs, {
+        kpcallback,
+        debugLog: this.debugLog,
+      });
       this.stack.pop(); // Discard called function
       this.stack.push(result);
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
       if (this.trace) {
         console.log(`Return to ${this.cursor}`);
       }
@@ -602,7 +678,7 @@ export class Vm {
 
   runCapture() {
     if (this.trace) {
-      console.log("CAPTURE");
+      this.logInstruction("CAPTURE");
     }
     const value = this.stack.pop();
     this.openUpvalues[this.stack.length].close(value);
@@ -612,7 +688,7 @@ export class Vm {
   runReadUpvalue() {
     const upvalueIndex = this.next();
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
       );
     }
@@ -632,13 +708,12 @@ export class Vm {
 
   runReturn() {
     if (this.trace) {
-      console.log("RETURN");
+      this.logInstruction("RETURN");
     }
     if (this.callFrames.length === 0) {
       this.cursor = this.instructions.length;
     } else {
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
     }
     if (this.trace) {
       console.log(`Return to ${this.cursor}`);
@@ -646,21 +721,25 @@ export class Vm {
   }
 
   runCallBuiltin() {
+    const calleeName = this.next();
     if (this.trace) {
-      console.log("CALL_BUILTIN");
+      this.logInstruction(`CALL_BUILTIN ${calleeName}`);
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
-    this.callFrames.push(new CallFrame(frameIndex, this.cursor));
     const callee = this.stack[frameIndex];
+    this.pushCallFrame(calleeName);
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
-    const kpcallback = (f, posArgs, namedArgs) =>
-      this.callback(f, posArgs, namedArgs);
+    const kpcallback = this.kpcallback.bind(this);
+    const getMethod = this.getMethod.bind(this, calleeName);
     try {
-      const result = callee(args, kpcallback);
+      const result = callee(args, {
+        kpcallback,
+        debugLog: this.debugLog,
+        getMethod,
+      });
       this.stack.push(result);
-      const callFrame = this.callFrames.pop();
-      this.cursor = callFrame.returnIndex;
+      this.popCallFrame();
       if (this.trace) {
         console.log(`Return to ${this.cursor}`);
       }
@@ -673,64 +752,186 @@ export class Vm {
     }
   }
 
+  runSelf() {
+    if (this.trace) {
+      this.logInstruction("SELF");
+    }
+    this.stack.push(this.stack.pop().self);
+  }
+
+  pushCallFrame(name) {
+    const frameIndex = this.scopeFrames.at(-1).stackIndex;
+    this.callFrames.push(new CallFrame(name, frameIndex, this.cursor));
+  }
+
+  popCallFrame() {
+    const callFrame = this.callFrames.pop();
+    this.cursor = callFrame.returnIndex;
+  }
+
+  kpcallback(f, posArgs, namedArgs) {
+    if (typeof f === "function") {
+      return f(posArgs, namedArgs, {
+        kpcallback: this.kpcallback.bind(this),
+        debugLog: this.debugLog,
+      });
+    } else {
+      return this.callback(f, posArgs, namedArgs);
+    }
+  }
+
+  getMethod(constructorName, name) {
+    const methods = this.methods.get(constructorName);
+    if (methods && methods.has(name)) {
+      const target = this.functions.get(`${constructorName}/${name}`);
+      return new Function(`${constructorName}/${name}`, this.program, target, {
+        isPlatform: true,
+      });
+    }
+    throw new Error(`Method ${constructorName}/${name} not found`);
+  }
+
   runIndex() {
     if (this.trace) {
-      console.log("INDEX");
+      this.logInstruction("INDEX");
     }
     const index = this.stack.pop();
     const collection = this.stack.pop();
     if (isString(collection) || isArray(collection)) {
-      if (!isNumber(index)) {
-        this.throw_(
-          kperror("wrongType", ["value", index], ["expectedType", "number"])
-        );
-      }
-      if (index < 1 || index > collection.length) {
-        this.throw_(
-          kperror(
-            "indexOutOfBounds",
-            ["value", collection],
-            ["length", collection.length],
-            ["index", index]
-          )
-        );
-      }
-      this.stack.push(collection[index - 1]);
+      this.indexArray(collection, index);
+    } else if (isStream(collection)) {
+      this.indexStream(collection, index);
     } else if (isObject(collection)) {
-      if (!isString(index)) {
-        this.throw_(
-          kperror("wrongType", ["value", index], ["expectedType", "string"])
-        );
-      }
-      if (collection.has(index)) {
-        this.stack.push(collection.get(index));
-      } else {
-        this.throw_(
-          kperror("missingProperty", ["value", collection], ["key", index])
-        );
-      }
+      this.indexObject(collection, index);
+    } else if (isInstance(collection)) {
+      this.indexInstance(collection, index);
     } else {
       this.throw_(
-        kperror(
-          "wrongType",
-          ["value", collection],
-          ["expectedType", either("string", "array", "object")]
+        wrongType(
+          collection,
+          either(sequenceProtocol, objectClass, instanceProtocol)
         )
       );
     }
   }
 
+  indexArray(array, index) {
+    if (!isNumber(index)) {
+      this.throw_(wrongType(index, numberClass));
+      return;
+    }
+    const result = kpcatch(() => indexArray(array, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
+  }
+
+  indexStream(stream, index) {
+    if (isNumber(index)) {
+      if (this.trace) {
+        console.log(`Indexing a stream with ${index}`);
+      }
+      this.pushCallFrame("$indexStream");
+      if (index < 0) {
+        const result = kpcatch(() => indexArray(toArray(stream), index));
+        if (isError(result)) {
+          this.throw_(result);
+          return;
+        } else {
+          this.stack.push(result);
+        }
+      } else if (index > 0) {
+        let last;
+        let current = stream;
+        let j = 0;
+        while (!current.properties.isEmpty() && j < index) {
+          last = current;
+          current = current.properties.next();
+          j += 1;
+        }
+        if (j === index) {
+          this.stack.push(last.properties.value());
+        } else {
+          this.throw_(
+            kperror(
+              "indexOutOfBounds",
+              ["value", stream],
+              ["length", j],
+              ["index", index]
+            )
+          );
+          return;
+        }
+      } else {
+        this.throw_(
+          kperror("indexOutOfBounds", ["value", stream], ["index", 0])
+        );
+        return;
+      }
+      this.popCallFrame();
+      if (this.trace) {
+        console.log(`Return to ${this.cursor} from stream indexing`);
+      }
+    } else if (isString(index)) {
+      return this.indexInstance(stream, index);
+    } else {
+      this.throw_(wrongType(index, either(numberClass, stringClass)));
+    }
+  }
+
+  indexObject(object, index) {
+    if (!isString(index)) {
+      this.throw_(wrongType(index, stringClass));
+      return;
+    }
+    const result = kpcatch(() => indexMapping(object, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
+  }
+
+  indexInstance(instance, index) {
+    if (!isString(index)) {
+      this.throw_(wrongType(index, stringClass));
+      return;
+    }
+    const result = kpcatch(() => indexInstance(instance, index));
+    if (isError(result)) {
+      this.throw_(result);
+      return;
+    }
+    this.stack.push(result);
+  }
+
+  runThrow() {
+    if (this.trace) {
+      this.logInstruction("THROW");
+    }
+    this.throw_(this.stack.pop());
+  }
+
   runCatch() {
     const recoveryOffset = this.next();
     if (this.trace) {
-      console.log(`CATCH ${recoveryOffset}`);
+      this.logInstruction(`CATCH ${recoveryOffset}`);
     }
-    this.scopeFrames.at(-1).setRecovery(this.cursor + recoveryOffset);
+    this.scopeFrames.at(-1).pushRecovery(this.cursor + recoveryOffset);
+  }
+
+  runUncatch() {
+    if (this.trace) {
+      this.logInstruction("UNCATCH");
+    }
+    this.scopeFrames.at(-1).popRecovery();
   }
 
   runIsNull() {
     if (this.trace) {
-      console.log("IS_NULL");
+      this.logInstruction("IS_NULL");
     }
     const value = this.stack.pop();
     this.stack.push(isNull(value));
@@ -738,7 +939,7 @@ export class Vm {
 
   runIsBoolean() {
     if (this.trace) {
-      console.log("IS_BOOLEAN");
+      this.logInstruction("IS_BOOLEAN");
     }
     const value = this.stack.pop();
     this.stack.push(isBoolean(value));
@@ -746,7 +947,7 @@ export class Vm {
 
   runIsNumber() {
     if (this.trace) {
-      console.log("IS_NUMBER");
+      this.logInstruction("IS_NUMBER");
     }
     const value = this.stack.pop();
     this.stack.push(isNumber(value));
@@ -754,7 +955,7 @@ export class Vm {
 
   runIsString() {
     if (this.trace) {
-      console.log("IS_STRING");
+      this.logInstruction("IS_STRING");
     }
     const value = this.stack.pop();
     this.stack.push(isString(value));
@@ -762,63 +963,87 @@ export class Vm {
 
   runIsArray() {
     if (this.trace) {
-      console.log("IS_ARRAY");
+      this.logInstruction("IS_ARRAY");
     }
     const value = this.stack.pop();
     this.stack.push(isArray(value));
   }
 
+  runIsStream() {
+    if (this.trace) {
+      this.logInstruction("IS_STREAM");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isStream(value));
+  }
+
   runIsObject() {
     if (this.trace) {
-      console.log("IS_OBJECT");
+      this.logInstruction("IS_OBJECT");
     }
     const value = this.stack.pop();
     this.stack.push(isObject(value));
   }
 
-  runIsBuiltin() {
-    if (this.trace) {
-      console.log("IS_BUILTIN");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isBuiltin(value));
-  }
-
-  runIsGiven() {
-    if (this.trace) {
-      console.log("IS_GIVEN");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isGiven(value));
-  }
-
-  runIsError() {
-    if (this.trace) {
-      console.log("IS_ERROR");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isError(value));
-  }
-
   runIsFunction() {
     if (this.trace) {
-      console.log("IS_FUNCTION");
+      this.logInstruction("IS_FUNCTION");
     }
     const value = this.stack.pop();
     this.stack.push(isFunction(value));
   }
 
+  runIsError() {
+    if (this.trace) {
+      this.logInstruction("IS_ERROR");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isError(value));
+  }
+
+  runIsClass() {
+    if (this.trace) {
+      this.logInstruction("IS_CLASS");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isClass(value));
+  }
+
+  runIsProtocol() {
+    if (this.trace) {
+      this.logInstruction("IS_PROTOCOL");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isProtocol(value));
+  }
+
   runIsSequence() {
     if (this.trace) {
-      console.log("IS_SEQUENCE");
+      this.logInstruction("IS_SEQUENCE");
     }
     const value = this.stack.pop();
     this.stack.push(isSequence(value));
   }
 
+  runIsType() {
+    if (this.trace) {
+      this.logInstruction("IS_TYPE");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isType(value));
+  }
+
+  runIsInstance() {
+    if (this.trace) {
+      this.logInstruction("IS_INSTANCE");
+    }
+    const value = this.stack.pop();
+    this.stack.push(isInstance(value));
+  }
+
   runErrorIfInvalid() {
     if (this.trace) {
-      console.log(
+      this.logInstruction(
         `ERROR_IF_INVALID isArgument=${this.getDiagnostic().isArgument}`
       );
     }
@@ -826,8 +1051,7 @@ export class Vm {
     const isValid = this.stack.pop();
     const value = this.stack.at(-1);
     if (!isValid) {
-      const kpcallback = (f, posArgs, namedArgs) =>
-        this.callback(f, posArgs, namedArgs);
+      const kpcallback = this.kpcallback.bind(this);
       try {
         if (this.getDiagnostic().isArgument) {
           transformError(
@@ -864,11 +1088,11 @@ export class Vm {
 
   throw_(error) {
     if (this.trace) {
-      console.log(toString(error));
+      console.log(display(error, kpcallbackInNewSession));
     }
     while (
       this.scopeFrames.length > 0 &&
-      this.scopeFrames.at(-1).recoveryIndex === undefined
+      this.scopeFrames.at(-1).recoveryIndex() === undefined
     ) {
       const frame = this.scopeFrames.pop();
       this.stack.length = frame.stackIndex;
@@ -876,23 +1100,40 @@ export class Vm {
         this.callFrames.length > 0 &&
         this.callFrames.at(-1).stackIndex >= frame.stackIndex
       ) {
-        this.callFrames.pop();
+        const callFrame = this.callFrames.pop();
+        error.properties.calls.push(kpobject(["function", callFrame.name]));
       }
     }
     if (this.scopeFrames.length === 0) {
-      throw error;
+      throw new KenpaliError(error, kpcallbackInNewSession);
     }
     this.stack.push(error);
-    this.cursor = this.scopeFrames.at(-1).recoveryIndex;
+    this.cursor = this.scopeFrames.at(-1).recoveryIndex();
   }
 }
 
+function extractMethods(functions) {
+  const functionSet = new Set(functions.map((f) => f.name));
+  const methods = new Map();
+  for (const f of functions) {
+    const enclosingName = f.name.split("/").slice(0, -1).join("/");
+    const methodName = f.name.split("/").at(-1);
+    if (functionSet.has(enclosingName)) {
+      if (!methods.has(enclosingName)) {
+        methods.set(enclosingName, new Set());
+      }
+      methods.get(enclosingName).add(methodName);
+    }
+  }
+  return methods;
+}
+
 class Function {
-  constructor(name, program, target, { isBuiltin }) {
+  constructor(name, program, target, { isPlatform }) {
     this.name = name;
     this.program = program;
     this.target = target;
-    this.isBuiltin = isBuiltin;
+    this.isPlatform = isPlatform;
     this.closure = [];
   }
 }
@@ -910,15 +1151,25 @@ class Upvalue {
 class ScopeFrame {
   constructor(stackIndex) {
     this.stackIndex = stackIndex;
+    this.recoveryStack = [];
   }
 
-  setRecovery(index) {
-    this.recoveryIndex = index;
+  pushRecovery(index) {
+    this.recoveryStack.push(index);
+  }
+
+  popRecovery() {
+    this.recoveryStack.pop();
+  }
+
+  recoveryIndex() {
+    return this.recoveryStack.at(-1);
   }
 }
 
 class CallFrame {
-  constructor(stackIndex, returnIndex) {
+  constructor(name, stackIndex, returnIndex) {
+    this.name = name;
     this.stackIndex = stackIndex;
     this.returnIndex = returnIndex;
   }

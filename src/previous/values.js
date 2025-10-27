@@ -1,22 +1,92 @@
-import { kpoEntries } from "./kpobject.js";
+import kpobject, { kpoEntries, toKpobject } from "./kpobject.js";
+
+//#region Type objects
+
+export class Instance {
+  constructor(class_, properties, internals = {}) {
+    for (const name in internals) {
+      this[name] = internals[name];
+    }
+    this.class_ = class_;
+    this.properties = properties;
+  }
+}
+
+export class Protocol extends Instance {
+  constructor(name, supers = []) {
+    const display = () => {
+      return `Protocol {name: "${name}"}`;
+    };
+    super(undefined, { name, supers, display });
+    Object.defineProperty(this, "class_", {
+      get() {
+        return protocolClass;
+      },
+    });
+  }
+}
+
+export class Class extends Instance {
+  constructor(name, protocols = []) {
+    const display = () => {
+      return `Class {name: "${name}"}`;
+    };
+    super(undefined, { name, protocols, display });
+    Object.defineProperty(this, "class_", {
+      get() {
+        return classClass;
+      },
+    });
+  }
+}
+
+export const sequenceProtocol = new Protocol("Sequence");
+export const typeProtocol = new Protocol("Type");
+export const instanceProtocol = new Protocol("Instance");
+export const displayProtocol = new Protocol("Display");
+export const anyProtocol = new Protocol("Any");
+
+export const nullClass = new Class("Null");
+export const booleanClass = new Class("Boolean");
+export const numberClass = new Class("Number");
+export const stringClass = new Class("String", [sequenceProtocol]);
+export const arrayClass = new Class("Array", [sequenceProtocol]);
+export const objectClass = new Class("Object");
+export const functionClass = new Class("Function");
+export const classClass = new Class("Class", [
+  typeProtocol,
+  instanceProtocol,
+  displayProtocol,
+]);
+export const protocolClass = new Class("Protocol", [
+  typeProtocol,
+  instanceProtocol,
+  displayProtocol,
+]);
+
+//#endregion
 
 //#region Identifying types
 
-export function typeOf(value) {
-  if (value === null) {
-    return "null";
+export function classOf(value) {
+  if (isNull(value)) {
+    return nullClass;
+  } else if (isBoolean(value)) {
+    return booleanClass;
+  } else if (isNumber(value)) {
+    return numberClass;
+  } else if (isString(value)) {
+    return stringClass;
   } else if (isArray(value)) {
-    return "array";
+    return arrayClass;
   } else if (isObject(value)) {
-    return "object";
-  } else if (isBuiltin(value)) {
-    return "builtin";
-  } else if (isGiven(value)) {
-    return "given";
-  } else if (isError(value)) {
-    return "error";
+    return objectClass;
+  } else if (isFunction(value)) {
+    return functionClass;
+  } else if (isInstance(value)) {
+    return value.class_;
   } else {
-    return typeof value;
+    throw new Error(`Not a valid Kenpali value: ${value}`);
   }
 }
 
@@ -40,39 +110,56 @@ export function isArray(value) {
   return Array.isArray(value);
 }
 
-export function isBuiltin(value) {
-  return (
-    typeof value === "function" ||
-    (value !== null &&
-      typeof value === "object" &&
-      "target" in value &&
-      value.isBuiltin)
-  );
-}
-
-export function isGiven(value) {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "target" in value &&
-    !value.isBuiltin
-  );
-}
-
-export function isError(value) {
-  return value !== null && typeof value === "object" && "error" in value;
-}
-
 export function isObject(value) {
   return value instanceof Map;
 }
 
 export function isFunction(value) {
-  return isBuiltin(value) || isGiven(value);
+  return isPlatformFunction(value) || isNaturalFunction(value);
+}
+
+export function isClass(value) {
+  return value instanceof Class;
+}
+
+export function isProtocol(value) {
+  return value instanceof Protocol;
+}
+
+export function isPlatformFunction(value) {
+  return (
+    (typeof value === "function" && !isInstance(value)) ||
+    (isJsObjectWithProperty(value, "target") && value.isPlatform)
+  );
+}
+
+export function isNaturalFunction(value) {
+  return isJsObjectWithProperty(value, "target") && !value.isPlatform;
 }
 
 export function isSequence(value) {
-  return isString(value) || isArray(value);
+  return hasProtocol(classOf(value), sequenceProtocol);
+}
+
+export function isType(value) {
+  return hasProtocol(classOf(value), typeProtocol);
+}
+
+export function isInstance(value) {
+  return value instanceof Instance;
+}
+
+function isJsObjectWithProperty(value, property) {
+  return value !== null && typeof value === "object" && property in value;
+}
+
+function hasProtocol(type, protocol) {
+  if (protocol === anyProtocol) {
+    return true;
+  }
+  return (type.properties.protocols ?? type.properties.supers).some(
+    (protocol_) => protocol_ === protocol || hasProtocol(protocol_, protocol)
+  );
 }
 
 //#endregion
@@ -100,30 +187,71 @@ export function equals(a, b) {
   }
 }
 
-export function toString(value) {
+/**
+ * Like `display`, but throws a clear error if the value implements `Display`.
+ * Useful in places where a suitable `kpcallback` isn't available, and the
+ * argument is known to have a narrow range of types.
+ * @param value - The value to convert to a string.
+ * @returns - The string representation of the value.
+ */
+export function displaySimple(value) {
+  return display(value, (display, args, namedArgs) => {
+    if (typeof display === "function") {
+      // A few types, like Class and Protocol, implement `display` as a plain
+      // JavaScript function, so they don't need a `kpcallback`. This is useful
+      // for disassembling.
+      return display(args, namedArgs);
+    } else {
+      throw new Error(
+        `Value of type ${classOf(display.self).properties.name} implements Display`
+      );
+    }
+  });
+}
+
+export function display(value, kpcallback) {
   if (isArray(value)) {
-    return "[" + value.map(toString).join(", ") + "]";
+    return (
+      "[" +
+      value.map((element) => display(element, kpcallback)).join(", ") +
+      "]"
+    );
   } else if (isObject(value)) {
     return (
       "{" +
       kpoEntries(value)
-        .map(([k, v]) => `${isValidName(k) ? k : `"${k}"`}: ${toString(v)}`)
+        .map(
+          ([k, v]) =>
+            `${isValidName(k) ? k : `"${k}"`}: ${display(v, kpcallback)}`
+        )
         .join(", ") +
       "}"
     );
-  } else if (isGiven(value)) {
-    if (value.closure.length > 0) {
-      return `function ${value.name} closure=${toString(value.closure)}`;
+  } else if (isNaturalFunction(value)) {
+    return `Function {name: "${value.name}"}`;
+  } else if (isPlatformFunction(value)) {
+    return `Function {name: "${functionName(value)}"}`;
+  } else if (isInstance(value)) {
+    if (hasProtocol(value.class_, displayProtocol)) {
+      if (typeof value.properties.display === "function") {
+        return value.properties.display([], kpobject(), { kpcallback });
+      } else if (kpcallback) {
+        return kpcallback(value.properties.display, [], kpobject());
+      } else {
+        return `${value.class_.properties.name} ${display(toKpobject(value.properties), kpcallback)}`;
+      }
     } else {
-      return `function ${value.name}`;
+      return `${value.class_.properties.name} ${display(toKpobject(value.properties), kpcallback)}`;
     }
-  } else if (isBuiltin(value)) {
-    return `function ${value.builtinName ?? value.name ?? "<anonymous>"}`;
-  } else if (isError(value)) {
-    return `error ${value.error} ${toString(value.details)}`;
   } else {
-    return JSON.stringify(value);
+    return JSON.stringify(value, (key, value) =>
+      key === "" ? value : display(value, kpcallback)
+    );
   }
+}
+
+export function functionName(f) {
+  return f.functionName ?? f.name ?? "<anonymous>";
 }
 
 function isValidName(string) {

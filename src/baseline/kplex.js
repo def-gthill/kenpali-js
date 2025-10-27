@@ -4,17 +4,14 @@ const tokenSpec = [
   // Literals
   ["NUMBER", r`-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?`],
   ["STRING", r`"(\\"|[^"])*"`],
+  ["RAW_STRING", "`[^`]*`"],
   // Groupers
-  ["OPEN_QUOTE_PAREN", r`'\(`],
-  ["CLOSE_QUOTE_PAREN", r`\)'`],
   ["OPEN_PAREN", r`\(`],
   ["CLOSE_PAREN", r`\)`],
   ["OPEN_BRACKET", r`\[`],
   ["CLOSE_BRACKET", r`\]`],
   ["OPEN_BRACE", "{"],
   ["CLOSE_BRACE", "}"],
-  ["OPEN_ANGLES", "<<"],
-  ["CLOSE_ANGLES", ">>"],
   // Terminators
   ["COMMA", ","],
   ["SEMICOLON", ";"],
@@ -22,10 +19,12 @@ const tokenSpec = [
   ["COLON", ":"],
   ["ARROW", "=>"],
   ["EQUALS", "="],
+  ["PIPE_DOT", r`\|\.`],
   ["PIPE", r`\|`],
   ["AT", "@"],
   ["DOT", r`\.`],
   ["BANG", "!"],
+  ["DOLLAR", r`\$`],
   ["DOUBLE_STAR", r`\*\*`],
   ["STAR", r`\*`],
   // Other
@@ -33,6 +32,7 @@ const tokenSpec = [
   ["NEWLINE", r`\r\n|\r|\n`],
   ["WHITESPACE", r`[ \t]+`],
   ["COMMENT", r`//[^\r\n]*(\r\n|\r|\n)?`],
+  ["SLASH", r`\/`],
   ["INVALID", "."],
 ];
 
@@ -66,6 +66,9 @@ export default function* kplex(code) {
     } else if (kind === "STRING") {
       kind = "LITERAL";
       value = JSON.parse(text);
+    } else if (kind === "RAW_STRING") {
+      kind = "LITERAL";
+      value = text.slice(1, text.length - 1);
     } else if (kind === "NEWLINE" || kind === "COMMENT") {
       lineStart = mo.index + text.length;
       lineNum += 1;
