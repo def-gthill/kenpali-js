@@ -9,7 +9,7 @@ import {
   TreeTransformer,
 } from "./kpast.js";
 import kperror, { errorClass, isError, KenpaliError } from "./kperror.js";
-import kpobject, { kpoMerge } from "./kpobject.js";
+import kpobject, { deepToKpobject, kpoMerge } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
 import { kpcallbackInNewSession } from "./kpvm.js";
 import { streamClass } from "./stream.js";
@@ -747,7 +747,7 @@ class Compiler {
   }
 
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
-    this.validateRecursive(schema);
+    this.validateRecursive(deepToKpobject(schema));
     this.addInstruction(op.VALUE, schema);
     this.addInstruction(op.ERROR_IF_INVALID);
     this.addDiagnostic({ isArgument, isArgumentPattern });

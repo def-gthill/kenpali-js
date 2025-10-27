@@ -1,4 +1,4 @@
-import { isArray, isFunction, isInstance } from "./values.js";
+import { isArray, isFunction, isInstance, isObject } from "./values.js";
 
 export default function kpobject(...entries) {
   return new Map(entries);
@@ -13,7 +13,7 @@ export function deepToKpobject(value) {
     return value;
   } else if (isArray(value)) {
     return value.map(deepToKpobject);
-  } else if (isFunction(value) || isInstance(value)) {
+  } else if (isFunction(value) || isObject(value) || isInstance(value)) {
     return value;
   } else if (typeof value === "object") {
     return kpoMap(toKpobject(value), ([key, value]) => [

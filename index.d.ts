@@ -3,7 +3,7 @@
 export interface CheckedNode {
   type: "checked";
   name: NamePatternNode;
-  schema: Schema;
+  schema: Schema<KpValue>;
 }
 
 export interface OptionalNode {
@@ -115,25 +115,40 @@ export type ExpressionNode =
 
 //#region Kenpali values
 
-export type KpArray = KpValue[];
+export type KpArray<T extends KpValue> = T[];
 
-export type Stream = (
-  | {
-      value: () => KpValue;
-      next: () => Stream;
-    }
-  | {}
-) & { isEmpty: () => boolean };
+export type KpTuple<T extends KpValue[]> = T;
 
-export type Sequence = string | KpArray | Stream;
+export class FullStream<T extends KpValue> {
+  isEmpty: () => false;
+  value: () => T;
+  next: () => Stream<T>;
+}
 
-export type KpObject = Map<string, KpValue>;
+export class EmptyStream {
+  isEmpty: () => true;
+}
 
-export type Callback<P extends KpArray, N extends KpObject> = (
-  args: P,
-  namedArgs: N,
-  context: VmContext
-) => KpValue;
+export type Stream<T extends KpValue> = FullStream<T> | EmptyStream;
+
+export function stream<T extends KpValue>(
+  value: () => T,
+  next: () => Stream<T>
+): FullStream<T>;
+
+export function emptyStream(): EmptyStream;
+
+export type Sequence<T extends KpValue> =
+  | (T extends string ? string : never)
+  | KpArray<T>
+  | Stream<T>;
+
+export type KpObject<K extends string, V extends KpValue> = Map<K, V>;
+
+export type Callback<
+  P extends KpTuple<KpValue[]>,
+  N extends KpObject<string, KpValue>,
+> = (args: P, namedArgs: N, context: VmContext) => KpValue;
 
 export interface CompiledFunction {
   name: string;
@@ -148,7 +163,7 @@ export type KpFunction = Callback<never, never> | CompiledFunction;
 
 export interface KpError {
   error: string;
-  details: KpObject;
+  details: KpObject<string, KpValue>;
 }
 
 export class KpInstance<T extends KpValue, P extends object> {
@@ -157,29 +172,23 @@ export class KpInstance<T extends KpValue, P extends object> {
   constructor(class_: KpClass<T>, properties: P);
 }
 
-export class KpProtocol<out T extends KpValue> extends KpInstance<
+export class KpProtocol<T extends KpValue> extends KpInstance<
   KpProtocol<T>,
   {
     name: string;
-    protocols: KpProtocol<KpValue>[];
+    supers: KpProtocol<KpValue>[];
   }
 > {
-  // Ensures that KpProtocol and KpClass are not assignable to each other,
-  // despite having the same shape.
-  private _jsclass: "protocol";
-  constructor(name: string, protocols: KpProtocol<KpValue>[]);
+  constructor(name: string, supers: KpProtocol<KpValue>[]);
 }
 
-export class KpClass<out T extends KpValue> extends KpInstance<
+export class KpClass<T extends KpValue> extends KpInstance<
   KpClass<T>,
   {
-    name: string;
+    name: T extends KpClass<KpValue> ? "Class" : string;
     protocols: KpProtocol<KpValue>[];
   }
 > {
-  // Ensures that KpProtocol and KpClass are not assignable to each other,
-  // despite having the same shape.
-  private _jsclass: "class";
   constructor(name: string, protocols: KpProtocol<KpValue>[]);
 }
 
@@ -188,9 +197,9 @@ export type KpValue =
   | boolean
   | number
   | string
-  | KpArray
-  | Stream
-  | KpObject
+  | KpValue[] // KpArray, inlined to avoid circularity
+  | (FullStream<KpValue> | EmptyStream) // Stream, inlined to avoid circularity
+  | Map<string, KpValue> // KpObject, inlined to avoid circularity
   | Callback<never, never>
   | CompiledFunction
   | KpError
@@ -198,7 +207,9 @@ export type KpValue =
   | KpClass<KpValue>
   | KpProtocol<KpValue>;
 
-export const sequenceProtocol: KpProtocol<string | KpArray | Stream>;
+export const sequenceProtocol: KpProtocol<
+  string | KpArray<KpValue> | Stream<KpValue>
+>;
 export const typeProtocol: KpProtocol<KpClass<KpValue> | KpProtocol<KpValue>>;
 export const instanceProtocol: KpProtocol<KpInstance<KpValue, object>>;
 export const displayProtocol: KpProtocol<
@@ -210,8 +221,8 @@ export const nullClass: KpClass<null>;
 export const booleanClass: KpClass<boolean>;
 export const numberClass: KpClass<number>;
 export const stringClass: KpClass<string>;
-export const arrayClass: KpClass<KpArray>;
-export const objectClass: KpClass<KpObject>;
+export const arrayClass: KpClass<KpArray<KpValue>>;
+export const objectClass: KpClass<KpObject<string, KpValue>>;
 export const functionClass: KpClass<KpFunction>;
 export const classClass: KpClass<KpClass<KpValue>>;
 export const protocolClass: KpClass<KpProtocol<KpValue>>;
@@ -220,78 +231,91 @@ export const protocolClass: KpClass<KpProtocol<KpValue>>;
 
 //#region Schemas
 
-export type TypeSchema =
-  | "null"
-  | "boolean"
-  | "number"
-  | "string"
-  | "array"
-  | "stream"
-  | "object"
-  | "function"
-  | "error"
-  | "sequence";
+export type TypeSchema<T extends KpValue> = KpClass<T> | KpProtocol<T>;
 
-export interface EitherSchema {
-  either: Schema[];
+export interface TypeWithWhereSchema<T extends KpValue> {
+  type: TypeSchema<T>;
+  where: (value: T) => boolean;
 }
 
-export interface OneOfSchema {
-  oneOf: KpValue[];
+export interface OneOfSchema<T extends KpValue> {
+  oneOf: T[];
 }
 
-export type TypeToValue<T extends Schema> = T extends "null"
-  ? null
-  : T extends "boolean"
-    ? boolean
-    : T extends "number"
-      ? number
-      : T extends "string"
-        ? string
-        : T extends "array"
-          ? KpArray
-          : T extends "stream"
-            ? Stream
-            : T extends "object"
-              ? KpObject
-              : T extends "function"
-                ? KpFunction
-                : T extends "error"
-                  ? KpError
-                  : T extends "sequence"
-                    ? Sequence
-                    : KpValue;
-
-export interface TypeWithWhereSchema<T extends TypeSchema = TypeSchema> {
-  type: T;
-  where: (value: TypeToValue<T>) => boolean;
+export interface ArraySchema<T extends KpValue> {
+  type: TypeSchema<KpArray<KpValue>>;
+  elements: Schema<T>;
+  where?: (value: KpArray<T>) => boolean;
 }
 
-export interface ArrayWithConditionsSchema {
-  type: "array";
-  shape?: Schema[];
-  elements?: Schema;
-  where?: (value: KpArray) => boolean;
+export interface TupleSchema<T extends KpValue[]> {
+  type: TypeSchema<KpArray<KpValue>>;
+  shape?: { [K in keyof T]: Schema<T[K]> | OptionalSchema<T[K]> };
+  where?: (value: KpTuple<T>) => boolean;
 }
 
-export interface ObjectWithConditionsSchema {
-  type: "object";
-  shape?: Record<string, Schema>;
-  keys?: TypeWithWhereSchema & { type: "string" };
-  values?: Schema;
-  where?: (value: KpObject) => boolean;
+export interface ObjectSchema<K extends string, V extends KpValue> {
+  type: TypeSchema<KpObject<K, V>>;
+  keys?: Schema<K>;
+  values?: Schema<V>;
+  where?: (value: KpObject<K, V>) => boolean;
 }
 
-export type TypeWithConditionsSchema =
-  | TypeWithWhereSchema
-  | ArrayWithConditionsSchema
-  | ObjectWithConditionsSchema;
+export interface RecordSchema<K extends string, V extends KpValue> {
+  type: TypeSchema<KpObject<K, V>>;
+  shape?: Map<K, Schema<V> | OptionalSchema<V>>;
+  where?: (value: KpObject<K, V>) => boolean;
+}
 
-export type Schema =
-  | TypeSchema
-  | EitherSchema
-  | OneOfSchema
-  | TypeWithConditionsSchema;
+export interface OptionalSchema<T extends KpValue> {
+  optional: Schema<T>;
+}
+
+export interface EitherSchema<T extends KpValue> {
+  either: Schema<T>[];
+}
+
+export type TypeWithConditionsSchema<T extends KpValue> =
+  | TypeWithWhereSchema<T>
+  | (T extends KpArray<infer E> ? ArraySchema<E> : never)
+  | (T extends KpTuple<infer T> ? TupleSchema<T> : never)
+  | (T extends KpObject<infer K, infer V>
+      ? ObjectSchema<K, V> | RecordSchema<K, V>
+      : never);
+
+export type Schema<T extends KpValue> =
+  | TypeSchema<T>
+  | EitherSchema<T>
+  | OneOfSchema<T>
+  | TypeWithConditionsSchema<T>;
+
+export function is<T extends KpValue>(
+  type: TypeSchema<T>,
+  where?: (value: T) => boolean
+): Schema<T>;
+
+export function oneOf<T extends KpValue>(value: T[]): OneOfSchema<T>;
+
+export function arrayOf<T extends KpValue>(
+  elementSchema: Schema<T>
+): ArraySchema<T>;
+
+export function tupleLike<T extends KpValue[]>(shape: {
+  [K in keyof T]: Schema<T[K]> | OptionalSchema<T[K]>;
+}): TupleSchema<T>;
+
+export function objectOf<K extends string, V extends KpValue>(
+  keys: Schema<K>,
+  values: Schema<V>
+): ObjectSchema<K, V>;
+
+export function recordLike<K extends string, V extends KpValue>(
+  shape: Map<K, Schema<V> | OptionalSchema<V>>
+): RecordSchema<K, V>;
+
+export function optional<T extends KpValue>(
+  schema: Schema<T>
+): OptionalSchema<T>;
 
 //#endregion
 
@@ -326,14 +350,17 @@ export interface VmOptions extends CallOptions {
 export type EvalOptions = CompileOptions & VmOptions;
 
 export function kpparse(code: string, options?: ParseOptions): ExpressionNode;
+
 export function kpeval(
   expression: ExpressionNode,
   options?: EvalOptions
 ): KpValue;
+
 export function kpcompile(
   expression: ExpressionNode,
   options?: CompileOptions
 ): KpProgram;
+
 export function kpvm(program: KpProgram, options: VmOptions): KpValue;
 
 export function kpcall(
@@ -341,43 +368,54 @@ export function kpcall(
   args: KpValue[],
   namedArgs: Record<string, KpValue>,
   options?: CallOptions
-): any;
-export function toKpFunction(
-  f: (
-    args: KpValue[],
-    namedArgs: Record<string, KpValue>,
-    kpcallback: KpCallback
-  ) => KpValue
-): Callback<KpArray, KpObject>;
+): KpValue;
+
+export function toKpFunction<
+  P extends KpTuple<KpValue[]>,
+  K extends string,
+  V extends KpValue,
+>(
+  f: (args: P, namedArgs: KpObject<K, V>, kpcallback: KpCallback) => KpValue
+): Callback<KpTuple<P>, KpObject<K, V>>;
+
 export function kpcatch<T>(f: () => T): T | KpError;
+
 export function foldError(
   f: () => KpValue,
   onSuccess: (value: KpValue) => KpValue,
   onFailure: (error: KpError) => KpValue
 ): KpValue;
 
-export function kpobject(...entries: [string, KpValue][]): KpObject;
-export function matches<T extends Schema = Schema>(
+export function kpobject<K extends string, V extends KpValue>(
+  ...entries: [NoInfer<K>, NoInfer<V>][]
+): KpObject<K, V>;
+
+export function matches<T extends KpValue>(
   value: KpValue,
-  schema: T
-): value is TypeToValue<T>;
-export function validate(value: KpValue, schema: Schema): void;
+  schema: Schema<T>
+): value is T;
+
+export function validate(value: KpValue, schema: Schema<KpValue>): void;
+
 export function validateCatching(
   value: KpValue,
-  schema: Schema
+  schema: Schema<KpValue>
 ): KpError | null;
+
 export function validateErrorTo(
   value: KpValue,
-  schema: Schema,
+  schema: Schema<KpValue>,
   onFailure: (error: KpError) => void
 ): void;
+
 export function toString(value: KpValue): string;
+
 export function isError(value: KpValue): value is KpError;
 
 export type KpCallback = (
   callee: KpValue,
-  args: KpArray,
-  namedArgs: KpObject
+  args: KpArray<KpValue>,
+  namedArgs: KpObject<string, KpValue>
 ) => KpValue;
 
 export type DebugLog = (message: string) => void;
@@ -404,7 +442,7 @@ type NamedParamTypesFrom<T extends [string, KpValue][]> = {
 export type FunctionImpl<P extends ParamTypes> = (
   args: [
     ...("pos" extends keyof P ? Defined<P["pos"]> : []),
-    ...("posRest" extends keyof P ? [Defined<P["posRest"]>] : []),
+    ...("posRest" extends keyof P ? [Defined<P["posRest"]>[]] : []),
     ...("named" extends keyof P
       ? NamedParamTypesFrom<Defined<P["named"]>>
       : []),
@@ -421,8 +459,8 @@ export type SingleParamSpec<
   T extends KpValue,
   N extends string = string,
 > = KpValue extends T
-  ? N | { name: N; type: KpClass<T> | KpProtocol<T> }
-  : { name: N; type: KpClass<T> | KpProtocol<T> };
+  ? N | { name: N; type: Schema<T> }
+  : { name: N; type: Schema<T> };
 
 export type RestParamSpec<T extends KpValue> = { rest: SingleParamSpec<T> };
 
@@ -430,25 +468,29 @@ type PosParamSpecsFrom<T extends KpValue[]> = {
   [K in keyof T]: SingleParamSpec<T[K]>;
 };
 
+type PosRestParamSpecFrom<T extends KpValue> = RestParamSpec<KpArray<T>>;
+
 type NamedParamSpecsFrom<T extends [string, KpValue][]> = {
   [K in keyof T]: SingleParamSpec<T[K][1], T[K][0]>;
 };
 
+type NamedRestParamSpecFrom<T extends KpValue> = RestParamSpec<
+  KpObject<string, T>
+>;
+
 export interface ParamSpec<P extends ParamTypes> {
   params?: [
     ...("pos" extends keyof P ? PosParamSpecsFrom<Defined<P["pos"]>> : []),
-    // ...MaybeSingle<P["posRest"], RestParamSpec<Defined<P["posRest"]>>>,
     ...("posRest" extends keyof P
-      ? [RestParamSpec<Defined<P["posRest"]>>]
+      ? [PosRestParamSpecFrom<Defined<P["posRest"]>>]
       : []),
-    // P["posRest"],
   ];
   namedParams?: [
     ...("named" extends keyof P
       ? NamedParamSpecsFrom<Defined<P["named"]>>
       : []),
     ...("namedRest" extends keyof P
-      ? [RestParamSpec<Defined<P["namedRest"]>>]
+      ? [NamedRestParamSpecFrom<Defined<P["namedRest"]>>]
       : []),
   ];
 }

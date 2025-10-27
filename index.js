@@ -3,11 +3,26 @@ import { kpcall, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
 import { foldError, isError, kpcatch } from "./src/kperror.js";
 import kpeval from "./src/kpeval.js";
-import kpobject, { deepToKpobject } from "./src/kpobject.js";
+import kpobject, { deepToKpobject, toJsObject } from "./src/kpobject.js";
 import kpparse from "./src/kpparse.js";
 import kpvm from "./src/kpvm.js";
+import {
+  EmptyStream,
+  emptyStream,
+  FullStream,
+  Stream,
+  stream,
+} from "./src/stream.js";
 import internalValidate, {
+  arrayOf,
+  either,
   matches as internalMatches,
+  is,
+  objectOf,
+  oneOf,
+  optional,
+  recordLike,
+  tupleLike,
 } from "./src/validate.js";
 import {
   anyProtocol,
@@ -56,15 +71,46 @@ function validateErrorTo(value, schema, onFailure) {
   );
 }
 
+function jsIs(type, where) {
+  return toJsObject(is(type, where));
+}
+function jsOneOf(values) {
+  return toJsObject(oneOf(values));
+}
+function jsArrayOf(elementSchema, where) {
+  return toJsObject(arrayOf(elementSchema, where));
+}
+function jsTupleLike(shape) {
+  return toJsObject(tupleLike(shape));
+}
+function jsObjectOf(keys, values, where) {
+  return toJsObject(objectOf(keys, values, where));
+}
+function jsRecordLike(shape) {
+  return toJsObject(recordLike(shape));
+}
+function jsOptional(schema) {
+  return toJsObject(optional(schema));
+}
+function jsEither(...schemas) {
+  return toJsObject(either(...schemas));
+}
+
 export {
   anyProtocol,
   arrayClass,
+  jsArrayOf as arrayOf,
   booleanClass,
   classClass,
   displayProtocol,
+  jsEither as either,
+  emptyStream,
+  EmptyStream,
   foldError,
+  FullStream,
   functionClass,
   instanceProtocol,
+  jsIs as is,
   isError,
   kpcall,
   kpcatch,
@@ -79,13 +125,20 @@ export {
   nullClass,
   numberClass,
   objectClass,
+  jsObjectOf as objectOf,
+  jsOneOf as oneOf,
+  jsOptional as optional,
   platformClass,
   platformFunction,
   protocolClass,
+  jsRecordLike as recordLike,
   sequenceProtocol,
+  stream,
+  Stream,
   stringClass,
   toKpFunction,
   toString,
+  jsTupleLike as tupleLike,
   typeProtocol,
   validate,
   validateCatching,

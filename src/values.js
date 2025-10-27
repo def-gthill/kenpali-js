@@ -13,11 +13,11 @@ export class Instance {
 }
 
 export class Protocol extends Instance {
-  constructor(name, protocols = []) {
+  constructor(name, supers = []) {
     const display = () => {
       return `Protocol {name: "${name}"}`;
     };
-    super(undefined, { name, protocols, display });
+    super(undefined, { name, supers, display });
     Object.defineProperty(this, "class_", {
       get() {
         return protocolClass;
@@ -157,7 +157,7 @@ function hasProtocol(type, protocol) {
   if (protocol === anyProtocol) {
     return true;
   }
-  return type.properties.protocols.some(
+  return (type.properties.protocols ?? type.properties.supers).some(
     (protocol_) => protocol_ === protocol || hasProtocol(protocol_, protocol)
   );
 }
@@ -231,13 +231,21 @@ export function toString(value, kpcallback) {
   } else if (isPlatformFunction(value)) {
     return `Function {name: "${functionName(value)}"}`;
   } else if (isInstance(value)) {
-    if (kpcallback && hasProtocol(value.class_, displayProtocol)) {
-      return kpcallback(value.properties.display, [], kpobject());
+    if (hasProtocol(value.class_, displayProtocol)) {
+      if (typeof value.properties.display === "function") {
+        return value.properties.display([], kpobject(), { kpcallback });
+      } else if (kpcallback) {
+        return kpcallback(value.properties.display, [], kpobject());
+      } else {
+        return `${value.class_.properties.name} ${toString(toKpobject(value.properties), kpcallback)}`;
+      }
     } else {
       return `${value.class_.properties.name} ${toString(toKpobject(value.properties), kpcallback)}`;
     }
   } else {
-    return JSON.stringify(value);
+    return JSON.stringify(value, (key, value) =>
+      key === "" ? value : toString(value, kpcallback)
+    );
   }
 }
 

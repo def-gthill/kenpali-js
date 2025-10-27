@@ -19,7 +19,7 @@ export class Stream extends Instance {
   }
 }
 
-class FullStream extends Stream {
+export class FullStream extends Stream {
   constructor(value, next) {
     const display = (_args, _namedArgs, { kpcallback }) => {
       let current = this;
@@ -59,7 +59,7 @@ export function stream({ value, next }) {
   return new FullStream(value, next);
 }
 
-class EmptyStream extends Stream {
+export class EmptyStream extends Stream {
   constructor() {
     super({ isEmpty: () => true, display: () => "stream []" });
   }

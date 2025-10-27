@@ -1,6 +1,7 @@
 import test from "ava";
 import * as tsdModule from "tsd";
 import {
+  arrayOf,
   kpeval,
   kpobject,
   numberClass,
@@ -56,7 +57,7 @@ test("Can define a module containing a platform function", (t) => {
   t.is(result, "Hello, world!");
 });
 
-test("Can statically check the types of the arguments to a platform function", (t) => {
+test("Can statically check the types of a platform function's parameters", (t) => {
   const ast: ExpressionNode = {
     type: "call",
     callee: {
@@ -83,4 +84,37 @@ test("Can statically check the types of the arguments to a platform function", (
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, 43);
+});
+
+test("Can check types of positional rest parameters", (t) => {
+  const ast: ExpressionNode = {
+    type: "call",
+    callee: {
+      type: "name",
+      name: "bar",
+      from: "foo",
+    },
+    posArgs: [
+      {
+        type: "literal",
+        value: 42,
+      },
+      {
+        type: "literal",
+        value: 73,
+      },
+    ],
+  };
+  const fooModule = new Map([
+    [
+      "bar",
+      platformFunction<{ posRest: number }>(
+        "bar",
+        { params: [{ rest: { name: "n", type: arrayOf(numberClass) } }] },
+        ([args]) => args.length
+      ),
+    ],
+  ]);
+  const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
+  t.is(result, 2);
 });
