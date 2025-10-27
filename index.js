@@ -1,7 +1,7 @@
 import { platformClass, platformFunction } from "./src/builtins.js";
 import { kpcall, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
-import { foldError, isError, kpcatch } from "./src/kperror.js";
+import { errorClass, foldError, isError, kpcatch } from "./src/kperror.js";
 import kpeval from "./src/kpeval.js";
 import kpobject, { deepToKpobject, toJsObject } from "./src/kpobject.js";
 import kpparse from "./src/kpparse.js";
@@ -12,6 +12,7 @@ import {
   FullStream,
   Stream,
   stream,
+  streamClass,
 } from "./src/stream.js";
 import internalValidate, {
   arrayOf,
@@ -29,6 +30,7 @@ import {
   arrayClass,
   booleanClass,
   classClass,
+  display,
   displayProtocol,
   functionClass,
   instanceProtocol,
@@ -40,7 +42,6 @@ import {
   protocolClass,
   sequenceProtocol,
   stringClass,
-  toString,
   typeProtocol,
 } from "./src/values.js";
 
@@ -102,10 +103,12 @@ export {
   jsArrayOf as arrayOf,
   booleanClass,
   classClass,
+  display,
   displayProtocol,
   jsEither as either,
   emptyStream,
   EmptyStream,
+  errorClass,
   foldError,
   FullStream,
   functionClass,
@@ -135,9 +138,9 @@ export {
   sequenceProtocol,
   stream,
   Stream,
+  streamClass,
   stringClass,
   toKpFunction,
-  toString,
   jsTupleLike as tupleLike,
   typeProtocol,
   validate,

@@ -7,7 +7,7 @@
 // - dis: Disassembles Kenpali bytecode to human-readable assembly.
 
 import fs from "node:fs";
-import { kpcall, toString } from "./interop.js";
+import { display, kpcall } from "./interop.js";
 import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
 
@@ -79,9 +79,9 @@ function run() {
   const args = process.argv.slice(i);
   if (args.length > 0) {
     const [posArgs, namedArgs] = parseFunctionArgs(args);
-    console.log(toString(kpcall(result, posArgs, namedArgs)));
+    console.log(display(kpcall(result, posArgs, namedArgs)));
   } else {
-    console.log(toString(result));
+    console.log(display(result));
   }
 }
 

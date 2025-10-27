@@ -1,5 +1,5 @@
 import test from "ava";
-import { kpcall, toKpFunction, toString } from "../src/interop.js";
+import { display, kpcall, toKpFunction } from "../src/interop.js";
 import {
   block,
   call,
@@ -183,9 +183,9 @@ test("A time kpcall time limit is enforced through nested callbacks", (t) => {
   assertIsError(t, result, "timeLimitExceeded");
 });
 
-test("We can call toString on a Display value without explicitly passing a kpcallback", (t) => {
+test("We can call display on a Display value without explicitly passing a kpcallback", (t) => {
   const code = "newVar(42)";
   const value = kpeval(kpparse(code));
 
-  t.is(toString(value), "Var {value: 42}");
+  t.is(display(value), "Var {value: 42}");
 });

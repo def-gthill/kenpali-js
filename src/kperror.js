@@ -1,5 +1,5 @@
 import kpobject, { kpoMerge } from "./kpobject.js";
-import { Class, Instance, instanceProtocol, toString } from "./values.js";
+import { Class, display, Instance, instanceProtocol } from "./values.js";
 
 export const errorClass = new Class("Error", [instanceProtocol]);
 
@@ -97,7 +97,7 @@ export function errorToNull(f) {
  */
 export class KenpaliError extends Error {
   constructor(error, kpcallback, message = "Kenpali encountered an error") {
-    super(`${message}: ${toString(error, kpcallback)}`);
+    super(`${message}: ${display(error, kpcallback)}`);
     this.name = this.constructor.name;
     this.error = error;
     this.kpcallback = kpcallback;

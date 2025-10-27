@@ -222,8 +222,10 @@ export const booleanClass: KpClass<boolean>;
 export const numberClass: KpClass<number>;
 export const stringClass: KpClass<string>;
 export const arrayClass: KpClass<KpArray<KpValue>>;
+export const streamClass: KpClass<Stream<KpValue>>;
 export const objectClass: KpClass<KpObject<string, KpValue>>;
 export const functionClass: KpClass<KpFunction>;
+export const errorClass: KpClass<KpError>;
 export const classClass: KpClass<KpClass<KpValue>>;
 export const protocolClass: KpClass<KpProtocol<KpValue>>;
 
@@ -408,7 +410,7 @@ export function validateErrorTo(
   onFailure: (error: KpError) => void
 ): void;
 
-export function toString(value: KpValue): string;
+export function display(value: KpValue): string;
 
 export function isError(value: KpValue): value is KpError;
 

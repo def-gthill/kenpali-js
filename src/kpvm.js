@@ -21,6 +21,7 @@ import validate, {
   wrongType,
 } from "./validate.js";
 import {
+  display,
   functionName,
   instanceProtocol,
   isArray,
@@ -40,7 +41,6 @@ import {
   objectClass,
   sequenceProtocol,
   stringClass,
-  toString,
 } from "./values.js";
 
 export default function kpvm(
@@ -196,7 +196,7 @@ export class Vm {
     const result = this.run();
     if (this.trace) {
       console.log(
-        `Returning ${toString(result, kpcallbackInNewSession)} from callback`
+        `Returning ${display(result, kpcallbackInNewSession)} from callback`
       );
     }
     this.scopeFrames.pop();
@@ -217,9 +217,7 @@ export class Vm {
           `Stack: [${cutoff > 0 ? `... (${cutoff}), ` : ""}${this.stack
             .slice(cutoff)
             .map((value) =>
-              value === undefined
-                ? "-"
-                : toString(value, kpcallbackInNewSession)
+              value === undefined ? "-" : display(value, kpcallbackInNewSession)
             )
             .join(", ")}]`
         );
@@ -268,7 +266,7 @@ export class Vm {
   runValue() {
     const value = this.next();
     if (this.trace) {
-      this.logInstruction(`VALUE ${toString(value, kpcallbackInNewSession)}`);
+      this.logInstruction(`VALUE ${display(value, kpcallbackInNewSession)}`);
     }
     this.stack.push(value);
   }
@@ -1090,7 +1088,7 @@ export class Vm {
 
   throw_(error) {
     if (this.trace) {
-      console.log(toString(error, kpcallbackInNewSession));
+      console.log(display(error, kpcallbackInNewSession));
     }
     while (
       this.scopeFrames.length > 0 &&

@@ -1,10 +1,10 @@
 import {
   Class,
+  display,
   displayProtocol,
   Instance,
   instanceProtocol,
   sequenceProtocol,
-  toString,
 } from "./values.js";
 
 export const streamClass = new Class("Stream", [
@@ -21,11 +21,11 @@ export class Stream extends Instance {
 
 export class FullStream extends Stream {
   constructor(value, next) {
-    const display = (_args, _namedArgs, { kpcallback }) => {
+    const display_ = (_args, _namedArgs, { kpcallback }) => {
       let current = this;
       const elements = [];
       while (current.savedValue !== undefined) {
-        elements.push(toString(current.savedValue, kpcallback));
+        elements.push(display(current.savedValue, kpcallback));
         if (current.savedNext === undefined) {
           break;
         } else {
@@ -51,7 +51,12 @@ export class FullStream extends Stream {
       }
       return this.savedNext;
     };
-    super({ isEmpty: () => false, display, value: value_, next: next_ });
+    super({
+      isEmpty: () => false,
+      display: display_,
+      value: value_,
+      next: next_,
+    });
   }
 }
 

@@ -29,8 +29,8 @@ export function runSpecFile(
     if (only && !only.includes(description)) {
       continue;
     }
-    const actualOutputValue = functionToTest(input);
     test(description, (t) => {
+      const actualOutputValue = functionToTest(input);
       if (errorName) {
         checkErrorOutput(t, actualOutputValue, errorName, errorDetails);
       } else {

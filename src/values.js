@@ -188,17 +188,18 @@ export function equals(a, b) {
 }
 
 /**
- * Like `toString`, but throws a clear error if the value implements `Display`.
+ * Like `display`, but throws a clear error if the value implements `Display`.
  * Useful in places where a suitable `kpcallback` isn't available, and the
  * argument is known to have a narrow range of types.
  * @param value - The value to convert to a string.
  * @returns - The string representation of the value.
  */
-export function toStringSimple(value) {
-  return toString(value, (display, args, namedArgs) => {
+export function displaySimple(value) {
+  return display(value, (display, args, namedArgs) => {
     if (typeof display === "function") {
-      // Allow a few types, like Class and Protocol, to be displayed without a callback.
-      // This is useful for disassembling.
+      // A few types, like Class and Protocol, implement `display` as a plain
+      // JavaScript function, so they don't need a `kpcallback`. This is useful
+      // for disassembling.
       return display(args, namedArgs);
     } else {
       throw new Error(
@@ -208,11 +209,11 @@ export function toStringSimple(value) {
   });
 }
 
-export function toString(value, kpcallback) {
+export function display(value, kpcallback) {
   if (isArray(value)) {
     return (
       "[" +
-      value.map((element) => toString(element, kpcallback)).join(", ") +
+      value.map((element) => display(element, kpcallback)).join(", ") +
       "]"
     );
   } else if (isObject(value)) {
@@ -221,7 +222,7 @@ export function toString(value, kpcallback) {
       kpoEntries(value)
         .map(
           ([k, v]) =>
-            `${isValidName(k) ? k : `"${k}"`}: ${toString(v, kpcallback)}`
+            `${isValidName(k) ? k : `"${k}"`}: ${display(v, kpcallback)}`
         )
         .join(", ") +
       "}"
@@ -237,14 +238,14 @@ export function toString(value, kpcallback) {
       } else if (kpcallback) {
         return kpcallback(value.properties.display, [], kpobject());
       } else {
-        return `${value.class_.properties.name} ${toString(toKpobject(value.properties), kpcallback)}`;
+        return `${value.class_.properties.name} ${display(toKpobject(value.properties), kpcallback)}`;
       }
     } else {
-      return `${value.class_.properties.name} ${toString(toKpobject(value.properties), kpcallback)}`;
+      return `${value.class_.properties.name} ${display(toKpobject(value.properties), kpcallback)}`;
     }
   } else {
     return JSON.stringify(value, (key, value) =>
-      key === "" ? value : toString(value, kpcallback)
+      key === "" ? value : display(value, kpcallback)
     );
   }
 }

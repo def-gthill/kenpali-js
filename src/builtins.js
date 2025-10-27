@@ -31,7 +31,9 @@ import {
   Class,
   classClass,
   classOf,
+  display,
   displayProtocol,
+  displaySimple,
   equals,
   functionClass,
   Instance,
@@ -53,8 +55,6 @@ import {
   protocolClass,
   sequenceProtocol,
   stringClass,
-  toString,
-  toStringSimple,
   typeProtocol,
 } from "./values.js";
 
@@ -73,9 +73,9 @@ const rawBuiltins = [
     },
     function ([value, name], { debugLog, kpcallback }) {
       if (name) {
-        debugLog(`${name}: ${toString(value, kpcallback)}`);
+        debugLog(`${name}: ${display(value, kpcallback)}`);
       } else {
-        debugLog(toString(value, kpcallback));
+        debugLog(display(value, kpcallback));
       }
       return value;
     }
@@ -389,10 +389,10 @@ const rawBuiltins = [
     return isString(value);
   }),
   platformFunction(
-    "toString",
+    "display",
     { params: ["value"] },
     function ([value], { kpcallback }) {
-      return toString(value, kpcallback);
+      return display(value, kpcallback);
     }
   ),
   platformFunction("isArray", { params: ["value"] }, function ([value]) {
@@ -1065,7 +1065,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `Set {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+          `Set {elements: ${display(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
       },
     },
   }),
@@ -1136,7 +1136,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `Map {entries: ${toString(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
+          `Map {entries: ${display(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
       },
     },
   }),
@@ -1170,7 +1170,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `Var {value: ${toString(self.value, kpcallback)}}`,
+          `Var {value: ${display(self.value, kpcallback)}}`,
       },
     },
   }),
@@ -1251,7 +1251,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `MutableArray {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+          `MutableArray {elements: ${display(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
       },
     },
   }),
@@ -1321,7 +1321,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `MutableSet {elements: ${toString(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
+          `MutableSet {elements: ${display(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
       },
     },
   }),
@@ -1430,7 +1430,7 @@ const rawBuiltins = [
       },
       display: {
         body: ([self], { kpcallback }) =>
-          `MutableMap {entries: ${toString(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
+          `MutableMap {entries: ${display(kpcallback(self.properties.entries, [], kpobject()), kpcallback)}}`,
       },
     },
   }),
@@ -1916,13 +1916,11 @@ function toValue(expression) {
 
 function toKey(value) {
   if (isString(value) || isArray(value)) {
-    return toStringSimple(value);
+    return displaySimple(value);
   } else if (isObject(value)) {
     const keys = kpoKeys(value);
     keys.sort(compare);
-    return toStringSimple(
-      kpobject(...keys.map((key) => [key, value.get(key)]))
-    );
+    return displaySimple(kpobject(...keys.map((key) => [key, value.get(key)])));
   } else {
     return value;
   }

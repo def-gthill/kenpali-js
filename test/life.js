@@ -1,28 +1,26 @@
 import {
+  arrayOf,
+  booleanClass,
+  display,
+  errorClass,
+  functionClass,
+  is,
   kpcall,
   kpcatch,
   kpeval,
   kpparse,
   matches,
+  numberClass,
   toKpFunction,
-  toString,
+  tupleLike,
 } from "../index.js";
 
 const numRows = 30;
 const numCols = 30;
 
-const rowNumberSchema = {
-  type: "number",
-  where: (n) => n >= 1 && n <= numRows,
-};
-const colNumberSchema = {
-  type: "number",
-  where: (n) => n >= 1 && n <= numCols,
-};
-const liveCellsSchema = {
-  type: "array",
-  elements: { type: "array", shape: [rowNumberSchema, colNumberSchema] },
-};
+const rowNumberSchema = is(numberClass, (n) => n >= 1 && n <= numRows);
+const colNumberSchema = is(numberClass, (n) => n >= 1 && n <= numCols);
+const liveCellsSchema = arrayOf(tupleLike([rowNumberSchema, colNumberSchema]));
 
 export const defaultSetupCode = `glider = (centre) => (
   [[1, 1], [1, 0], [1, -1], [0, 1], [-1, 0]]
@@ -33,7 +31,7 @@ export const defaultSetupCode = `glider = (centre) => (
     ]
   )
 );
-[glider([5, 5]), glider([5, 10])] | flatten
+[glider([5, 5]), glider([5, 10])] | flatten | toArray
 `;
 
 export const defaultRulesCode = `(isLive) => (
@@ -56,7 +54,7 @@ export const defaultRulesCode = `(isLive) => (
 
 function newGameBoard(liveCells) {
   if (!matches(liveCells, liveCellsSchema)) {
-    return `Live cells must be an array of [rowNumber, columnNumber] pairs between [1, 1] and [${numRows}, ${numCols}]. Received: ${toString(
+    return `Live cells must be an array of [rowNumber, columnNumber] pairs between [1, 1] and [${numRows}, ${numCols}]. Received: ${display(
       liveCells
     )}`;
   }
@@ -89,14 +87,14 @@ export function updateGameBoard(oldBoard, rules) {
       };
 
       const newState = rules(isLive);
-      if (matches(newState, "error")) {
-        return toString(newState);
+      if (matches(newState, errorClass)) {
+        return display(newState);
       }
-      if (!matches(newState, "boolean")) {
-        return `Rules must return a boolean, received: ${toString(newState)}`;
+      if (!matches(newState, booleanClass)) {
+        return `Rules must return a boolean, received: ${display(newState)}`;
       }
 
-      newBoard[i][j] = rules(isLive);
+      newBoard[i][j] = newState;
     }
   }
 
@@ -108,8 +106,8 @@ function runSetup() {
   const liveCells = kpcatch(() =>
     kpeval(kpparse(code), { timeLimitSeconds: 1 })
   );
-  if (matches(liveCells, "error")) {
-    return toString(liveCells);
+  if (matches(liveCells, errorClass)) {
+    return display(liveCells);
   }
   return newGameBoard(liveCells);
 }
@@ -119,10 +117,10 @@ function setUpRules() {
   const rulesKpFunction = kpcatch(() =>
     kpeval(kpparse(code), { timeLimitSeconds: 1 })
   );
-  if (matches(rulesKpFunction, "error")) {
-    return toString(rulesKpFunction);
-  } else if (!matches(rulesKpFunction, "function")) {
-    return `Not a function: ${toString(rulesKpFunction)}`;
+  if (matches(rulesKpFunction, errorClass)) {
+    return display(rulesKpFunction);
+  } else if (!matches(rulesKpFunction, functionClass)) {
+    return `Not a function: ${display(rulesKpFunction)}`;
   } else {
     return (isLive) =>
       kpcall(
