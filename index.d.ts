@@ -131,11 +131,40 @@ export class EmptyStream {
 
 export type Stream<T extends KpValue> = FullStream<T> | EmptyStream;
 
-export function stream<T extends KpValue>(
-  value: () => T,
-  next: () => Stream<T>
-): FullStream<T>;
+/**
+ * Creates a non-empty `Stream`.
+ *
+ * Streams should generally be created using a function that captures the current
+ * internal state, and is called recursively from inside the `next` function. For example,
+ * the following imitates the core `to` function:
+ *
+ * ```javascript
+ * function to(start, end) {
+ *   return stream({
+ *     value: () => start,
+ *     next: () => start < end ? to(start + 1, end) : emptyStream(),
+ *   });
+ * }
+ * ```
+ *
+ * @param definition - The definition of the stream, an object with the following properties:
+ * - `value` - A function that returns the first value of the stream.
+ * - `next` - A function that returns a stream that generates the rest of the elements.
+ * @returns A non-empty `Stream`.
+ */
+export function stream<T extends KpValue>(definition: {
+  value: () => T;
+  next: () => Stream<T>;
+}): FullStream<T>;
 
+/**
+ * Creates an empty `Stream`.
+ *
+ * This function can be used on its own to create an empty stream, but it's
+ * also the normal way to signal that a non-empty stream has run out of elements.
+ *
+ * @returns An empty `Stream`.
+ */
 export function emptyStream(): EmptyStream;
 
 export type Sequence<T extends KpValue> =
@@ -291,15 +320,50 @@ export type Schema<T extends KpValue> =
   | OneOfSchema<T>
   | TypeWithConditionsSchema<T>;
 
+/**
+ * Creates a schema that checks whether the value has the specified type, and
+ * optionally satisfies a condition.
+ *
+ * Though the `where` parameter is optional, passing `is(<type>)` as a schema
+ * is equivalent to just passing `<type>`.
+ *
+ * @param type - The type to check against.
+ * @param where - A function that checks whether the value satisfies a condition.
+ * @returns The schema.
+ */
 export function is<T extends KpValue>(
   type: TypeSchema<T>,
   where?: (value: T) => boolean
-): Schema<T>;
+): TypeWithWhereSchema<T>;
 
+/**
+ * Creates a schema that checks whether the value is one of the specified values.
+ *
+ * This is used to simulate enum types; for example, a parameter representing a
+ * traffic light's colour could be given the schema `oneOf(["red", "green", "yellow"])`.
+ *
+ * For more general union types, use `either`.
+ *
+ * @param value - The values to check against.
+ * @returns The schema.
+ */
 export function oneOf<T extends KpValue>(value: T[]): OneOfSchema<T>;
 
+/**
+ * Creates a schema that checks for arrays with a uniform element type.
+ *
+ * To use a different schema for each element, use `tupleLike`.
+ *
+ * The `where` parameter can be added to check that the array as a whole satisfies
+ * a given condition, e.g. that it is sorted, or that its length is in a given range.
+ *
+ * @param elementSchema - The schema that each element must match.
+ * @param where - A function that checks whether the value satisfies a condition.
+ * @returns The schema.
+ */
 export function arrayOf<T extends KpValue>(
-  elementSchema: Schema<T>
+  elementSchema: Schema<T>,
+  where?: (value: KpArray<T>) => boolean
 ): ArraySchema<T>;
 
 export function tupleLike<T extends KpValue[]>(shape: {
@@ -351,20 +415,79 @@ export interface VmOptions extends CallOptions {
 
 export type EvalOptions = CompileOptions & VmOptions;
 
+/**
+ * Parses a Kenpali Code expression into a Kenpali JSON AST.
+ * @param code - The Kenpali Code expression to parse.
+ * @param options - The options for the parsing:
+ * - `trace` - Whether to print diagnostic messages to the console.
+ * @returns The Kenpali JSON AST.
+ */
 export function kpparse(code: string, options?: ParseOptions): ExpressionNode;
 
+/**
+ * Evaluates a Kenpali JSON expression. See https://www.kenpali.org/docs/json/
+ * for the details of the JSON format.
+ * @param expression - The expression to evaluate.
+ * @param options - The options for the evaluation:
+ * - `names` - Additional names to make available to the expression, as if they were
+ *   in the core library.
+ * - `modules` - Additional modules to make available to the expression via the
+ *   `<module>/<name>` syntax. The values in a module can be defined using the
+ *   `platformFunction` and `platformClass` functions, or they can be ordinary
+ *   Kenpali values.
+ * - `trace` - Whether to print diagnostic messages to the console.
+ * - `timeLimitSeconds` - The maximum time in seconds the evaluation is allowed to take.
+ * - `debugLog` - A function to call when a Kenpali program calls the `debug` function.
+ * @returns The result of the evaluation.
+ */
 export function kpeval(
   expression: ExpressionNode,
   options?: EvalOptions
 ): KpValue;
 
+/**
+ * Compiles a Kenpali JSON expression into a bytecode program.
+ * @param expression - The Kenpali JSON expression to compile.
+ * @param options - The options for the compilation:
+ * - `names` - Additional names to make available to the expression, as if they were
+ *   in the core library.
+ * - `modules` - Additional modules to make available to the expression via the
+ *   `<module>/<name>` syntax. The values in a module can be defined using the
+ *   `platformFunction` and `platformClass` functions, or they can be ordinary
+ *   Kenpali values.
+ * - `trace` - Whether to print diagnostic messages to the console.
+ * @returns The compiled bytecode program.
+ */
 export function kpcompile(
   expression: ExpressionNode,
   options?: CompileOptions
 ): KpProgram;
 
+/**
+ * Executes a Kenpali bytecode program.
+ * @param program - The Kenpali bytecode program to execute.
+ * @param options - The options for the execution:
+ * - `trace` - Whether to print diagnostic messages to the console.
+ * - `timeLimitSeconds` - The maximum time in seconds the execution is allowed to take.
+ * - `debugLog` - A function to call when a Kenpali program calls the `debug` function.
+ * @returns The result of the execution.
+ */
 export function kpvm(program: KpProgram, options: VmOptions): KpValue;
 
+/**
+ * Calls a Kenpali function.
+ *
+ * This spins up a new Kenpali VM to execute the bytecode program referenced
+ * by the function.
+ *
+ * @param f - The Kenpali function to call.
+ * @param args - The positional arguments to pass to the function.
+ * @param namedArgs - The named arguments to pass to the function.
+ * @param options - The options for the call:
+ * - `timeLimitSeconds` - The maximum time in seconds the execution is allowed to take.
+ * - `debugLog` - A function to call when a Kenpali program calls the `debug` function.
+ * @returns The result of the call.
+ */
 export function kpcall(
   f: KpFunction,
   args: KpValue[],
@@ -372,12 +495,35 @@ export function kpcall(
   options?: CallOptions
 ): KpValue;
 
+export type KpCallback = (
+  callee: KpValue,
+  args: KpArray<KpValue>,
+  namedArgs: Record<string, KpValue>
+) => KpValue;
+
+/**
+ * Wraps a JavaScript function to make it callable from Kenpali.
+ *
+ * When called from Kenpali, `f` will be passed three arguments:
+ * - `args` - An array of the positional arguments passed to the function.
+ * - `namedArgs` - A JavaScript object of the named arguments passed to the function.
+ * - `kpcallback` - A function to use when making calls to Kenpali functions.
+ *
+ * The `kpcallback` function is used in the same way as `kpcall`, but it uses the
+ * existing Kenpali VM to execute the function instead of spinning up a new one.
+ * Its main use is for calling functions passed as arguments, but some functions
+ * in the JavaScript API, such as `display`, also accept a `kpcallback` parameter
+ * to ensure that they run in the existing VM.
+ *
+ * @param f - The JavaScript function to wrap.
+ * @returns The wrapped function.
+ */
 export function toKpFunction<
   P extends KpTuple<KpValue[]>,
   K extends string,
   V extends KpValue,
 >(
-  f: (args: P, namedArgs: KpObject<K, V>, kpcallback: KpCallback) => KpValue
+  f: (args: P, namedArgs: Record<K, V>, kpcallback: KpCallback) => KpValue
 ): Callback<KpTuple<P>, KpObject<K, V>>;
 
 export function kpcatch<T>(f: () => T): T | KpError;
@@ -414,7 +560,7 @@ export function display(value: KpValue): string;
 
 export function isError(value: KpValue): value is KpError;
 
-export type KpCallback = (
+export type VmCallback = (
   callee: KpValue,
   args: KpArray<KpValue>,
   namedArgs: KpObject<string, KpValue>
@@ -423,7 +569,7 @@ export type KpCallback = (
 export type DebugLog = (message: string) => void;
 export type GetMethod = (methodName: string) => PlatformFunction;
 export type VmContext = {
-  kpcallback: KpCallback;
+  kpcallback: VmCallback;
   debugLog: DebugLog;
   getMethod: GetMethod;
 };

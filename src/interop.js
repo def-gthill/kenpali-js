@@ -2,8 +2,16 @@ import { toJsObject, toKpobject } from "./kpobject.js";
 import { kpvmCall } from "./kpvm.js";
 import { display as internalDisplay } from "./values.js";
 
-export function kpcall(kpf, args, namedArgs, { timeLimitSeconds = 0 } = {}) {
-  return kpvmCall(kpf, args, toKpobject(namedArgs), { timeLimitSeconds });
+export function kpcall(
+  kpf,
+  args,
+  namedArgs,
+  { timeLimitSeconds = 0, debugLog = console.error } = {}
+) {
+  return kpvmCall(kpf, args, toKpobject(namedArgs), {
+    timeLimitSeconds,
+    debugLog,
+  });
 }
 
 export function kpcallbackInNewSession(
@@ -22,8 +30,6 @@ export function toKpFunction(jsf) {
     );
 }
 
-export function display(value, options = { timeLimitSeconds: 10 }) {
-  return internalDisplay(value, (...args) =>
-    kpcallbackInNewSession(...args, options)
-  );
+export function display(value, kpcallback = kpcallbackInNewSession) {
+  return internalDisplay(value, kpcallback);
 }

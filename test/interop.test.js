@@ -189,3 +189,15 @@ test("We can call display on a Display value without explicitly passing a kpcall
 
   t.is(display(value), "Var {value: 42}");
 });
+
+test("We can call display from inside a JavaScript callback", (t) => {
+  const code = "(foo) => foo(bar: newVar(42))";
+  const kpf = kpeval(kpparse(code));
+  const callback = toKpFunction(([], { bar }, kpcallback) => {
+    return display(bar, kpcallback);
+  });
+
+  const result = kpcall(kpf, [callback], {});
+
+  t.is(result, "Var {value: 42}");
+});
