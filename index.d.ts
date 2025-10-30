@@ -264,121 +264,144 @@ export const protocolClass: KpClass<KpProtocol<KpValue>>;
 
 export type TypeSchema<T extends KpValue> = KpClass<T> | KpProtocol<T>;
 
-export interface TypeWithWhereSchema<T extends KpValue> {
-  type: TypeSchema<T>;
-  where: (value: T) => boolean;
+export interface EnumSchema<T extends KpValue> {
+  form: "enum";
+  values: T[];
 }
 
-export interface OneOfSchema<T extends KpValue> {
-  oneOf: T[];
+export interface UnionSchema<T extends KpValue> {
+  form: "union";
+  options: Schema<T>[];
+}
+
+export interface ConditionSchema<T extends KpValue> {
+  form: "condition";
+  schema: Schema<T>;
+  condition: (value: T) => boolean;
 }
 
 export interface ArraySchema<T extends KpValue> {
-  type: TypeSchema<KpArray<KpValue>>;
+  form: "array";
   elements: Schema<T>;
-  where?: (value: KpArray<T>) => boolean;
 }
 
 export interface TupleSchema<T extends KpValue[]> {
-  type: TypeSchema<KpArray<KpValue>>;
-  shape?: { [K in keyof T]: Schema<T[K]> | OptionalSchema<T[K]> };
-  where?: (value: KpTuple<T>) => boolean;
+  form: "tuple";
+  shape: { [K in keyof T]: Schema<T[K]> | OptionalSchema<T[K]> };
 }
 
 export interface ObjectSchema<K extends string, V extends KpValue> {
-  type: TypeSchema<KpObject<K, V>>;
+  form: "object";
   keys?: Schema<K>;
-  values?: Schema<V>;
-  where?: (value: KpObject<K, V>) => boolean;
+  values: Schema<V>;
 }
 
 export interface RecordSchema<K extends string, V extends KpValue> {
-  type: TypeSchema<KpObject<K, V>>;
+  form: "record";
   shape?: Map<K, Schema<V> | OptionalSchema<V>>;
-  where?: (value: KpObject<K, V>) => boolean;
 }
 
 export interface OptionalSchema<T extends KpValue> {
-  optional: Schema<T>;
+  form: "optional";
+  schema: Schema<T>;
 }
 
-export interface EitherSchema<T extends KpValue> {
-  either: Schema<T>[];
-}
-
-export type TypeWithConditionsSchema<T extends KpValue> =
-  | TypeWithWhereSchema<T>
+export type Schema<T extends KpValue> =
+  | TypeSchema<T>
+  | EnumSchema<T>
+  | UnionSchema<T>
+  | ConditionSchema<T>
   | (T extends KpArray<infer E> ? ArraySchema<E> : never)
   | (T extends KpTuple<infer T> ? TupleSchema<T> : never)
   | (T extends KpObject<infer K, infer V>
       ? ObjectSchema<K, V> | RecordSchema<K, V>
       : never);
 
-export type Schema<T extends KpValue> =
-  | TypeSchema<T>
-  | EitherSchema<T>
-  | OneOfSchema<T>
-  | TypeWithConditionsSchema<T>;
-
-/**
- * Creates a schema that checks whether the value has the specified type, and
- * optionally satisfies a condition.
- *
- * Though the `where` parameter is optional, passing `is(<type>)` as a schema
- * is equivalent to just passing `<type>`.
- *
- * @param type - The type to check against.
- * @param where - A function that checks whether the value satisfies a condition.
- * @returns The schema.
- */
-export function is<T extends KpValue>(
-  type: TypeSchema<T>,
-  where?: (value: T) => boolean
-): TypeWithWhereSchema<T>;
-
 /**
  * Creates a schema that checks whether the value is one of the specified values.
  *
  * This is used to simulate enum types; for example, a parameter representing a
- * traffic light's colour could be given the schema `oneOf(["red", "green", "yellow"])`.
+ * traffic light's colour could be given the schema `oneOfValues(["red", "green", "yellow"])`.
  *
  * For more general union types, use `either`.
  *
- * @param value - The values to check against.
- * @returns The schema.
+ * @param values - The values to check against.
+ * @returns The enum schema.
  */
-export function oneOf<T extends KpValue>(value: T[]): OneOfSchema<T>;
+export function oneOfValues<T extends KpValue>(values: T[]): EnumSchema<T>;
+
+/**
+ * Creates a schema that checks whether the value matches any of the specified schemas.
+ *
+ * @param schemas - The schemas to check against.
+ * @returns The union schema.
+ */
+export function either<T extends KpValue>(
+  ...schemas: Schema<T>[]
+): UnionSchema<T>;
+
+/**
+ * Creates a schema that adds an arbitrary condition to an existing schema.
+ *
+ * @param schema - The schema to add the condition to.
+ * @param condition - A predicate that the value must satisfy.
+ * @returns The condition schema.
+ */
+export function satisfying<T extends KpValue>(
+  schema: Schema<T>,
+  condition: (value: T) => boolean
+): ConditionSchema<T>;
 
 /**
  * Creates a schema that checks for arrays with a uniform element type.
  *
- * To use a different schema for each element, use `tupleLike`.
+ * To specify a different schema for each element, use `tupleLike`.
  *
- * The `where` parameter can be added to check that the array as a whole satisfies
- * a given condition, e.g. that it is sorted, or that its length is in a given range.
- *
- * @param elementSchema - The schema that each element must match.
- * @param where - A function that checks whether the value satisfies a condition.
- * @returns The schema.
+ * @param elements - The schema that all elements must match.
+ * @returns The array schema.
  */
-export function arrayOf<T extends KpValue>(
-  elementSchema: Schema<T>,
-  where?: (value: KpArray<T>) => boolean
-): ArraySchema<T>;
+export function arrayOf<T extends KpValue>(elements: Schema<T>): ArraySchema<T>;
 
+/**
+ * Creates a schema that checks for arrays with a specific schema for each element.
+ *
+ * @param shape - The array of schemas that the corresponding element must match.
+ * @returns The tuple schema.
+ */
 export function tupleLike<T extends KpValue[]>(shape: {
   [K in keyof T]: Schema<T[K]> | OptionalSchema<T[K]>;
 }): TupleSchema<T>;
 
+/**
+ * Creates a schema that checks for objects with a uniform key and value type.
+ *
+ * To specify a different schema for each property, use `recordLike`.
+ *
+ * @param keys - The schema that the keys must match.
+ * @param values - The schema that the values must match.
+ * @returns The object schema.
+ */
 export function objectOf<K extends string, V extends KpValue>(
   keys: Schema<K>,
   values: Schema<V>
 ): ObjectSchema<K, V>;
 
+/**
+ * Creates a schema that checks for objects with a specific schema for each property.
+ *
+ * @param shape - The map of schemas that the corresponding property must match.
+ * @returns The record schema.
+ */
 export function recordLike<K extends string, V extends KpValue>(
   shape: Map<K, Schema<V> | OptionalSchema<V>>
 ): RecordSchema<K, V>;
 
+/**
+ * Creates a schema that marks an array element or object property as optional.
+ *
+ * @param schema - The schema that the value must match if present.
+ * @returns The optional schema.
+ */
 export function optional<T extends KpValue>(
   schema: Schema<T>
 ): OptionalSchema<T>;

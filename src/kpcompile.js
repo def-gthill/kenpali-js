@@ -756,15 +756,31 @@ class Compiler {
   validateRecursive(schema) {
     if (schema instanceof Class || schema instanceof Protocol) {
       this.validateTypeSchema(schema);
-    } else if (isObject(schema)) {
-      if (schema.has("either")) {
-        this.validateEitherSchema(schema);
-      } else if (schema.has("oneOf")) {
-        this.validateOneOfSchema(schema);
-      } else if (schema.has("type")) {
-        this.validateTypeWithConditionsSchema(schema);
-      } else {
-        this.invalidSchema(schema);
+    } else if (isObject(schema) && schema.has("form")) {
+      switch (schema.get("form")) {
+        case "enum":
+          this.validateEnumSchema(schema);
+          break;
+        case "union":
+          this.validateUnionSchema(schema);
+          break;
+        case "condition":
+          this.validateConditionSchema(schema);
+          break;
+        case "array":
+          this.validateArraySchema(schema);
+          break;
+        case "tuple":
+          this.validateTupleSchema(schema);
+          break;
+        case "object":
+          this.validateObjectSchema(schema);
+          break;
+        case "record":
+          this.validateRecordSchema(schema);
+          break;
+        default:
+          this.invalidSchema(schema);
       }
     } else {
       this.invalidSchema(schema);
@@ -815,25 +831,9 @@ class Compiler {
     }
   }
 
-  validateEitherSchema(schema) {
+  validateEnumSchema(schema) {
     const jumpIndices = [];
-    for (const option of schema.get("either")) {
-      this.validateRecursive(option);
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
-      jumpIndices.push(this.nextInstructionIndex());
-    }
-    this.addInstruction(op.VALUE, false);
-    this.addInstruction(op.JUMP, 2);
-    for (const jumpIndex of jumpIndices) {
-      const toIndex = this.nextInstructionIndex();
-      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
-    }
-    this.addInstruction(op.VALUE, true);
-  }
-
-  validateOneOfSchema(schema) {
-    const jumpIndices = [];
-    for (const option of schema.get("oneOf")) {
+    for (const option of schema.get("values")) {
       this.addInstruction(op.ALIAS);
       this.addInstruction(op.VALUE, option);
       this.addInstruction(op.EQUALS);
@@ -849,50 +849,57 @@ class Compiler {
     this.addInstruction(op.VALUE, true);
   }
 
-  validateTypeWithConditionsSchema(schema) {
+  validateUnionSchema(schema) {
     const jumpIndices = [];
-
-    const failIfFalse = () => {
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
+    for (const option of schema.get("options")) {
+      this.validateRecursive(option);
+      this.addInstruction(op.JUMP_IF_TRUE, 0);
       jumpIndices.push(this.nextInstructionIndex());
-    };
-
-    this.validateTypeSchema(schema.get("type"));
-    failIfFalse();
-
-    if (schema.get("type") === arrayClass) {
-      if (schema.has("shape")) {
-        this.validateArrayShape(schema.get("shape"));
-        failIfFalse();
-      }
-      if (schema.has("elements")) {
-        this.validateArrayElements(schema.get("elements"));
-        failIfFalse();
-      }
-    } else if (schema.get("type") === objectClass) {
-      if (schema.has("shape")) {
-        this.validateObjectShape(schema.get("shape"));
-        failIfFalse();
-      }
-      if (schema.has("keys")) {
-        this.validateObjectKeys(schema.get("keys"));
-        failIfFalse();
-      }
-      if (schema.has("values")) {
-        this.validateObjectValues(schema.get("values"));
-        failIfFalse();
-      }
     }
-    this.addInstruction(op.VALUE, true);
+    this.addInstruction(op.VALUE, false);
     this.addInstruction(op.JUMP, 2);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.VALUE, true);
   }
 
-  validateArrayShape(shape) {
+  validateConditionSchema(schema) {
+    throw new Error("Not implemented");
+  }
+
+  validateArraySchema(schema) {
+    this.validateTypeSchema(arrayClass);
+    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    const jumpIndex = this.nextInstructionIndex();
+    this.validateArrayElements(schema.get("elements"));
+    this.addInstruction(op.JUMP_IF_TRUE, 4);
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
+    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.JUMP, 2);
+    this.addInstruction(op.VALUE, true);
+  }
+
+  validateArrayElements(schema) {
+    this.addInstruction(op.ALIAS);
+    this.addInstruction(op.ARRAY_COPY);
+    this.validateAll(schema);
+  }
+
+  validateTupleSchema(schema) {
+    this.validateTypeSchema(arrayClass);
+    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    const jumpIndex = this.nextInstructionIndex();
+    this.validateTupleShape(schema.get("shape"));
+    this.addInstruction(op.JUMP_IF_TRUE, 4);
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
+    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.JUMP, 2);
+    this.addInstruction(op.VALUE, true);
+  }
+
+  validateTupleShape(shape) {
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
@@ -903,8 +910,8 @@ class Compiler {
       this.addInstruction(op.ARRAY_IS_EMPTY);
       this.addInstruction(op.JUMP_IF_TRUE, 0);
       let subschema;
-      if (isObject(element) && element.has("optional")) {
-        subschema = element.get("optional");
+      if (isObject(element) && element.get("form") === "optional") {
+        subschema = element.get("schema");
         passJumpIndices.push(this.nextInstructionIndex());
       } else {
         subschema = element;
@@ -930,25 +937,55 @@ class Compiler {
     this.addInstruction(op.VALUE, false);
   }
 
-  validateArrayElements(schema) {
+  validateObjectSchema(schema) {
+    this.validateTypeSchema(objectClass);
+    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    const jumpIndex = this.nextInstructionIndex();
+    this.validateObjectValues(schema.get("values"));
+    this.addInstruction(op.JUMP_IF_TRUE, 4);
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
+    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.JUMP, 2);
+    this.addInstruction(op.VALUE, true);
+  }
+
+  validateObjectKeys(schema) {
     this.addInstruction(op.ALIAS);
-    this.addInstruction(op.ARRAY_COPY);
+    this.addInstruction(op.OBJECT_KEYS);
     this.validateAll(schema);
   }
 
-  validateObjectShape(shape) {
+  validateObjectValues(schema) {
+    this.addInstruction(op.ALIAS);
+    this.addInstruction(op.OBJECT_VALUES);
+    this.validateAll(schema);
+  }
+
+  validateRecordSchema(schema) {
+    this.validateTypeSchema(objectClass);
+    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    const jumpIndex = this.nextInstructionIndex();
+    this.validateRecordShape(schema.get("shape"));
+    this.addInstruction(op.JUMP_IF_TRUE, 4);
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
+    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.JUMP, 2);
+    this.addInstruction(op.VALUE, true);
+  }
+
+  validateRecordShape(shape) {
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.OBJECT_COPY);
     const failJumpIndices = [];
     for (const [key, valueSchema] of shape) {
-      if (isObject(valueSchema) && valueSchema.has("optional")) {
+      if (isObject(valueSchema) && valueSchema.get("form") === "optional") {
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         const jumpIndex = this.nextInstructionIndex();
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_POP);
-        this.validateRecursive(valueSchema.get("optional"));
+        this.validateRecursive(valueSchema.get("schema"));
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         failJumpIndices.push(this.nextInstructionIndex());
         this.setInstruction(
@@ -976,18 +1013,6 @@ class Compiler {
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
     this.addInstruction(op.VALUE, false);
-  }
-
-  validateObjectKeys(schema) {
-    this.addInstruction(op.ALIAS);
-    this.addInstruction(op.OBJECT_KEYS);
-    this.validateAll(schema);
-  }
-
-  validateObjectValues(schema) {
-    this.addInstruction(op.ALIAS);
-    this.addInstruction(op.OBJECT_VALUES);
-    this.validateAll(schema);
   }
 
   validateAll(schema) {

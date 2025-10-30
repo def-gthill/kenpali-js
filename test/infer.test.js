@@ -1,7 +1,7 @@
 import test from "ava";
 import { cast, infer } from "../src/infer.js";
 import { kpoMap } from "../src/kpobject.js";
-import { arrayOf, oneOf } from "../src/validate.js";
+import { arrayOf, oneOfValues } from "../src/validate.js";
 
 // Two main operations:
 // - infer: given an operation and schemas for all inputs, what's the output schema?
@@ -10,10 +10,10 @@ import { arrayOf, oneOf } from "../src/validate.js";
 
 // #region infer
 
-test("Inferring a literal yields a single-element oneOf", (t) => {
+test("Inferring a literal yields a single-element oneOfValues", (t) => {
   const node = { type: "literal", value: 42 };
   const result = infer(node);
-  t.deepEqual(result, oneOf([42]));
+  t.deepEqual(result, oneOfValues([42]));
 });
 
 test("Inferring a name yields the name's schema", (t) => {
@@ -49,7 +49,7 @@ const schemas = [
   { name: "a string", schema: "string" },
   { name: "an array", schema: ["number", "string"] },
   { name: "a uniform array", schema: arrayOf("number") },
-  { name: "specific values", schema: oneOf("red", "green", "blue") },
+  { name: "specific values", schema: oneOfValues("red", "green", "blue") },
 ];
 
 for (const { name, schema } of schemas) {

@@ -15,13 +15,13 @@ import validate, {
   argumentError,
   arrayOf,
   either,
-  is,
   matches,
   objectOf,
-  oneOf,
+  oneOfValues,
   optional,
   recordLike,
   returnError,
+  satisfying,
   tupleLike,
 } from "./validate.js";
 import {
@@ -1450,42 +1450,33 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "is",
-    {
-      params: [{ name: "type", type: typeProtocol }],
-      namedParams: [
-        {
-          name: "where",
-          type: either(functionClass, nullClass),
-          defaultValue: literal(null),
-        },
-      ],
-    },
-    function ([type, where]) {
-      return is(type, where);
+    "oneOfValues",
+    { params: [{ rest: "values" }] },
+    function ([values]) {
+      return oneOfValues(values);
     }
   ),
   platformFunction(
-    "oneOf",
-    { params: [{ rest: "values" }] },
-    function ([values]) {
-      return oneOf(values);
+    "either",
+    { params: [{ rest: "schemas" }] },
+    function ([schemas]) {
+      return either(...schemas);
+    }
+  ),
+  platformFunction(
+    "satisfying",
+    { params: ["schema", { name: "condition", type: functionClass }] },
+    function ([schema, condition]) {
+      return satisfying(schema, condition);
     }
   ),
   platformFunction(
     "arrayOf",
     {
-      params: ["elementSchema"],
-      namedParams: [
-        {
-          name: "where",
-          type: either(functionClass, nullClass),
-          defaultValue: literal(null),
-        },
-      ],
+      params: ["elements"],
     },
-    function ([elementSchema, where]) {
-      return arrayOf(elementSchema, where);
+    function ([elements]) {
+      return arrayOf(elements);
     }
   ),
   platformFunction(
@@ -1503,15 +1494,10 @@ const rawBuiltins = [
       namedParams: [
         { name: "keys", defaultValue: value(stringClass) },
         "values",
-        {
-          name: "where",
-          type: either(functionClass, nullClass),
-          defaultValue: literal(null),
-        },
       ],
     },
-    function ([keys, values, where]) {
-      return objectOf(keys, values, where);
+    function ([keys, values]) {
+      return objectOf(keys, values);
     }
   ),
   platformFunction(
@@ -1530,13 +1516,6 @@ const rawBuiltins = [
     },
     function ([schema]) {
       return optional(schema);
-    }
-  ),
-  platformFunction(
-    "either",
-    { params: [{ rest: "schemas" }] },
-    function ([schemas]) {
-      return either(...schemas);
     }
   ),
   platformFunction(

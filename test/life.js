@@ -4,13 +4,13 @@ import {
   display,
   errorClass,
   functionClass,
-  is,
   kpcall,
   kpcatch,
   kpeval,
   kpparse,
   matches,
   numberClass,
+  satisfying,
   toKpFunction,
   tupleLike,
 } from "../index.js";
@@ -18,8 +18,8 @@ import {
 const numRows = 30;
 const numCols = 30;
 
-const rowNumberSchema = is(numberClass, (n) => n >= 1 && n <= numRows);
-const colNumberSchema = is(numberClass, (n) => n >= 1 && n <= numCols);
+const rowNumberSchema = satisfying(numberClass, (n) => n >= 1 && n <= numRows);
+const colNumberSchema = satisfying(numberClass, (n) => n >= 1 && n <= numCols);
 const liveCellsSchema = arrayOf(tupleLike([rowNumberSchema, colNumberSchema]));
 
 export const defaultSetupCode = `glider = (centre) => (

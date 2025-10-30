@@ -18,11 +18,11 @@ import internalValidate, {
   arrayOf,
   either,
   matches as internalMatches,
-  is,
   objectOf,
-  oneOf,
+  oneOfValues,
   optional,
   recordLike,
+  satisfying,
   tupleLike,
 } from "./src/validate.js";
 import {
@@ -72,29 +72,36 @@ function validateErrorTo(value, schema, onFailure) {
   );
 }
 
-function jsIs(type, where) {
-  return toJsObject(is(type, where));
+function jsOneOfValues(values) {
+  return toJsObject(oneOfValues(values));
 }
-function jsOneOf(values) {
-  return toJsObject(oneOf(values));
+
+function jsEither(...schemas) {
+  return toJsObject(either(...schemas));
 }
-function jsArrayOf(elementSchema, where) {
-  return toJsObject(arrayOf(elementSchema, where));
+
+function jsSatisfying(schema, condition) {
+  return toJsObject(satisfying(schema, condition));
 }
+
+function jsArrayOf(elementSchema) {
+  return toJsObject(arrayOf(elementSchema));
+}
+
 function jsTupleLike(shape) {
   return toJsObject(tupleLike(shape));
 }
-function jsObjectOf(keys, values, where) {
-  return toJsObject(objectOf(keys, values, where));
+
+function jsObjectOf(keys, values) {
+  return toJsObject(objectOf(keys, values));
 }
+
 function jsRecordLike(shape) {
   return toJsObject(recordLike(shape));
 }
+
 function jsOptional(schema) {
   return toJsObject(optional(schema));
-}
-function jsEither(...schemas) {
-  return toJsObject(either(...schemas));
 }
 
 export {
@@ -113,7 +120,6 @@ export {
   FullStream,
   functionClass,
   instanceProtocol,
-  jsIs as is,
   isError,
   kpcall,
   kpcatch,
@@ -129,12 +135,13 @@ export {
   numberClass,
   objectClass,
   jsObjectOf as objectOf,
-  jsOneOf as oneOf,
+  jsOneOfValues as oneOfValues,
   jsOptional as optional,
   platformClass,
   platformFunction,
   protocolClass,
   jsRecordLike as recordLike,
+  jsSatisfying as satisfying,
   sequenceProtocol,
   stream,
   Stream,
