@@ -177,7 +177,7 @@ export type KpObject<K extends string, V extends KpValue> = Map<K, V>;
 export type Callback<
   P extends KpTuple<KpValue[]>,
   N extends KpObject<string, KpValue>,
-> = (args: P, namedArgs: N, context: VmContext) => KpValue;
+> = (posArgs: P, namedArgs: N, context: VmContext) => KpValue;
 
 export interface CompiledFunction {
   name: string;
@@ -504,7 +504,7 @@ export function kpvm(program: KpProgram, options: VmOptions): KpValue;
  * by the function.
  *
  * @param f - The Kenpali function to call.
- * @param args - The positional arguments to pass to the function.
+ * @param posArgs - The positional arguments to pass to the function.
  * @param namedArgs - The named arguments to pass to the function.
  * @param options - The options for the call:
  * - `timeLimitSeconds` - The maximum time in seconds the execution is allowed to take.
@@ -513,14 +513,14 @@ export function kpvm(program: KpProgram, options: VmOptions): KpValue;
  */
 export function kpcall(
   f: KpFunction,
-  args: KpValue[],
+  posArgs: KpValue[],
   namedArgs: Record<string, KpValue>,
   options?: CallOptions
 ): KpValue;
 
 export type KpCallback = (
   callee: KpValue,
-  args: KpArray<KpValue>,
+  posArgs: KpArray<KpValue>,
   namedArgs: Record<string, KpValue>
 ) => KpValue;
 
@@ -528,7 +528,7 @@ export type KpCallback = (
  * Wraps a JavaScript function to make it callable from Kenpali.
  *
  * When called from Kenpali, `f` will be passed three arguments:
- * - `args` - An array of the positional arguments passed to the function.
+ * - `posArgs` - An array of the positional arguments passed to the function.
  * - `namedArgs` - A JavaScript object of the named arguments passed to the function.
  * - `kpcallback` - A function to use when making calls to Kenpali functions.
  *
@@ -546,7 +546,7 @@ export function toKpFunction<
   K extends string,
   V extends KpValue,
 >(
-  f: (args: P, namedArgs: Record<K, V>, kpcallback: KpCallback) => KpValue
+  f: (posArgs: P, namedArgs: Record<K, V>, kpcallback: KpCallback) => KpValue
 ): Callback<KpTuple<P>, KpObject<K, V>>;
 
 export function kpcatch<T>(f: () => T): T | KpError;
@@ -585,7 +585,7 @@ export function isError(value: KpValue): value is KpError;
 
 export type VmCallback = (
   callee: KpValue,
-  args: KpArray<KpValue>,
+  posArgs: KpArray<KpValue>,
   namedArgs: KpObject<string, KpValue>
 ) => KpValue;
 

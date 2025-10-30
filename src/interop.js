@@ -4,11 +4,11 @@ import { display as internalDisplay } from "./values.js";
 
 export function kpcall(
   kpf,
-  args,
+  posArgs,
   namedArgs,
   { timeLimitSeconds = 0, debugLog = console.error } = {}
 ) {
-  return kpvmCall(kpf, args, toKpobject(namedArgs), {
+  return kpvmCall(kpf, posArgs, toKpobject(namedArgs), {
     timeLimitSeconds,
     debugLog,
   });
@@ -16,17 +16,17 @@ export function kpcall(
 
 export function kpcallbackInNewSession(
   kpf,
-  args,
+  posArgs,
   namedArgs,
   options = { timeLimitSeconds: 10 }
 ) {
-  return kpcall(kpf, args, namedArgs, options);
+  return kpcall(kpf, posArgs, namedArgs, options);
 }
 
 export function toKpFunction(jsf) {
-  return (args, namedArgs, { kpcallback }) =>
-    jsf(args, toJsObject(namedArgs), (callback, args, namedArgs) =>
-      kpcallback(callback, args, toKpobject(namedArgs))
+  return (posArgs, namedArgs, { kpcallback }) =>
+    jsf(posArgs, toJsObject(namedArgs), (callback, posArgs, namedArgs) =>
+      kpcallback(callback, posArgs, toKpobject(namedArgs))
     );
 }
 
