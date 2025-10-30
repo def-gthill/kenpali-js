@@ -21,7 +21,7 @@ test("Can define a module containing a platform function", (t) => {
       "bar",
       platformFunction(
         "bar",
-        { params: [{ name: "name", type: stringClass }] },
+        { posParams: [{ name: "name", type: stringClass }] },
         ([name]) => `Hello, ${name}!`
       ),
     ],

@@ -48,7 +48,7 @@ test("Can define a module containing a platform function", (t) => {
       "bar",
       platformFunction<{ pos: [string] }>(
         "bar",
-        { params: [{ name: "name", type: stringClass }] },
+        { posParams: [{ name: "name", type: stringClass }] },
         ([name]) => `Hello, ${name}!`
       ),
     ],
@@ -77,7 +77,7 @@ test("Can statically check the types of a platform function's parameters", (t) =
       "bar",
       platformFunction<{ pos: [number] }>(
         "bar",
-        { params: [{ name: "n", type: numberClass }] },
+        { posParams: [{ name: "n", type: numberClass }] },
         ([n]) => n + 1
       ),
     ],
@@ -110,7 +110,7 @@ test("Can check types of positional rest parameters", (t) => {
       "bar",
       platformFunction<{ posRest: number }>(
         "bar",
-        { params: [{ rest: { name: "n", type: arrayOf(numberClass) } }] },
+        { posParams: [{ rest: { name: "n", type: arrayOf(numberClass) } }] },
         ([args]) => args.length
       ),
     ],

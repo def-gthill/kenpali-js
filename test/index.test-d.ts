@@ -8,7 +8,7 @@ expectNotAssignable<KpProtocol<string>>(stringClass);
 expectError(
   platformFunction<{ pos: [number] }>(
     "bar",
-    { params: [{ name: "n", type: stringClass }] },
+    { posParams: [{ name: "n", type: stringClass }] },
     ([n]) => n + 1
   )
 );

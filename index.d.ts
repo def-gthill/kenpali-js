@@ -650,7 +650,7 @@ type NamedRestParamSpecFrom<T extends KpValue> = RestParamSpec<
 >;
 
 export interface ParamSpec<P extends ParamTypes> {
-  params?: [
+  posParams?: [
     ...("pos" extends keyof P ? PosParamSpecsFrom<Defined<P["pos"]>> : []),
     ...("posRest" extends keyof P
       ? [PosRestParamSpecFrom<Defined<P["posRest"]>>]

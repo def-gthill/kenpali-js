@@ -55,7 +55,7 @@ test("Names in modules can be accessed", (t) => {
     "bar",
     platformFunction(
       "bar",
-      { params: [{ name: "name", type: stringClass }] },
+      { posParams: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);
@@ -72,7 +72,7 @@ test("Local names don't shadow names in modules", (t) => {
     "bar",
     platformFunction(
       "bar",
-      { params: [{ name: "name", type: stringClass }] },
+      { posParams: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);
@@ -86,7 +86,7 @@ test("Functions in modules have type checking applied", (t) => {
     "bar",
     platformFunction(
       "bar",
-      { params: [{ name: "name", type: stringClass }] },
+      { posParams: [{ name: "name", type: stringClass }] },
       (name) => `Hello, ${name}!`
     ),
   ]);

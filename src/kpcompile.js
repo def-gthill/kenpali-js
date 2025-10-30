@@ -149,19 +149,19 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(name);
-    const { paramPattern, namedParamPattern } = getParamPatterns(expression);
-    if (paramPattern.names.length > 0) {
-      this.declareNames(paramPattern);
+    const { posParamPattern, namedParamPattern } = getParamPatterns(expression);
+    if (posParamPattern.names.length > 0) {
+      this.declareNames(posParamPattern);
     }
     if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
-    if (paramPattern.names.length > 0) {
+    if (posParamPattern.names.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
+      this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
@@ -192,19 +192,19 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(fullName);
-    const { paramPattern, namedParamPattern } = getParamPatterns(method);
-    if (paramPattern.names.length > 0) {
-      this.declareNames(paramPattern);
+    const { posParamPattern, namedParamPattern } = getParamPatterns(method);
+    if (posParamPattern.names.length > 0) {
+      this.declareNames(posParamPattern);
     }
     if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
-    if (paramPattern.names.length > 0) {
+    if (posParamPattern.names.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
+      this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);

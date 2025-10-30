@@ -62,7 +62,7 @@ const rawBuiltins = [
   platformFunction(
     "debug",
     {
-      params: [
+      posParams: [
         "value",
         {
           name: "name",
@@ -82,7 +82,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "plus",
-    { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
+    { posParams: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc + value, 0);
     }
@@ -90,7 +90,7 @@ const rawBuiltins = [
   platformFunction(
     "minus",
     {
-      params: [
+      posParams: [
         { name: "a", type: numberClass },
         { name: "b", type: numberClass },
       ],
@@ -101,28 +101,28 @@ const rawBuiltins = [
   ),
   platformFunction(
     "negative",
-    { params: [{ name: "n", type: numberClass }] },
+    { posParams: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return -n;
     }
   ),
   platformFunction(
     "up",
-    { params: [{ name: "n", type: numberClass }] },
+    { posParams: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return n + 1;
     }
   ),
   platformFunction(
     "down",
-    { params: [{ name: "n", type: numberClass }] },
+    { posParams: [{ name: "n", type: numberClass }] },
     function ([n]) {
       return n - 1;
     }
   ),
   platformFunction(
     "times",
-    { params: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
+    { posParams: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc * value, 1);
     }
@@ -130,7 +130,7 @@ const rawBuiltins = [
   platformFunction(
     "dividedBy",
     {
-      params: [
+      posParams: [
         { name: "a", type: numberClass },
         { name: "b", type: numberClass },
       ],
@@ -141,7 +141,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "oneOver",
-    { params: [{ name: "x", type: numberClass }] },
+    { posParams: [{ name: "x", type: numberClass }] },
     function ([x]) {
       return 1 / x;
     }
@@ -149,7 +149,7 @@ const rawBuiltins = [
   platformFunction(
     "quotientBy",
     {
-      params: [
+      posParams: [
         { name: "a", type: numberClass },
         { name: "b", type: numberClass },
       ],
@@ -161,7 +161,7 @@ const rawBuiltins = [
   platformFunction(
     "remainderBy",
     {
-      params: [
+      posParams: [
         { name: "a", type: numberClass },
         { name: "b", type: numberClass },
       ],
@@ -173,7 +173,7 @@ const rawBuiltins = [
   platformFunction(
     "toCodePoints",
     {
-      params: [{ name: "string", type: stringClass }],
+      posParams: [{ name: "string", type: stringClass }],
     },
     function ([string]) {
       return [...string].map((char) => char.codePointAt(0));
@@ -182,7 +182,7 @@ const rawBuiltins = [
   platformFunction(
     "fromCodePoints",
     {
-      params: [{ name: "codePoints", type: arrayOf(numberClass) }],
+      posParams: [{ name: "codePoints", type: arrayOf(numberClass) }],
     },
     function ([codePoints]) {
       return String.fromCodePoint(...codePoints);
@@ -191,7 +191,7 @@ const rawBuiltins = [
   platformFunction(
     "join",
     {
-      params: [{ name: "strings", type: either(arrayClass, streamClass) }],
+      posParams: [{ name: "strings", type: either(arrayClass, streamClass) }],
       namedParams: [
         {
           name: "on",
@@ -209,20 +209,20 @@ const rawBuiltins = [
   platformFunction(
     "split",
     {
-      params: [{ name: "string", type: stringClass }],
+      posParams: [{ name: "string", type: stringClass }],
       namedParams: [{ name: "on", type: stringClass }],
     },
     function ([string, on]) {
       return string.split(on);
     }
   ),
-  platformFunction("equals", { params: ["a", "b"] }, function ([a, b]) {
+  platformFunction("equals", { posParams: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
   platformFunction(
     "isLessThan",
     {
-      params: [
+      posParams: [
         {
           name: "a",
           type: either(numberClass, stringClass, booleanClass, arrayClass),
@@ -241,7 +241,7 @@ const rawBuiltins = [
   platformFunction(
     "isAtMost",
     {
-      params: [
+      posParams: [
         {
           name: "a",
           type: either(numberClass, stringClass, booleanClass, arrayClass),
@@ -260,7 +260,7 @@ const rawBuiltins = [
   platformFunction(
     "isMoreThan",
     {
-      params: [
+      posParams: [
         {
           name: "a",
           type: either(numberClass, stringClass, booleanClass, arrayClass),
@@ -279,7 +279,7 @@ const rawBuiltins = [
   platformFunction(
     "isAtLeast",
     {
-      params: [
+      posParams: [
         {
           name: "a",
           type: either(numberClass, stringClass, booleanClass, arrayClass),
@@ -298,7 +298,7 @@ const rawBuiltins = [
   platformFunction(
     "and",
     {
-      params: [
+      posParams: [
         { name: "first", type: booleanClass },
         { rest: { name: "rest", type: arrayOf(functionClass) } },
       ],
@@ -320,7 +320,7 @@ const rawBuiltins = [
   platformFunction(
     "or",
     {
-      params: [
+      posParams: [
         { name: "first", type: booleanClass },
         { rest: { name: "rest", type: arrayOf(functionClass) } },
       ],
@@ -341,7 +341,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "not",
-    { params: [{ name: "x", type: booleanClass }] },
+    { posParams: [{ name: "x", type: booleanClass }] },
     function ([x]) {
       return !x;
     }
@@ -360,21 +360,21 @@ const rawBuiltins = [
   constant("Sequence", value(sequenceProtocol)),
   constant("Type", value(typeProtocol)),
   constant("Any", value(anyProtocol)),
-  platformFunction("classOf", { params: ["value"] }, function ([value]) {
+  platformFunction("classOf", { posParams: ["value"] }, function ([value]) {
     return classOf(value);
   }),
-  platformFunction("isNull", { params: ["value"] }, function ([value]) {
+  platformFunction("isNull", { posParams: ["value"] }, function ([value]) {
     return value === null;
   }),
-  platformFunction("isBoolean", { params: ["value"] }, function ([value]) {
+  platformFunction("isBoolean", { posParams: ["value"] }, function ([value]) {
     return isBoolean(value);
   }),
-  platformFunction("isNumber", { params: ["value"] }, function ([value]) {
+  platformFunction("isNumber", { posParams: ["value"] }, function ([value]) {
     return isNumber(value);
   }),
   platformFunction(
     "toNumber",
-    { params: [{ name: "value", type: either(stringClass, numberClass) }] },
+    { posParams: [{ name: "value", type: either(stringClass, numberClass) }] },
     function ([value]) {
       if (isNumber(value)) {
         return value;
@@ -385,64 +385,64 @@ const rawBuiltins = [
       return parseFloat(value);
     }
   ),
-  platformFunction("isString", { params: ["value"] }, function ([value]) {
+  platformFunction("isString", { posParams: ["value"] }, function ([value]) {
     return isString(value);
   }),
   platformFunction(
     "display",
-    { params: ["value"] },
+    { posParams: ["value"] },
     function ([value], { kpcallback }) {
       return display(value, kpcallback);
     }
   ),
-  platformFunction("isArray", { params: ["value"] }, function ([value]) {
+  platformFunction("isArray", { posParams: ["value"] }, function ([value]) {
     return isArray(value);
   }),
   platformFunction(
     "toArray",
-    { params: [{ name: "value", type: sequenceProtocol }] },
+    { posParams: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toArray(value);
     }
   ),
-  platformFunction("isStream", { params: ["value"] }, function ([value]) {
+  platformFunction("isStream", { posParams: ["value"] }, function ([value]) {
     return isStream(value);
   }),
   platformFunction(
     "toStream",
-    { params: [{ name: "value", type: sequenceProtocol }] },
+    { posParams: [{ name: "value", type: sequenceProtocol }] },
     function ([value]) {
       return toStream(value);
     }
   ),
-  platformFunction("isObject", { params: ["value"] }, function ([value]) {
+  platformFunction("isObject", { posParams: ["value"] }, function ([value]) {
     return isObject(value);
   }),
-  platformFunction("isFunction", { params: ["value"] }, function ([value]) {
+  platformFunction("isFunction", { posParams: ["value"] }, function ([value]) {
     return isFunction(value);
   }),
-  platformFunction("isError", { params: ["value"] }, function ([value]) {
+  platformFunction("isError", { posParams: ["value"] }, function ([value]) {
     return isError(value);
   }),
-  platformFunction("isClass", { params: ["value"] }, function ([value]) {
+  platformFunction("isClass", { posParams: ["value"] }, function ([value]) {
     return isClass(value);
   }),
-  platformFunction("isProtocol", { params: ["value"] }, function ([value]) {
+  platformFunction("isProtocol", { posParams: ["value"] }, function ([value]) {
     return isProtocol(value);
   }),
-  platformFunction("isSequence", { params: ["value"] }, function ([value]) {
+  platformFunction("isSequence", { posParams: ["value"] }, function ([value]) {
     return isSequence(value);
   }),
-  platformFunction("isType", { params: ["value"] }, function ([value]) {
+  platformFunction("isType", { posParams: ["value"] }, function ([value]) {
     return isType(value);
   }),
-  platformFunction("isInstance", { params: ["value"] }, function ([value]) {
+  platformFunction("isInstance", { posParams: ["value"] }, function ([value]) {
     return isInstance(value);
   }),
   platformFunction(
     "if",
     {
-      params: [{ name: "condition", type: booleanClass }],
+      posParams: [{ name: "condition", type: booleanClass }],
       namedParams: [
         { name: "then", type: functionClass },
         { name: "else", type: functionClass },
@@ -459,7 +459,7 @@ const rawBuiltins = [
   platformFunction(
     "switch",
     {
-      params: [
+      posParams: [
         "value",
         {
           rest: {
@@ -484,7 +484,7 @@ const rawBuiltins = [
   platformFunction(
     "build",
     {
-      params: ["start", { name: "next", type: functionClass }],
+      posParams: ["start", { name: "next", type: functionClass }],
     },
     function ([start, next], { kpcallback }) {
       function streamFrom(state) {
@@ -522,7 +522,7 @@ const rawBuiltins = [
   platformFunction(
     "at",
     {
-      params: [
+      posParams: [
         {
           name: "collection",
           type: either(sequenceProtocol, objectClass, instanceProtocol),
@@ -573,7 +573,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "length",
-    { params: [{ name: "sequence", type: sequenceProtocol }] },
+    { posParams: [{ name: "sequence", type: sequenceProtocol }] },
     function ([sequence]) {
       if (isStream(sequence)) {
         return toArray(sequence).length;
@@ -585,7 +585,7 @@ const rawBuiltins = [
   platformFunction(
     "sort",
     {
-      params: [{ name: "sequence", type: sequenceProtocol }],
+      posParams: [{ name: "sequence", type: sequenceProtocol }],
       namedParams: [
         {
           name: "by",
@@ -613,7 +613,7 @@ const rawBuiltins = [
   platformFunction(
     "forEach",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "action", type: functionClass },
       ],
@@ -629,7 +629,7 @@ const rawBuiltins = [
   platformFunction(
     "transform",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "f", type: functionClass },
       ],
@@ -656,7 +656,7 @@ const rawBuiltins = [
   platformFunction(
     "running",
     {
-      params: [{ name: "sequence", type: sequenceProtocol }],
+      posParams: [{ name: "sequence", type: sequenceProtocol }],
       namedParams: ["start", { name: "next", type: functionClass }],
     },
     function ([in_, start, next], { kpcallback }) {
@@ -687,7 +687,7 @@ const rawBuiltins = [
   platformFunction(
     "keepFirst",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "n", type: numberClass },
       ],
@@ -719,7 +719,7 @@ const rawBuiltins = [
   platformFunction(
     "dropFirst",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "n", type: numberClass, defaultValue: literal(1) },
       ],
@@ -747,7 +747,7 @@ const rawBuiltins = [
   platformFunction(
     "while",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "condition", type: functionClass },
       ],
@@ -784,7 +784,7 @@ const rawBuiltins = [
   platformFunction(
     "continueIf",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "condition", type: functionClass },
       ],
@@ -820,7 +820,7 @@ const rawBuiltins = [
   platformFunction(
     "where",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "condition", type: functionClass },
       ],
@@ -865,7 +865,7 @@ const rawBuiltins = [
   platformFunction(
     "zip",
     {
-      params: [
+      posParams: [
         { rest: { name: "sequences", type: arrayOf(sequenceProtocol) } },
       ],
     },
@@ -895,7 +895,7 @@ const rawBuiltins = [
   platformFunction(
     "unzip",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "numStreams", type: numberClass, defaultValue: literal(2) },
       ],
@@ -923,7 +923,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "flatten",
-    { params: [{ name: "sequences", type: sequenceProtocol }] },
+    { posParams: [{ name: "sequences", type: sequenceProtocol }] },
     function ([sequences]) {
       const outer = toStream(sequences);
 
@@ -955,7 +955,7 @@ const rawBuiltins = [
   platformFunction(
     "dissect",
     {
-      params: [
+      posParams: [
         { name: "sequence", type: sequenceProtocol },
         { name: "condition", type: functionClass },
       ],
@@ -1004,7 +1004,7 @@ const rawBuiltins = [
   ),
   platformFunction(
     "keys",
-    { params: [{ name: "object", type: objectClass }] },
+    { posParams: [{ name: "object", type: objectClass }] },
     function ([object]) {
       return [...object.keys()];
     }
@@ -1012,7 +1012,7 @@ const rawBuiltins = [
   platformFunction(
     "toObject",
     {
-      params: [
+      posParams: [
         {
           name: "value",
           type: either(arrayClass, instanceProtocol),
@@ -1027,7 +1027,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newSet: {
-        params: [
+        posParams: [
           { name: "elements", type: arrayClass, defaultValue: literal([]) },
         ],
         body: ([elements], { getMethod }) => {
@@ -1060,7 +1060,7 @@ const rawBuiltins = [
           [...self.set.keys()].map((key) => self.originalKeys.get(key)),
       },
       has: {
-        params: ["element"],
+        posParams: ["element"],
         body: ([self, element]) => self.set.has(toKey(element)),
       },
       display: {
@@ -1073,7 +1073,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newMap: {
-        params: [
+        posParams: [
           {
             name: "entries",
             type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
@@ -1123,11 +1123,11 @@ const rawBuiltins = [
           ]),
       },
       has: {
-        params: ["key"],
+        posParams: ["key"],
         body: ([self, key]) => self.map.has(toKey(key)),
       },
       at: {
-        params: ["key"],
+        posParams: ["key"],
         namedParams: [optionalFunctionParameter("default")],
         body: ([self, key, default_], { kpcallback }) => {
           const realKey = toKey(key);
@@ -1144,7 +1144,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newVar: {
-        params: ["initialValue"],
+        posParams: ["initialValue"],
         body: ([initialValue], { getMethod }) => ({
           internals: {
             value: initialValue,
@@ -1162,7 +1162,7 @@ const rawBuiltins = [
         body: ([self]) => self.value,
       },
       set: {
-        params: ["newValue"],
+        posParams: ["newValue"],
         body: ([self, newValue]) => {
           self.value = newValue;
           return newValue;
@@ -1178,7 +1178,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newMutableArray: {
-        params: [
+        posParams: [
           { name: "elements", type: arrayClass, defaultValue: literal([]) },
         ],
         body: ([elements], { getMethod }) => {
@@ -1208,28 +1208,28 @@ const rawBuiltins = [
         body: ([self]) => [...self.array],
       },
       append: {
-        params: ["element"],
+        posParams: ["element"],
         body: ([self, element]) => {
           self.array.push(element);
           return self;
         },
       },
       set: {
-        params: [{ name: "index", type: numberClass }, "element"],
+        posParams: [{ name: "index", type: numberClass }, "element"],
         body: ([self, index, element]) => {
           setArray(self.array, index, element, self);
           return self;
         },
       },
       storeAt: {
-        params: ["element", { name: "index", type: numberClass }],
+        posParams: ["element", { name: "index", type: numberClass }],
         body: ([self, element, index]) => {
           setArray(self.array, index, element, self);
           return self;
         },
       },
       at: {
-        params: [{ name: "index", type: numberClass }],
+        posParams: [{ name: "index", type: numberClass }],
         namedParams: [optionalFunctionParameter("default")],
         body: ([self, index, default_], { kpcallback }) => {
           return indexArray(self.array, index, default_, kpcallback, self);
@@ -1259,7 +1259,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newMutableSet: {
-        params: [
+        posParams: [
           { name: "elements", type: arrayClass, defaultValue: literal([]) },
         ],
         body: ([elements], { getMethod }) => {
@@ -1292,7 +1292,7 @@ const rawBuiltins = [
           [...self.set.keys()].map((key) => self.originalKeys.get(key)),
       },
       add: {
-        params: ["element"],
+        posParams: ["element"],
         body: ([self, element]) => {
           const key = toKey(element);
           self.set.add(key);
@@ -1301,7 +1301,7 @@ const rawBuiltins = [
         },
       },
       remove: {
-        params: ["element"],
+        posParams: ["element"],
         body: ([self, element]) => {
           const key = toKey(element);
           self.set.delete(key);
@@ -1310,7 +1310,7 @@ const rawBuiltins = [
         },
       },
       has: {
-        params: ["element"],
+        posParams: ["element"],
         body: ([self, element]) => self.set.has(toKey(element)),
       },
       clear: {
@@ -1329,7 +1329,7 @@ const rawBuiltins = [
     protocols: [displayProtocol],
     constructors: {
       newMutableMap: {
-        params: [
+        posParams: [
           {
             name: "entries",
             type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
@@ -1383,7 +1383,7 @@ const rawBuiltins = [
           ]),
       },
       set: {
-        params: ["key", "value"],
+        posParams: ["key", "value"],
         body: ([self, key, value]) => {
           const realKey = toKey(key);
           self.map.set(realKey, value);
@@ -1392,7 +1392,7 @@ const rawBuiltins = [
         },
       },
       storeAt: {
-        params: ["value", "key"],
+        posParams: ["value", "key"],
         body: ([self, value, key]) => {
           const realKey = toKey(key);
           self.map.set(realKey, value);
@@ -1401,7 +1401,7 @@ const rawBuiltins = [
         },
       },
       remove: {
-        params: ["key"],
+        posParams: ["key"],
         body: ([self, key]) => {
           const realKey = toKey(key);
           self.map.delete(realKey);
@@ -1410,11 +1410,11 @@ const rawBuiltins = [
         },
       },
       has: {
-        params: ["key"],
+        posParams: ["key"],
         body: ([self, key]) => self.map.has(toKey(key)),
       },
       at: {
-        params: ["key"],
+        posParams: ["key"],
         namedParams: [optionalFunctionParameter("default")],
         body: ([self, key, default_], { kpcallback }) => {
           const realKey = toKey(key);
@@ -1436,7 +1436,7 @@ const rawBuiltins = [
   }),
   platformFunction(
     "validate",
-    { params: ["value", "schema"] },
+    { posParams: ["value", "schema"] },
     function ([value, schema], { kpcallback }) {
       validate(value, schema, kpcallback);
       return true;
@@ -1444,28 +1444,28 @@ const rawBuiltins = [
   ),
   platformFunction(
     "matches",
-    { params: ["value", "schema"] },
+    { posParams: ["value", "schema"] },
     function ([value, schema], { kpcallback }) {
       return matches(value, schema, kpcallback);
     }
   ),
   platformFunction(
     "oneOfValues",
-    { params: [{ rest: "values" }] },
+    { posParams: [{ rest: "values" }] },
     function ([values]) {
       return oneOfValues(values);
     }
   ),
   platformFunction(
     "either",
-    { params: [{ rest: "schemas" }] },
+    { posParams: [{ rest: "schemas" }] },
     function ([schemas]) {
       return either(...schemas);
     }
   ),
   platformFunction(
     "satisfying",
-    { params: ["schema", { name: "condition", type: functionClass }] },
+    { posParams: ["schema", { name: "condition", type: functionClass }] },
     function ([schema, condition]) {
       return satisfying(schema, condition);
     }
@@ -1473,7 +1473,7 @@ const rawBuiltins = [
   platformFunction(
     "arrayOf",
     {
-      params: ["elements"],
+      posParams: ["elements"],
     },
     function ([elements]) {
       return arrayOf(elements);
@@ -1482,7 +1482,7 @@ const rawBuiltins = [
   platformFunction(
     "tupleLike",
     {
-      params: ["shape"],
+      posParams: ["shape"],
     },
     function ([shape]) {
       return tupleLike(shape);
@@ -1503,7 +1503,7 @@ const rawBuiltins = [
   platformFunction(
     "recordLike",
     {
-      params: ["shape"],
+      posParams: ["shape"],
     },
     function ([shape]) {
       return recordLike(shape);
@@ -1512,7 +1512,7 @@ const rawBuiltins = [
   platformFunction(
     "optional",
     {
-      params: ["schema"],
+      posParams: ["schema"],
     },
     function ([schema]) {
       return optional(schema);
@@ -1521,7 +1521,7 @@ const rawBuiltins = [
   platformFunction(
     "newError",
     {
-      params: [{ name: "type", type: stringClass }],
+      posParams: [{ name: "type", type: stringClass }],
       namedParams: [{ rest: "details" }],
     },
     function ([type, details]) {
@@ -1536,8 +1536,11 @@ export function constant(name, value) {
 
 export function platformFunction(name, paramSpec, f) {
   f.functionName = name;
-  for (const property in paramSpec) {
-    f[property] = paramSpec[property];
+  if ("posParams" in paramSpec) {
+    f.posParams = paramSpec.posParams;
+  }
+  if ("namedParams" in paramSpec) {
+    f.namedParams = paramSpec.namedParams;
   }
   return f;
 }
@@ -1550,8 +1553,11 @@ function platformConstructor(name, paramSpec, f, methods) {
 
 function platformMethod(name, paramSpec, f) {
   f.methodName = name;
-  for (const property in paramSpec) {
-    f[property] = paramSpec[property];
+  if ("posParams" in paramSpec) {
+    f.posParams = paramSpec.posParams;
+  }
+  if ("namedParams" in paramSpec) {
+    f.namedParams = paramSpec.namedParams;
   }
   return f;
 }
@@ -1562,16 +1568,16 @@ export function platformClass(
 ) {
   const class_ = new Class(name, [instanceProtocol, ...protocols]);
   const methods = Object.entries(methodSpecs).map(
-    ([name, { params, namedParams, body }]) =>
-      platformMethod(name, { params, namedParams }, body)
+    ([name, { posParams, namedParams, body }]) =>
+      platformMethod(name, { posParams, namedParams }, body)
   );
   return [
     constant(name, class_),
     ...Object.entries(constructors).map(
-      ([name, { params, namedParams, body }]) =>
+      ([name, { posParams, namedParams, body }]) =>
         platformConstructor(
           name,
-          { params, namedParams },
+          { posParams, namedParams },
           (args, { getMethod }) => {
             const { internals, properties } = body(args, { getMethod });
             const instance = new Instance(class_, properties, internals);
@@ -1597,13 +1603,13 @@ function optionalFunctionParameter(name) {
 }
 
 export function getParamPatterns(f) {
-  const paramPattern = arrayPattern(
-    ...(f.params ?? []).map(toArrayNamePattern)
+  const posParamPattern = arrayPattern(
+    ...(f.posParams ?? []).map(toArrayNamePattern)
   );
   const namedParamPattern = objectPattern(
     ...(f.namedParams ?? []).map(toObjectNamePattern)
   );
-  return { paramPattern, namedParamPattern };
+  return { posParamPattern, namedParamPattern };
 }
 
 function toArrayNamePattern(param) {
