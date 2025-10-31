@@ -583,11 +583,20 @@ class Compiler {
 
   assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
     this.validate(either(arrayClass, streamClass));
+    this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
+    let existingRest = null;
     for (let i = 0; i < pattern.names.length; i++) {
       const element = pattern.names[i];
       if (typeof element === "object" && element.type === "rest") {
+        if (existingRest !== null) {
+          throw kperror("overlappingRestPatterns", [
+            "names",
+            [existingRest, element.name],
+          ]);
+        }
+        existingRest = element.name;
         this.addInstruction(op.ARRAY_CUT, pattern.names.length - i - 1);
         this.addInstruction(op.ARRAY_REVERSE);
         this.assignNames(element.name, { isArgumentPattern });
@@ -605,6 +614,7 @@ class Compiler {
       }
     }
     this.addInstruction(op.DISCARD);
+    this.addInstruction(op.DISCARD);
   }
 
   assignNamesInObjectPattern(pattern, { isArgumentPattern }) {
@@ -613,6 +623,12 @@ class Compiler {
     let rest = null;
     for (const entry of pattern.entries) {
       if (entry.type === "rest") {
+        if (rest !== null) {
+          throw kperror("overlappingRestPatterns", [
+            "names",
+            [rest, entry.name],
+          ]);
+        }
         rest = entry.name;
       } else {
         const [key, name] = entry;

@@ -402,6 +402,7 @@ export class Vm {
       }
     }
     if (value === undefined) {
+      const source = this.stack.at(-2);
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
         if (diagnostic.isArgument) {
@@ -411,14 +412,14 @@ export class Vm {
           this.throw_(
             kperror(
               "missingElement",
-              ["value", array],
+              ["value", source],
               ["name", diagnostic.name]
             )
           );
           return;
         }
       } else {
-        this.throw_(kperror("missingElement", ["value", value]));
+        this.throw_(kperror("missingElement", ["value", source]));
         return;
       }
     }
@@ -702,6 +703,15 @@ export class Vm {
       value = upvalue.value;
     } else {
       value = this.stack[upvalue.ref];
+      if (value === undefined) {
+        this.throw_(
+          kperror("nameUsedBeforeAssignment", [
+            "name",
+            this.getDiagnostic().name,
+          ])
+        );
+        return;
+      }
     }
     this.stack.push(value);
   }

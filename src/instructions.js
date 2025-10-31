@@ -3,7 +3,9 @@ import { displaySimple } from "./values.js";
 
 export const BEGIN = 0;
 export const VALUE = 1;
+// Create an alias of the top of the stack, and push it onto the stack.
 export const ALIAS = 43;
+// Pop the top of the stack and throw it away.
 export const DISCARD = 10;
 export const RESERVE = 8;
 export const WRITE_LOCAL = 7;
@@ -17,6 +19,7 @@ export const ARRAY_REVERSE = 27;
 export const ARRAY_POP = 9;
 export const ARRAY_POP_OR_DEFAULT = 19;
 export const ARRAY_CUT = 12;
+// Replace the array at the top of the stack with a copy of it, breaking any alias relationships.
 export const ARRAY_COPY = 28;
 export const ARRAY_IS_EMPTY = 47;
 export const EMPTY_OBJECT = 25;
