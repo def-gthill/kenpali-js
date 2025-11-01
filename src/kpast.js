@@ -296,9 +296,6 @@ export class TreeTransformer {
   }
 
   transformNamePattern(name) {
-    if (typeof name === "string") {
-      return this.transformStringPattern(name);
-    }
     switch (name.type) {
       case "arrayPattern":
         return this.transformArrayPattern(name);

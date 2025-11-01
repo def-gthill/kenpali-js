@@ -28,7 +28,11 @@ test("Object key syntactic sugar desugars to standard object syntax", (t) => {
   const result = desugar(expression);
   t.deepEqual(
     result,
-    object(["foo", literal(1)], ["bar", literal(2)], [name("baz"), literal(3)])
+    object(
+      [literal("foo"), literal(1)],
+      [literal("bar"), literal(2)],
+      [name("baz"), literal(3)]
+    )
   );
 });
 
