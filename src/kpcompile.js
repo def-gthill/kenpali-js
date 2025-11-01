@@ -373,11 +373,16 @@ class Compiler {
         const [key, value] = entry;
         if (typeof key === "string") {
           this.addInstruction(op.VALUE, key);
+          this.compileExpression(value);
+          this.addInstruction(op.OBJECT_PUSH);
+        } else if (key.type === "spread") {
+          this.compileExpression(value);
+          this.addInstruction(op.OBJECT_MERGE);
         } else {
           this.compileExpression(key);
+          this.compileExpression(value);
+          this.addInstruction(op.OBJECT_PUSH);
         }
-        this.compileExpression(value);
-        this.addInstruction(op.OBJECT_PUSH);
       }
     }
     if (this.trace) {
@@ -646,20 +651,40 @@ class Compiler {
         const [key, name] = entry;
         if (typeof key === "string") {
           this.addInstruction(op.VALUE, key);
+          if (typeof name === "object" && name.type === "optional") {
+            this.compileExpression(name.defaultValue);
+            this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
+            this.assignNames(name.name, { isArgument: isArgumentPattern });
+          } else {
+            this.addInstruction(op.OBJECT_POP);
+            this.addDiagnostic({
+              name: key,
+              isArgument: isArgumentPattern,
+            });
+            this.assignNames(name, { isArgument: isArgumentPattern });
+          }
+        } else if (key.type === "rest") {
+          if (rest !== null) {
+            throw kperror("overlappingRestPatterns", [
+              "names",
+              [rest, name].map((x) => this.toNamePatternString(x)),
+            ]);
+          }
+          rest = name;
         } else {
           this.compileExpression(key);
-        }
-        if (typeof name === "object" && name.type === "optional") {
-          this.compileExpression(name.defaultValue);
-          this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
-          this.assignNames(name.name, { isArgument: isArgumentPattern });
-        } else {
-          this.addInstruction(op.OBJECT_POP);
-          this.addDiagnostic({
-            name: key,
-            isArgument: isArgumentPattern,
-          });
-          this.assignNames(name, { isArgument: isArgumentPattern });
+          if (typeof name === "object" && name.type === "optional") {
+            this.compileExpression(name.defaultValue);
+            this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
+            this.assignNames(name.name, { isArgument: isArgumentPattern });
+          } else {
+            this.addInstruction(op.OBJECT_POP);
+            this.addDiagnostic({
+              name: key,
+              isArgument: isArgumentPattern,
+            });
+            this.assignNames(name, { isArgument: isArgumentPattern });
+          }
         }
       }
     }

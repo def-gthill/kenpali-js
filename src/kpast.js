@@ -34,8 +34,16 @@ export function spread(value) {
   return { type: "spread", value };
 }
 
+export function spreadKey() {
+  return { type: "spread" };
+}
+
 export function rest(name) {
   return { type: "rest", name };
+}
+
+export function restKey() {
+  return { type: "rest" };
 }
 
 export function name(name, moduleName) {
@@ -256,10 +264,10 @@ export class TreeTransformer {
     return spread(this.transformExpression(element.value));
   }
 
-  transformEntryObjectElement(element) {
+  transformEntryObjectElement([key, value]) {
     return [
-      this.transformExpression(element[0]),
-      this.transformExpression(element[1]),
+      key.type === "spread" ? key : this.transformExpression(key),
+      this.transformExpression(value),
     ];
   }
 
@@ -354,7 +362,10 @@ export class TreeTransformer {
   }
 
   transformEntryObjectPatternElement([key, pattern]) {
-    return [this.transformExpression(key), this.transformNamePattern(pattern)];
+    return [
+      key.type === "spread" ? key : this.transformExpression(key),
+      this.transformNamePattern(pattern),
+    ];
   }
 
   transformOtherObjectPatternElement(element) {

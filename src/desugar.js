@@ -24,7 +24,9 @@ import {
   pipeDot,
   pipeline,
   rest,
+  restKey,
   spread,
+  spreadKey,
   TreeTransformer,
 } from "./kpast.js";
 
@@ -92,6 +94,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         this.transformExpression(element.key),
         this.transformExpression(element.value)
       );
+    } else if (element.type === "spread") {
+      return spread(this.transformExpression(element.value));
     } else {
       return super.transformObjectElement(element);
     }
@@ -120,6 +124,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         this.transformExpression(element.key),
         this.transformNamePattern(element.value)
       );
+    } else if (element.type === "rest") {
+      return rest(this.transformNamePattern(element.name));
     } else {
       return super.transformObjectPatternElement(element);
     }
@@ -442,9 +448,14 @@ function convertPipelines(expression) {
 class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
   transformObjectElement(element) {
     if (element.type === "keyName") {
-      return this.transformEntryObjectElement([element.key.name, element.key]);
+      return this.transformEntryObjectElement([
+        literal(element.key.name),
+        element.key,
+      ]);
     } else if (element.type === "entry") {
       return this.transformEntryObjectElement([element.key, element.value]);
+    } else if (element.type === "spread") {
+      return this.transformEntryObjectElement([spreadKey(), element.value]);
     } else {
       return super.transformObjectElement(element);
     }
@@ -452,7 +463,11 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
 
   transformEntryObjectElement([key, value]) {
     const transformedKey =
-      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+      key.type === "name"
+        ? literal(key.name)
+        : key.type === "literal"
+          ? key
+          : key;
     return super.transformEntryObjectElement([transformedKey, value]);
   }
 
@@ -473,6 +488,8 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
         element.key,
         element.value,
       ]);
+    } else if (element.type === "rest") {
+      return this.transformEntryObjectPatternElement([restKey(), element.name]);
     } else {
       return super.transformObjectPatternElement(element);
     }
