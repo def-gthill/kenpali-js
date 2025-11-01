@@ -1,22 +1,13 @@
 import test from "ava";
 import { display, kpcall, toKpFunction } from "../src/interop.js";
-import {
-  block,
-  call,
-  function_,
-  index,
-  literal,
-  name,
-  optional,
-  rest,
-} from "../src/kpast.js";
 import kperror, { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
 import { assertIsError } from "./assertIsError.js";
 
 test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
-  const kpf = kpeval(function_(literal(42)));
+  const code = "$ 42";
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcall(kpf, [], {});
 
@@ -24,12 +15,8 @@ test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
 });
 
 test("Positional arguments are sent to the Kenpali function", (t) => {
-  const kpf = kpeval(
-    function_(call(name("times"), [name("x"), call(name("up"), [name("y")])]), [
-      "x",
-      "y",
-    ])
-  );
+  const code = "(x, y) => x | times(y | up)";
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcall(kpf, [3, 4], {});
 
@@ -37,9 +24,8 @@ test("Positional arguments are sent to the Kenpali function", (t) => {
 });
 
 test("Positional arguments are bound to rest parameters on the Kenpali function", (t) => {
-  const kpf = kpeval(
-    function_(call(name("length"), [name("rest")]), [rest("rest")])
-  );
+  const code = "(*rest) => length(rest)";
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcall(kpf, [1, "a", [], null], {});
 
@@ -47,19 +33,9 @@ test("Positional arguments are bound to rest parameters on the Kenpali function"
 });
 
 test("Named arguments are sent to the Kenpali function", (t) => {
-  const kpf = kpeval(
-    function_(
-      call(name("plus"), [
-        call(name("times"), [name("base"), name("multiplier")]),
-        name("bonus"),
-      ]),
-      ["base"],
-      [
-        ["multiplier", "multiplier"],
-        ["bonus", "bonus"],
-      ]
-    )
-  );
+  const code =
+    "(base, multiplier:, bonus:) => base | times(multiplier) | plus(bonus)";
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcall(kpf, [3], { bonus: 4, multiplier: 5 });
 
@@ -67,15 +43,8 @@ test("Named arguments are sent to the Kenpali function", (t) => {
 });
 
 test("Kenpali parameter defaults can reference names from the context", (t) => {
-  const kpf = kpeval(
-    block(
-      ["a", literal(5)],
-      function_(call(name("times"), [name("x"), name("y")]), [
-        "x",
-        optional("y", name("a")),
-      ])
-    )
-  );
+  const code = "a = 5; (x, y = a) => x | times(y)";
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcall(kpf, [3], {});
 
@@ -83,7 +52,8 @@ test("Kenpali parameter defaults can reference names from the context", (t) => {
 });
 
 test("Errors thrown in Kenpali are thrown from kpcall", (t) => {
-  const kpf = kpeval(function_(index(literal("foo"), name("i")), ["i"]));
+  const code = '(i) => "foo" @ i';
+  const kpf = kpeval(kpparse(code));
 
   const result = kpcatch(() => kpcall(kpf, ["bar"], {}));
 
@@ -100,7 +70,8 @@ test("A time limit can be set on a kpcall", (t) => {
 });
 
 test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t) => {
-  const kpf = kpeval(function_(call(name("callback")), ["callback"]));
+  const code = "(callback) => callback()";
+  const kpf = kpeval(kpparse(code));
   const callback = toKpFunction(() => 42);
 
   const result = kpcall(kpf, [callback], {});
@@ -109,9 +80,8 @@ test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t)
 });
 
 test("A JavaScript callback can accept positional arguments", (t) => {
-  const kpf = kpeval(
-    function_(call(name("callback"), [literal(3), literal(4)]), ["callback"])
-  );
+  const code = "(callback) => callback(3, 4)";
+  const kpf = kpeval(kpparse(code));
   const callback = toKpFunction(([x, y]) => x * (y + 1));
 
   const result = kpcall(kpf, [callback], {});
@@ -120,19 +90,8 @@ test("A JavaScript callback can accept positional arguments", (t) => {
 });
 
 test("A JavaScript callback can accept named arguments", (t) => {
-  const kpf = kpeval(
-    function_(
-      call(
-        name("callback"),
-        [literal(3)],
-        [
-          ["bonus", literal(4)],
-          ["multiplier", literal(5)],
-        ]
-      ),
-      ["callback"]
-    )
-  );
+  const code = "(callback) => callback(3, bonus: 4, multiplier: 5)";
+  const kpf = kpeval(kpparse(code));
   const callback = toKpFunction(
     ([base], { multiplier, bonus }) => base * multiplier + bonus
   );
@@ -143,11 +102,8 @@ test("A JavaScript callback can accept named arguments", (t) => {
 });
 
 test("An error thrown by a JavaScript callback throws in Kenpali", (t) => {
-  const kpf = kpeval(
-    function_(call(name("plus"), [call(name("callback")), literal(42)]), [
-      "callback",
-    ])
-  );
+  const code = "(callback) => callback() | plus(42)";
+  const kpf = kpeval(kpparse(code));
   const callback = toKpFunction(() => {
     throw kperror("someError");
   });

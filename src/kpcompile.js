@@ -512,7 +512,7 @@ class Compiler {
     this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames());
     for (const statement of statements) {
       const [pattern, expression] = statement;
-      const name = typeof pattern === "string" ? pattern : undefined;
+      const name = pattern.type === "name" ? pattern.name : undefined;
       this.compileExpression(expression, name);
       this.assignNames(pattern);
     }
@@ -522,14 +522,16 @@ class Compiler {
     const activeScope = this.activeScopes.at(-1);
     if (pattern === null) {
       return;
-    } else if (typeof pattern === "string") {
-      activeScope.declareName(pattern);
-      if (this.trace) {
-        this.log(`Declared name "${pattern}"`);
-      }
-      return;
     }
     switch (pattern.type) {
+      case "ignore":
+        break;
+      case "name":
+        activeScope.declareName(pattern.name);
+        if (this.trace) {
+          this.log(`Declared name "${pattern.name}"`);
+        }
+        break;
       case "arrayPattern":
         for (const element of pattern.names) {
           this.declareNames(element);
@@ -562,10 +564,18 @@ class Compiler {
       return;
     } else if (typeof pattern === "string") {
       this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern));
-      this.addDiagnostic({ name: pattern });
+      this.addDiagnostic({ name: this.toNamePatternString(pattern) });
       return;
     }
     switch (pattern.type) {
+      case "ignore":
+        // Expression statement, throw away the result
+        this.addInstruction(op.DISCARD);
+        break;
+      case "name":
+        this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern.name));
+        this.addDiagnostic({ name: pattern.name });
+        break;
       case "arrayPattern":
         this.assignNamesInArrayPattern(pattern, { isArgumentPattern });
         break;
@@ -593,7 +603,9 @@ class Compiler {
         if (existingRest !== null) {
           throw kperror("overlappingRestPatterns", [
             "names",
-            [existingRest, element.name],
+            [existingRest, element.name].map((x) =>
+              this.toNamePatternString(x)
+            ),
           ]);
         }
         existingRest = element.name;
@@ -607,7 +619,7 @@ class Compiler {
       } else {
         this.addInstruction(op.ARRAY_POP);
         this.addDiagnostic({
-          name: this.paramName(element),
+          name: this.toNamePatternString(element),
           isArgument: isArgumentPattern,
         });
         this.assignNames(element, { isArgument: isArgumentPattern });
@@ -626,7 +638,7 @@ class Compiler {
         if (rest !== null) {
           throw kperror("overlappingRestPatterns", [
             "names",
-            [rest, entry.name],
+            [rest, entry.name].map((x) => this.toNamePatternString(x)),
           ]);
         }
         rest = entry.name;
@@ -655,6 +667,30 @@ class Compiler {
       this.assignNames(rest, { isArgumentPattern });
     } else {
       this.addInstruction(op.DISCARD);
+    }
+  }
+
+  toNamePatternString(pattern) {
+    switch (pattern.type) {
+      case "ignore":
+        return "_";
+      case "name":
+        return pattern.name;
+      case "arrayPattern":
+        return `[${pattern.names.map((x) => this.toNamePatternString(x)).join(", ")}]`;
+      case "objectPattern":
+        const entryStrings = pattern.entries.map((entry) =>
+          Array.isArray(entry)
+            ? `${entry[0]}: ${this.toNamePatternString(entry[1])}`
+            : this.toNamePatternString(entry)
+        );
+        return `{${entryStrings.join(", ")}}`;
+      case "checked":
+      case "optional":
+      case "rest":
+        return this.toNamePatternString(pattern.name);
+      default:
+        throw kperror("invalidPattern", ["pattern", pattern]);
     }
   }
 
@@ -1061,16 +1097,6 @@ class Compiler {
 
   invalidSchema(schema) {
     throw kperror("invalidSchema", ["schema", schema]);
-  }
-
-  paramName(param) {
-    if (typeof param === "string") {
-      return param;
-    } else if ("property" in param) {
-      return param.property;
-    } else {
-      return param.name;
-    }
   }
 
   currentScope() {

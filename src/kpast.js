@@ -18,6 +18,10 @@ export function objectPattern(...entries) {
   return { type: "objectPattern", entries };
 }
 
+export function ignore() {
+  return { type: "ignore" };
+}
+
 export function checked(name, schema) {
   return { type: "checked", name, schema };
 }

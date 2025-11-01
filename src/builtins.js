@@ -2,6 +2,7 @@ import {
   arrayPattern,
   checked,
   literal,
+  name,
   objectPattern,
   optional as optionalNode,
   rest,
@@ -1614,7 +1615,7 @@ export function getParamPatterns(f) {
 
 function toArrayNamePattern(param) {
   if (typeof param === "string") {
-    return param;
+    return name(param);
   } else if ("rest" in param) {
     return rest(toNamePattern(param.rest));
   } else if ("defaultValue" in param) {
@@ -1630,15 +1631,18 @@ function toArrayNamePattern(param) {
 
 function toObjectNamePattern(param) {
   if (typeof param === "string") {
-    return [param, param];
+    return [literal(param), name(param)];
   } else if ("rest" in param) {
     return rest(toNamePattern(param.rest));
   } else if ("defaultValue" in param) {
     const { defaultValue, ...rest } = param;
-    return [param.name, optionalNode(toNamePattern(rest), defaultValue)];
+    return [
+      literal(param.name),
+      optionalNode(toNamePattern(rest), defaultValue),
+    ];
   } else if ("type" in param) {
     const { type, ...rest } = param;
-    return [param.name, checked(toNamePattern(rest), type)];
+    return [literal(param.name), checked(toNamePattern(rest), type)];
   } else {
     throw new Error(`Invalid object name pattern: ${param}`);
   }
@@ -1646,12 +1650,12 @@ function toObjectNamePattern(param) {
 
 function toNamePattern(param) {
   if (typeof param === "string") {
-    return param;
+    return name(param);
   } else if ("type" in param) {
     const { type, ...rest } = param;
     return checked(toNamePattern(rest), type);
   } else {
-    return param.name;
+    return name(param.name);
   }
 }
 

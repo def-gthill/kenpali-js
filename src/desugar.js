@@ -11,8 +11,10 @@ import {
   entry,
   function_,
   group,
+  ignore,
   index,
   keyName,
+  literal,
   objectRest,
   objectSpread,
   optional,
@@ -31,6 +33,10 @@ export default function desugar(expression) {
 
   // This step splits argument and parameter lists into positional and named elements.
   result = splitMixedLists(result);
+
+  // Kenpali Code lets you write an expression where a statement is expected.
+  // This step converts those to actual statements, with an `ignore` node as the target.
+  result = normalizeExpressionStatements(result);
 
   // Kenpali Code uses different syntax for spreads in arrays than for spreads in objects.
   // This step converts both to the single `spread` node mandated by Kenpali JSON.
@@ -240,6 +246,23 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 }
 
+class ExpressionStatementNormalizer extends SugaredTreeTransformer {
+  transformDef(def) {
+    const [name, value] = def;
+    if (name === null) {
+      return super.transformDef([ignore(), value]);
+    } else {
+      return super.transformDef(def);
+    }
+  }
+}
+
+const expressionStatementNormalizer = new ExpressionStatementNormalizer();
+
+function normalizeExpressionStatements(expression) {
+  return expressionStatementNormalizer.transformExpression(expression);
+}
+
 class MixedListSplitter extends SugaredTreeTransformer {
   transformArrow(expression) {
     return super.transformArrow(
@@ -442,8 +465,8 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
       ]);
     } else if (element.type === "keyName") {
       return this.transformEntryObjectPatternElement([
-        element.key.name,
-        element.key.name,
+        literal(element.key.name),
+        element.key,
       ]);
     } else if (element.type === "entry") {
       return this.transformEntryObjectPatternElement([
@@ -457,7 +480,13 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
 
   transformEntryObjectPatternElement([key, pattern]) {
     const transformedKey =
-      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+      key.type === "name"
+        ? literal(key.name)
+        : key.type === "literal"
+          ? key
+          : typeof key === "string"
+            ? literal(key)
+            : key;
     return super.transformEntryObjectPatternElement([transformedKey, pattern]);
   }
 }
