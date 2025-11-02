@@ -365,24 +365,14 @@ class Compiler {
       this.logNodeStart("Starting object");
     }
     this.addInstruction(op.EMPTY_OBJECT);
-    for (const entry of expression.entries) {
-      if (entry.type === "spread") {
-        this.compileExpression(entry.value);
+    for (const [key, value] of expression.entries) {
+      if (key.type === "spread") {
+        this.compileExpression(value);
         this.addInstruction(op.OBJECT_MERGE);
       } else {
-        const [key, value] = entry;
-        if (typeof key === "string") {
-          this.addInstruction(op.VALUE, key);
-          this.compileExpression(value);
-          this.addInstruction(op.OBJECT_PUSH);
-        } else if (key.type === "spread") {
-          this.compileExpression(value);
-          this.addInstruction(op.OBJECT_MERGE);
-        } else {
-          this.compileExpression(key);
-          this.compileExpression(value);
-          this.addInstruction(op.OBJECT_PUSH);
-        }
+        this.compileExpression(key);
+        this.compileExpression(value);
+        this.addInstruction(op.OBJECT_PUSH);
       }
     }
     if (this.trace) {
@@ -563,15 +553,6 @@ class Compiler {
 
   assignNames(pattern, { isArgumentPattern = false, isArgument = false } = {}) {
     const activeScope = this.activeScopes.at(-1);
-    if (pattern === null) {
-      // Expression statement, throw away the result
-      this.addInstruction(op.DISCARD);
-      return;
-    } else if (typeof pattern === "string") {
-      this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern));
-      this.addDiagnostic({ name: this.toNamePatternString(pattern) });
-      return;
-    }
     switch (pattern.type) {
       case "ignore":
         // Expression statement, throw away the result
@@ -640,6 +621,7 @@ class Compiler {
     let rest = null;
     for (const entry of pattern.entries) {
       if (entry.type === "rest") {
+        throw new Error("Is anyone still using this?");
         if (rest !== null) {
           throw kperror("overlappingRestPatterns", [
             "names",
@@ -649,21 +631,7 @@ class Compiler {
         rest = entry.name;
       } else {
         const [key, name] = entry;
-        if (typeof key === "string") {
-          this.addInstruction(op.VALUE, key);
-          if (typeof name === "object" && name.type === "optional") {
-            this.compileExpression(name.defaultValue);
-            this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
-            this.assignNames(name.name, { isArgument: isArgumentPattern });
-          } else {
-            this.addInstruction(op.OBJECT_POP);
-            this.addDiagnostic({
-              name: key,
-              isArgument: isArgumentPattern,
-            });
-            this.assignNames(name, { isArgument: isArgumentPattern });
-          }
-        } else if (key.type === "rest") {
+        if (key.type === "rest") {
           if (rest !== null) {
             throw kperror("overlappingRestPatterns", [
               "names",

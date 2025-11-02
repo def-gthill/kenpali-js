@@ -6,6 +6,7 @@ import {
   objectPattern,
   optional as optionalNode,
   rest,
+  restKey,
   value,
 } from "./kpast.js";
 import kperror, { errorClass, isError, transformError } from "./kperror.js";
@@ -1633,7 +1634,7 @@ function toObjectNamePattern(param) {
   if (typeof param === "string") {
     return [literal(param), name(param)];
   } else if ("rest" in param) {
-    return rest(toNamePattern(param.rest));
+    return [restKey(), toNamePattern(param.rest)];
   } else if ("defaultValue" in param) {
     const { defaultValue, ...rest } = param;
     return [
