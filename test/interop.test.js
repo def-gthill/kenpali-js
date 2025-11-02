@@ -125,6 +125,22 @@ test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) =
   t.is(result, 42);
 });
 
+test("An error thrown by a Kenpali callback throws in JavaScript", (t) => {
+  const code = '(callback) => callback(() => throw(newError("someError")))';
+  const kpf = kpeval(kpparse(code));
+  const callback = toKpFunction(([callback], _, kpcallback) => {
+    try {
+      return kpcallback(callback, [], {});
+    } catch (error) {
+      return 42;
+    }
+  });
+
+  const result = kpcall(kpf, [callback], {});
+
+  t.is(result, 42);
+});
+
 test("A time kpcall time limit is enforced through nested callbacks", (t) => {
   const code = "(callback) => callback(() => 1 | build(| up) | toArray)";
   const kpf = kpeval(kpparse(code));

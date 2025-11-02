@@ -1112,6 +1112,10 @@ export class Vm {
       ) {
         const callFrame = this.callFrames.pop();
         error.properties.calls.push(kpobject(["function", callFrame.name]));
+        if (callFrame.returnIndex === this.instructions.length) {
+          // We've unwound to a callback boundary, throw the error to the caller
+          throw error;
+        }
       }
     }
     if (this.scopeFrames.length === 0) {

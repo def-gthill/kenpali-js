@@ -6,9 +6,10 @@ export function kpcall(
   kpf,
   posArgs,
   namedArgs,
-  { timeLimitSeconds = 0, debugLog = console.error } = {}
+  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
 ) {
   return kpvmCall(kpf, posArgs, toKpobject(namedArgs), {
+    trace,
     timeLimitSeconds,
     debugLog,
   });

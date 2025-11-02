@@ -1530,6 +1530,37 @@ const rawBuiltins = [
       return kperror(type, ...kpoEntries(details));
     }
   ),
+  platformFunction(
+    "throw",
+    {
+      posParams: [{ name: "error", type: errorClass }],
+    },
+    function ([error]) {
+      throw error;
+    }
+  ),
+  platformFunction(
+    "try",
+    {
+      posParams: [{ name: "f", type: functionClass }],
+      namedParams: [
+        { name: "onError", type: functionClass },
+        optionalFunctionParameter("onSuccess"),
+      ],
+    },
+    function ([f, onError, onSuccess], { kpcallback }) {
+      try {
+        const result = kpcallback(f, [], kpobject());
+        if (onSuccess) {
+          return kpcallback(onSuccess, [result], kpobject());
+        } else {
+          return result;
+        }
+      } catch (error) {
+        return kpcallback(onError, [error], kpobject());
+      }
+    }
+  ),
 ];
 
 export function constant(name, value) {

@@ -137,4 +137,9 @@ merge = (objects) => (
 );
 itself = (x) => x;
 also = (value, action) => (action(value); value);
+catch = (f) => try(
+    f,
+    onSuccess: (value) => {status: "success", value:},
+    onError: (error) => {status: "error", error:},
+);
 `;
