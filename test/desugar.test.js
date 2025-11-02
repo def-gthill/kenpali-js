@@ -4,10 +4,8 @@ import {
   array,
   arraySpread,
   at,
-  bang,
   block,
   call,
-  catch_,
   function_,
   group,
   index,
@@ -52,12 +50,6 @@ test("A forward pipe desugars to a function call", (t) => {
   const expression = pipeline(name("x"), pipe(name("f")));
   const result = desugar(expression);
   t.deepEqual(result, call(name("f"), [name("x")]));
-});
-
-test("A bang operator desugars to a catching node", (t) => {
-  const expression = pipeline(name("x"), bang());
-  const result = desugar(expression);
-  t.deepEqual(result, catch_(name("x")));
 });
 
 const pipeSugared = pipeline(name("x"), pipe(name("f")));

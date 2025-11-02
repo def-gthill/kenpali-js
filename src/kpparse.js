@@ -7,7 +7,6 @@ import {
   arraySpread,
   arrow,
   at,
-  bang,
   block,
   constantFunction,
   entry,
@@ -304,8 +303,7 @@ function parsePipelineStep(parser, start) {
     parsePipeArgs,
     parsePipeDot,
     parsePipe,
-    parseAt,
-    parseBang
+    parseAt
   )(parser, start);
 }
 
@@ -343,10 +341,6 @@ function parseAt(parser, start) {
     [consume("AT", "expectedAt"), parseTightPipeline],
     at
   )(parser, start);
-}
-
-function parseBang(parser, start) {
-  return convert(consume("BANG", "expectedBang"), bang)(parser, start);
 }
 
 function parseArrowFunction(parser, start) {

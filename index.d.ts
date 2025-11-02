@@ -95,11 +95,6 @@ export interface IndexNode {
   index: ExpressionNode;
 }
 
-export interface CatchNode {
-  type: "catch";
-  expression: ExpressionNode;
-}
-
 export type ExpressionNode =
   | LiteralNode
   | ArrayNode
@@ -108,8 +103,7 @@ export type ExpressionNode =
   | BlockNode
   | FunctionNode
   | CallNode
-  | IndexNode
-  | CatchNode;
+  | IndexNode;
 
 //#endregion
 

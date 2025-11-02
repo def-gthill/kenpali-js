@@ -76,7 +76,7 @@ test("A time limit can be set on execution", (t) => {
 });
 
 test("The time limit can't be subverted just by catching the error", (t) => {
-  const code = `1 | build(| up !) | toArray`;
+  const code = `1 | build((i) => try($ i | up, onError: $ 1)) | toArray`;
   const result = kpcatch(() =>
     kpeval(kpparse(code), { timeLimitSeconds: 0.1 })
   );

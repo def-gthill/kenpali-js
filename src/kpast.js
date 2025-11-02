@@ -86,10 +86,6 @@ export function index(collection, index) {
   return { type: "index", collection, index };
 }
 
-export function catch_(expression) {
-  return { type: "catch", expression };
-}
-
 //#region Syntactic sugar
 
 export function group(expression) {
@@ -146,10 +142,6 @@ export function pipe(callee) {
 
 export function at(index) {
   return { type: "at", index };
-}
-
-export function bang() {
-  return { type: "bang" };
 }
 
 export function keyName(key) {
@@ -209,8 +201,6 @@ export class TreeTransformer {
         return this.transformCall(expression);
       case "index":
         return this.transformIndex(expression);
-      case "catch":
-        return this.transformCatch(expression);
       default:
         return this.transformOtherExpression(expression);
     }
@@ -411,10 +401,6 @@ export class TreeTransformer {
       this.transformExpression(expression.collection),
       this.transformExpression(expression.index)
     );
-  }
-
-  transformCatch(expression) {
-    return catch_(this.transformExpression(expression.expression));
   }
 
   transformOtherExpression(expression) {

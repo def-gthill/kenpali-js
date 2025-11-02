@@ -326,9 +326,6 @@ class Compiler {
       case "index":
         this.compileIndex(expression);
         break;
-      case "catch":
-        this.compileCatch(expression);
-        break;
       case "value":
         this.compileValue(expression);
         break;

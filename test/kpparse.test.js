@@ -4,7 +4,6 @@ import {
   array,
   arraySpread,
   at,
-  bang,
   entry,
   group,
   literal,
@@ -45,12 +44,9 @@ test("An expression in parentheses parses to a group node", (t) => {
 });
 
 test("A pipeline parses to a pipeline node", (t) => {
-  const code = "a | b ! @ c !";
+  const code = "a | b @ c";
   const result = kpparseSugared(code);
-  t.deepEqual(
-    result,
-    pipeline(name("a"), pipe(name("b")), bang(), at(name("c")), bang())
-  );
+  t.deepEqual(result, pipeline(name("a"), pipe(name("b")), at(name("c"))));
 });
 
 test("An array spread operator in an array parses to an arraySpread node", (t) => {

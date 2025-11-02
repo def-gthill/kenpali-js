@@ -6,7 +6,6 @@ import {
   arrow,
   at,
   call,
-  catch_,
   constantFunction,
   entry,
   function_,
@@ -205,8 +204,6 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformPipeStep(step);
       case "at":
         return this.transformAtStep(step);
-      case "bang":
-        return this.transformBangStep(step);
       default:
         return this.transformOtherStep(step);
     }
@@ -427,9 +424,6 @@ class PipelineTransformer extends SugaredTreeTransformer {
           break;
         case "at":
           axis = index(axis, step.index);
-          break;
-        case "bang":
-          axis = catch_(axis);
           break;
         default:
           throw new Error(`Invalid pipeline step type "${step.type}"`);
