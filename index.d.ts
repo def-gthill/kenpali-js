@@ -1,49 +1,5 @@
 //#region AST nodes
 
-export interface CheckedNode {
-  type: "checked";
-  name: NamePatternNode;
-  schema: Schema<KpValue>;
-}
-
-export interface OptionalNode {
-  type: "optional";
-  name: NamePatternNode;
-  defaultValue: ExpressionNode;
-}
-
-export interface RestNode {
-  type: "rest";
-  name: NamePatternNode;
-}
-
-export type ArrayPatternElement = OptionalNode | RestNode | NamePatternNode;
-
-export interface ArrayPatternNode {
-  type: "arrayPattern";
-  names: ArrayPatternElement[];
-}
-
-export type ObjectPatternEntry =
-  | RestNode
-  | [ExpressionNode, OptionalNode | NamePatternNode];
-
-export interface ObjectPatternNode {
-  type: "objectPattern";
-  entries: ObjectPatternEntry[];
-}
-
-export type NamePatternNode =
-  | string
-  | CheckedNode
-  | ArrayPatternNode
-  | ObjectPatternNode;
-
-export interface SpreadNode {
-  type: "spread";
-  value: ExpressionNode;
-}
-
 export interface LiteralNode {
   type: "literal";
   value: KpValue;
@@ -56,11 +12,62 @@ export interface ArrayNode {
   elements: ArrayElement[];
 }
 
-export type ObjectEntry = SpreadNode | [ExpressionNode, ExpressionNode];
+export type ArrayPatternElement = OptionalNode | RestNode | NamePatternNode;
+
+export interface ArrayPatternNode {
+  type: "arrayPattern";
+  names: ArrayPatternElement[];
+}
+
+export type ObjectEntry = [ExpressionNode | SpreadKeyNode, ExpressionNode];
 
 export interface ObjectNode {
   type: "object";
   entries: ObjectEntry[];
+}
+
+export type ObjectPatternEntry = [
+  ExpressionNode | RestKeyNode,
+  OptionalNode | NamePatternNode,
+];
+
+export interface ObjectPatternNode {
+  type: "objectPattern";
+  entries: ObjectPatternEntry[];
+}
+
+export interface IgnoreNode {
+  type: "ignore";
+}
+
+export interface CheckedNode {
+  type: "checked";
+  name: NamePatternNode;
+  schema: Schema<KpValue>;
+}
+
+export interface OptionalNode {
+  type: "optional";
+  name: NamePatternNode;
+  defaultValue: ExpressionNode;
+}
+
+export interface SpreadNode {
+  type: "spread";
+  value: ExpressionNode;
+}
+
+export interface SpreadKeyNode {
+  type: "spreadKey";
+}
+
+export interface RestNode {
+  type: "rest";
+  name: NamePatternNode;
+}
+
+export interface RestKeyNode {
+  type: "restKey";
 }
 
 export interface NameNode {
@@ -74,6 +81,13 @@ export interface BlockNode {
   defs: [null | NamePatternNode, ExpressionNode][];
   result: ExpressionNode;
 }
+
+export type NamePatternNode =
+  | IgnoreNode
+  | NameNode
+  | CheckedNode
+  | ArrayPatternNode
+  | ObjectPatternNode;
 
 export interface FunctionNode {
   type: "function";
