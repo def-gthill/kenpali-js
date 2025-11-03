@@ -2,18 +2,15 @@ import test from "ava";
 import { platformFunction } from "../src/builtins.js";
 import { block, call, literal, name } from "../src/kpast.js";
 import kpcompile from "../src/kpcompile.js";
-import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import { stringClass } from "../src/values.js";
-import { assertIsError } from "./assertIsError.js";
+import { assertThrows } from "./assertThrows.js";
 
 test("Evaluating null returns an error", (t) => {
   const expression = null;
 
-  const result = kpcatch(() => kpcompile(expression));
-
-  assertIsError(t, result, "notAnExpression");
+  assertThrows(t, () => kpcompile(expression), "notAnExpression");
 });
 
 test("Names in modules can be accessed", (t) => {
@@ -57,11 +54,13 @@ test("Functions in modules have type checking applied", (t) => {
       (name) => `Hello, ${name}!`
     ),
   ]);
-  const result = kpcatch(() =>
-    kpeval(ast, { modules: kpobject(["foo", fooModule]) })
+  assertThrows(
+    t,
+    () => kpeval(ast, { modules: kpobject(["foo", fooModule]) }),
+    "wrongArgumentType",
+    {
+      value: 42,
+      expectedType: "String",
+    }
   );
-  assertIsError(t, result, "wrongArgumentType", {
-    value: 42,
-    expectedType: "String",
-  });
 });

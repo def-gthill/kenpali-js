@@ -198,11 +198,6 @@ export type NaturalFunction = CompiledFunction & { isPlatform: false };
 
 export type KpFunction = Callback<never, never> | CompiledFunction;
 
-export interface KpError {
-  error: string;
-  details: KpObject<string, KpValue>;
-}
-
 export class KpInstance<T extends KpValue, P extends object> {
   class_: KpClass<T>;
   properties: P;
@@ -227,6 +222,21 @@ export class KpClass<T extends KpValue> extends KpInstance<
   }
 > {
   constructor(name: string, protocols: KpProtocol<KpValue>[]);
+}
+
+export class KpError extends KpInstance<
+  KpError,
+  {
+    type: string;
+    details: KpObject<string, KpValue>;
+    calls: KpObject<string, string>[];
+  }
+> {
+  constructor(
+    type: string,
+    details: KpObject<string, KpValue>,
+    calls: KpObject<string, string>[]
+  );
 }
 
 export type KpValue =
@@ -557,13 +567,38 @@ export function toKpFunction<
   f: (posArgs: P, namedArgs: Record<K, V>, kpcallback: KpCallback) => KpValue
 ): Callback<KpTuple<P>, KpObject<K, V>>;
 
-export function kpcatch<T>(f: () => T): T | KpError;
+/**
+ * Calls the specified function, then invokes one of the specified handlers
+ * depending on whether the function threw an error.
+ *
+ * This mimics how the `try` function works in Kenpali.
+ *
+ * @param f - The function to call.
+ * @param onError - The handler to invoke if the function threw an error.
+ * @param onSuccess - The handler to invoke if the function returned a value; if not
+ *   specified, the value returned by `f` is returned.
+ * @returns The result of the appropriate handler.
+ */
+export function kptry<T>(f: () => T, onError: (error: KpError) => T): T;
+export function kptry<T, R>(
+  f: () => T,
+  onError: (error: KpError) => R,
+  onSuccess: (value: T) => R
+): R;
 
-export function foldError(
-  f: () => KpValue,
-  onSuccess: (value: KpValue) => KpValue,
-  onFailure: (error: KpError) => KpValue
-): KpValue;
+/**
+ * Calls the specified function, then returns a tagged object containing the successful
+ * value or the error thrown by the function.
+ *
+ * This mimics how the `catch` function works in Kenpali.
+ *
+ * @param f - The function to call.
+ * @returns `{ status: "success", value: <result> } if the function returned `<result>`,
+ *   or { status: "error", error: <error> } if the function threw `<error>`.
+ */
+export function kpcatch<T>(
+  f: () => T
+): { status: "success"; value: T } | { status: "error"; error: KpError };
 
 export function kpobject<K extends string, V extends KpValue>(
   ...entries: [NoInfer<K>, NoInfer<V>][]
@@ -575,17 +610,6 @@ export function matches<T extends KpValue>(
 ): value is T;
 
 export function validate(value: KpValue, schema: Schema<KpValue>): void;
-
-export function validateCatching(
-  value: KpValue,
-  schema: Schema<KpValue>
-): KpError | null;
-
-export function validateErrorTo(
-  value: KpValue,
-  schema: Schema<KpValue>,
-  onFailure: (error: KpError) => void
-): void;
 
 export function display(value: KpValue): string;
 

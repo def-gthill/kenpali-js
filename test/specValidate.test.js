@@ -1,6 +1,5 @@
 import { fromString } from "../src/builtins.js";
 import kpcompile from "../src/kpcompile.js";
-import { kpcatch } from "../src/kperror.js";
 import kpparse from "../src/kpparse.js";
 import kpvm from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
@@ -10,15 +9,14 @@ const specPath = "../kenpali/kenpali-validate.md";
 
 runSpecFile(
   specPath,
-  (code) =>
-    kpcatch(() => {
-      const ast = kpparse(code);
-      const program = kpcompile(ast);
-      // const program = kpcompile(ast, { trace: true });
-      const result = kpvm(program);
-      // const result = kpvm(program, { trace: true });
-      return result;
-    }),
+  (code) => {
+    const ast = kpparse(code);
+    const program = kpcompile(ast);
+    // const program = kpcompile(ast, { trace: true });
+    const result = kpvm(program);
+    // const result = kpvm(program, { trace: true });
+    return result;
+  },
   (t, actualOutputValue, expectedOutput) => {
     const expectedOutputValue = fromString(expectedOutput);
     t.deepEqual(actualOutputValue, expectedOutputValue);

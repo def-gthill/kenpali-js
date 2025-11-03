@@ -2,8 +2,13 @@ import test from "ava";
 import * as tsdModule from "tsd";
 import {
   arrayOf,
+  errorClass,
+  kpcatch,
   kpeval,
   kpobject,
+  kpparse,
+  kptry,
+  matches,
   numberClass,
   platformFunction,
   stringClass,
@@ -117,4 +122,23 @@ test("Can check types of positional rest parameters", (t) => {
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, 2);
+});
+
+test("Can try a Kenpali function", (t) => {
+  const code = 'throw(newError("someError"))';
+  const result = kptry(
+    () => kpeval(kpparse(code)),
+    (error) => error.properties.type
+  );
+  t.is(result, "someError");
+});
+
+test("Can catch errors thrown by Kenpali code", (t) => {
+  const code = 'throw(newError("someError"))';
+  const result = kpcatch(() => kpeval(kpparse(code)));
+  if (result.status === "error") {
+    t.assert(matches(result.error, errorClass));
+  } else {
+    t.fail("Result is not an error");
+  }
 });

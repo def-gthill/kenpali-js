@@ -33,58 +33,41 @@ export function withDetails(err, ...newDetails) {
   );
 }
 
-export function kpcatch(f) {
+export function kptry(f, onError, onSuccess) {
   try {
-    return f();
+    const result = f();
+    if (onSuccess) {
+      return onSuccess(result);
+    } else {
+      return result;
+    }
   } catch (error) {
     if (isError(error)) {
-      return error;
+      return onError(error);
     } else if (error instanceof KenpaliError) {
-      return error.error;
+      return onError(error.error);
     } else {
       throw error;
     }
   }
+}
+
+export function kpcatch(f) {
+  return kptry(
+    f,
+    (error) => ({ status: "error", error }),
+    (result) => ({ status: "success", value: result })
+  );
 }
 
 export function transformError(f, transform) {
-  try {
-    return f();
-  } catch (error) {
-    if (isError(error)) {
+  return kptry(
+    f,
+    (error) => {
       throw transform(error);
-    } else if (error instanceof KenpaliError) {
-      throw new KenpaliError(transform(error.error), error.kpcallback);
-    } else {
-      throw error;
-    }
-  }
-}
-
-export function foldError(f, onSuccess, onFailure) {
-  try {
-    return onSuccess(f());
-  } catch (error) {
-    if (isError(error)) {
-      return onFailure(error);
-    } else if (error instanceof KenpaliError) {
-      return onFailure(error.error);
-    } else {
-      throw error;
-    }
-  }
-}
-
-export function errorToNull(f) {
-  try {
-    return f();
-  } catch (error) {
-    if (isError(error) || error instanceof KenpaliError) {
-      return null;
-    } else {
-      throw error;
-    }
-  }
+    },
+    (result) => result
+  );
 }
 
 /**

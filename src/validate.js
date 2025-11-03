@@ -1,6 +1,6 @@
 import kperror, {
-  foldError,
   kpcatch,
+  kptry,
   transformError,
   withDetails,
   withErrorType,
@@ -82,8 +82,8 @@ function validateUnionSchema(value, schema, kpcallback) {
   const errors = [];
   for (const option of options) {
     const result = kpcatch(() => validate(value, option, kpcallback));
-    if (result) {
-      errors.push(result);
+    if (result.status === "error") {
+      errors.push(result.error);
     } else {
       return;
     }
@@ -201,10 +201,10 @@ function validateRecordShape(value, shape, kpcallback) {
 }
 
 export function matches(value, schema, kpcallback) {
-  return foldError(
+  return kptry(
     () => validate(value, schema, kpcallback),
-    () => true,
-    () => false
+    () => false,
+    () => true
   );
 }
 

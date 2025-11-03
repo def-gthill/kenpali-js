@@ -1,8 +1,9 @@
 import test from "ava";
 import * as op from "../src/instructions.js";
-import kperror, { kpcatch } from "../src/kperror.js";
+import kperror from "../src/kperror.js";
 import { Vm } from "../src/kpvm.js";
 import { assertIsError } from "./assertIsError.js";
+import { assertThrows } from "./assertThrows.js";
 
 test("The VALUE instruction pushes its argument onto the stack", (t) => {
   const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97] });
@@ -128,8 +129,7 @@ test("The THROW instruction throws the value on the top of the stack", (t) => {
     ],
   });
 
-  const error = kpcatch(() => vm.run());
-  assertIsError(t, error, "bad", {});
+  assertThrows(t, () => vm.run(), "bad");
   t.deepEqual(vm.stack, []);
 });
 
@@ -163,7 +163,6 @@ test("The UNCATCH instruction cancels the last CATCH", (t) => {
     ],
   });
 
-  const error = kpcatch(() => vm.run());
-  assertIsError(t, error, "bad", {});
+  assertThrows(t, () => vm.run(), "bad");
   t.deepEqual(vm.stack, []);
 });

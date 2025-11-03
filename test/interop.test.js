@@ -1,9 +1,9 @@
 import test from "ava";
 import { display, kpcall, toKpFunction } from "../src/interop.js";
-import kperror, { kpcatch } from "../src/kperror.js";
+import kperror from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
-import { assertIsError } from "./assertIsError.js";
+import { assertThrows } from "./assertThrows.js";
 
 test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
   const code = "$ 42";
@@ -55,18 +55,18 @@ test("Errors thrown in Kenpali are thrown from kpcall", (t) => {
   const code = '(i) => "foo" @ i';
   const kpf = kpeval(kpparse(code));
 
-  const result = kpcatch(() => kpcall(kpf, ["bar"], {}));
-
-  assertIsError(t, result, "wrongType");
+  assertThrows(t, () => kpcall(kpf, ["bar"], {}), "wrongType");
 });
 
 test("A time limit can be set on a kpcall", (t) => {
   const code = "() => 1 | build(| up) | toArray";
   const kpf = kpeval(kpparse(code));
 
-  const result = kpcatch(() => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }));
-
-  assertIsError(t, result, "timeLimitExceeded");
+  assertThrows(
+    t,
+    () => kpcall(kpf, [], {}, { timeLimitSeconds: 0.1 }),
+    "timeLimitExceeded"
+  );
 });
 
 test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t) => {
@@ -108,9 +108,7 @@ test("An error thrown by a JavaScript callback throws in Kenpali", (t) => {
     throw kperror("someError");
   });
 
-  const result = kpcatch(() => kpcall(kpf, [callback], {}));
-
-  assertIsError(t, result, "someError");
+  assertThrows(t, () => kpcall(kpf, [callback], {}), "someError");
 });
 
 test("A JavaScript callback can call a Kenpali callback using kpcallback", (t) => {
@@ -148,11 +146,11 @@ test("A time kpcall time limit is enforced through nested callbacks", (t) => {
     kpcallback(callback, [], {})
   );
 
-  const result = kpcatch(() =>
-    kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 })
+  assertThrows(
+    t,
+    () => kpcall(kpf, [callback], {}, { timeLimitSeconds: 0.1 }),
+    "timeLimitExceeded"
   );
-
-  assertIsError(t, result, "timeLimitExceeded");
 });
 
 test("We can call display on a Display value without explicitly passing a kpcallback", (t) => {

@@ -9,7 +9,7 @@ import * as op from "./instructions.js";
 import kperror, {
   isError,
   KenpaliError,
-  kpcatch,
+  kptry,
   transformError,
 } from "./kperror.js";
 import kpobject, { kpoEntries } from "./kpobject.js";
@@ -830,12 +830,15 @@ export class Vm {
       this.throw_(wrongType(index, numberClass));
       return;
     }
-    const result = kpcatch(() => indexArray(array, index));
-    if (isError(result)) {
-      this.throw_(result);
-      return;
-    }
-    this.stack.push(result);
+    kptry(
+      () => indexArray(array, index),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
   }
 
   indexStream(stream, index) {
@@ -845,13 +848,15 @@ export class Vm {
       }
       this.pushCallFrame("$indexStream");
       if (index < 0) {
-        const result = kpcatch(() => indexArray(toArray(stream), index));
-        if (isError(result)) {
-          this.throw_(result);
-          return;
-        } else {
-          this.stack.push(result);
-        }
+        kptry(
+          () => indexArray(toArray(stream), index),
+          (error) => {
+            this.throw_(error);
+          },
+          (result) => {
+            this.stack.push(result);
+          }
+        );
       } else if (index > 0) {
         let last;
         let current = stream;
@@ -896,12 +901,15 @@ export class Vm {
       this.throw_(wrongType(index, stringClass));
       return;
     }
-    const result = kpcatch(() => indexMapping(object, index));
-    if (isError(result)) {
-      this.throw_(result);
-      return;
-    }
-    this.stack.push(result);
+    kptry(
+      () => indexMapping(object, index),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
   }
 
   indexInstance(instance, index) {
@@ -909,12 +917,15 @@ export class Vm {
       this.throw_(wrongType(index, stringClass));
       return;
     }
-    const result = kpcatch(() => indexInstance(instance, index));
-    if (isError(result)) {
-      this.throw_(result);
-      return;
-    }
-    this.stack.push(result);
+    kptry(
+      () => indexInstance(instance, index),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
   }
 
   runThrow() {

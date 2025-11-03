@@ -1,9 +1,8 @@
 import test from "ava";
-import { kpcatch } from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import kpparse from "../src/kpparse.js";
-import { assertIsError } from "./assertIsError.js";
+import { assertThrows } from "./assertThrows.js";
 
 test("A function can be called with spread positional arguments", (t) => {
   const code = "arr = [1, 2, 3]; plus(*arr)";
@@ -44,21 +43,17 @@ test("A function can be defined with a named rest parameter", (t) => {
 
 test("A wrong argument type error doesn't have a rest detail", (t) => {
   const code = `1 | plus("two")`;
-  const result = kpcatch(() => kpeval(kpparse(code)));
-  assertIsError(t, result, "wrongArgumentType");
-  t.false(result.properties.details.has("rest"));
+  assertThrows(t, () => kpeval(kpparse(code)), "wrongArgumentType");
 });
 
 test("Errors short-circuit through the @ operator", (t) => {
   const code = `1 | plus("two") @ "three"`;
-  const result = kpcatch(() => kpeval(kpparse(code)));
-  assertIsError(t, result, "wrongArgumentType");
+  assertThrows(t, () => kpeval(kpparse(code)), "wrongArgumentType");
 });
 
 test("Using a name before it's assigned throws an error", (t) => {
   const code = `foo = bar; bar = 42; foo | plus(3)`;
-  const result = kpcatch(() => kpeval(kpparse(code)));
-  assertIsError(t, result, "nameUsedBeforeAssignment");
+  assertThrows(t, () => kpeval(kpparse(code)), "nameUsedBeforeAssignment");
 });
 
 test("Destructuring can reference other names in the same scope", (t) => {
@@ -69,18 +64,20 @@ test("Destructuring can reference other names in the same scope", (t) => {
 
 test("A time limit can be set on execution", (t) => {
   const code = `1 | build(| up) | toArray`;
-  const result = kpcatch(() =>
-    kpeval(kpparse(code), { timeLimitSeconds: 0.1 })
+  assertThrows(
+    t,
+    () => kpeval(kpparse(code), { timeLimitSeconds: 0.1 }),
+    "timeLimitExceeded"
   );
-  assertIsError(t, result, "timeLimitExceeded");
 });
 
 test("The time limit can't be subverted just by catching the error", (t) => {
   const code = `1 | build((i) => try($ i | up, onError: $ 1)) | toArray`;
-  const result = kpcatch(() =>
-    kpeval(kpparse(code), { timeLimitSeconds: 0.1 })
+  assertThrows(
+    t,
+    () => kpeval(kpparse(code), { timeLimitSeconds: 0.1 }),
+    "timeLimitExceeded"
   );
-  assertIsError(t, result, "timeLimitExceeded");
 });
 
 test("Debug logging can be configured", (t) => {

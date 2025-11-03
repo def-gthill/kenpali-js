@@ -1,7 +1,7 @@
 import { platformClass, platformFunction } from "./src/builtins.js";
 import { kpcall, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
-import { errorClass, foldError, isError, kpcatch } from "./src/kperror.js";
+import { errorClass, isError, kpcatch, kptry } from "./src/kperror.js";
 import kpeval from "./src/kpeval.js";
 import kpobject, { deepToKpobject, toJsObject } from "./src/kpobject.js";
 import kpparse from "./src/kpparse.js";
@@ -53,25 +53,6 @@ function validate(value, schema) {
   internalValidate(value, deepToKpobject(schema), (f, [arg]) => f(arg));
 }
 
-function validateCatching(value, schema) {
-  return foldError(
-    () => validate(value, schema),
-    () => null,
-    (error) => error
-  );
-}
-
-function validateErrorTo(value, schema, onFailure) {
-  foldError(
-    () => validate(value, schema),
-    () => null,
-    (error) => {
-      onFailure(error);
-      return null;
-    }
-  );
-}
-
 function jsOneOfValues(values) {
   return toJsObject(oneOfValues(values));
 }
@@ -116,7 +97,6 @@ export {
   emptyStream,
   EmptyStream,
   errorClass,
-  foldError,
   FullStream,
   functionClass,
   instanceProtocol,
@@ -129,6 +109,7 @@ export {
   kpobject,
   kpparse,
   KpProtocol,
+  kptry,
   kpvm,
   matches,
   nullClass,
@@ -151,6 +132,4 @@ export {
   jsTupleLike as tupleLike,
   typeProtocol,
   validate,
-  validateCatching,
-  validateErrorTo,
 };
