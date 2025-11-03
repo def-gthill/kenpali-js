@@ -2,8 +2,7 @@ import test from "ava";
 import * as op from "../src/instructions.js";
 import kperror from "../src/kperror.js";
 import { Vm } from "../src/kpvm.js";
-import { assertIsError } from "./assertIsError.js";
-import { assertThrows } from "./assertThrows.js";
+import { assertIsError, assertThrows } from "./assertions.js";
 
 test("The VALUE instruction pushes its argument onto the stack", (t) => {
   const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97] });

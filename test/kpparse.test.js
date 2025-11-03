@@ -15,7 +15,7 @@ import {
   pipeline,
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
-import { assertThrows } from "./assertThrows.js";
+import { assertThrows } from "./assertions.js";
 
 test("Variables can have names starting with literal keywords", (t) => {
   const code = `trueValue`;

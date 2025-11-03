@@ -2,7 +2,7 @@ import test from "ava";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import kpparse from "../src/kpparse.js";
-import { assertThrows } from "./assertThrows.js";
+import { assertThrows } from "./assertions.js";
 
 test("A function can be called with spread positional arguments", (t) => {
   const code = "arr = [1, 2, 3]; plus(*arr)";

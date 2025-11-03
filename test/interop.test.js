@@ -3,7 +3,7 @@ import { display, kpcall, toKpFunction } from "../src/interop.js";
 import kperror from "../src/kperror.js";
 import kpeval from "../src/kpeval.js";
 import kpparse from "../src/kpparse.js";
-import { assertThrows } from "./assertThrows.js";
+import { assertThrows } from "./assertions.js";
 
 test("We can call a Kenpali function from JavaScript using kpcall", (t) => {
   const code = "$ 42";

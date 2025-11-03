@@ -5,7 +5,7 @@ import kpcompile from "../src/kpcompile.js";
 import kpeval from "../src/kpeval.js";
 import kpobject from "../src/kpobject.js";
 import { stringClass } from "../src/values.js";
-import { assertThrows } from "./assertThrows.js";
+import { assertThrows } from "./assertions.js";
 
 test("Evaluating null returns an error", (t) => {
   const expression = null;

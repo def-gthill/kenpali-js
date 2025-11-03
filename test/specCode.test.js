@@ -1,5 +1,5 @@
 import kpparse from "../src/kpparse.js";
-import { assertIsError } from "./assertIsError.js";
+import { assertIsError } from "./assertions.js";
 import { runSpecFile } from "./specRunner.js";
 
 const specPath = "../kenpali/kenpali-code.md";
