@@ -600,6 +600,22 @@ export function kpcatch<T>(
   f: () => T
 ): { status: "success"; value: T } | { status: "error"; error: KpError };
 
+/**
+ * Wrapper for a Kenpali error object that extends the JavaScript Error class.
+ * All public functions throw instances of this class when they encounter
+ * Kenpali errors.
+ *
+ * @param error - The Kenpali error object.
+ * @param kpcallback - The `kpcallback` function to use for evaluation.
+ * @param message - An optional message to include in the error.
+ */
+export class KenpaliError extends Error {
+  name: "KenpaliError";
+  error: KpError;
+  kpcallback: VmCallback;
+  constructor(error: KpError, kpcallback: VmCallback, message?: string);
+}
+
 export function kpobject<K extends string, V extends KpValue>(
   ...entries: [NoInfer<K>, NoInfer<V>][]
 ): KpObject<K, V>;

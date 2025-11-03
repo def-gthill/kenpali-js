@@ -203,7 +203,13 @@ function validateRecordShape(value, shape, kpcallback) {
 export function matches(value, schema, kpcallback) {
   return kptry(
     () => validate(value, schema, kpcallback),
-    () => false,
+    (error) => {
+      if (error.properties.type === "invalidSchema") {
+        throw error;
+      } else {
+        return false;
+      }
+    },
     () => true
   );
 }

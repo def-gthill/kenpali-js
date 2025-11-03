@@ -3,6 +3,7 @@ import * as tsdModule from "tsd";
 import {
   arrayOf,
   errorClass,
+  KenpaliError,
   kpcatch,
   kpeval,
   kpobject,
@@ -12,6 +13,7 @@ import {
   numberClass,
   platformFunction,
   stringClass,
+  validate,
   type ExpressionNode,
   type KpValue,
 } from "../index.js";
@@ -140,5 +142,16 @@ test("Can catch errors thrown by Kenpali code", (t) => {
     t.assert(matches(result.error, errorClass));
   } else {
     t.fail("Result is not an error");
+  }
+});
+
+test("Can validate a value against a schema", (t) => {
+  const value = "foo";
+  const schema = numberClass;
+  try {
+    validate(value, schema);
+    t.fail("Validation should have failed");
+  } catch (error) {
+    t.assert(error instanceof KenpaliError);
   }
 });

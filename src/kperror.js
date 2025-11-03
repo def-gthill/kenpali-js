@@ -70,14 +70,6 @@ export function transformError(f, transform) {
   );
 }
 
-/**
- * Wrapper for a Kenpali error object that extends the JavaScript Error class.
- * All public functions throw instances of this class when they encounter
- * Kenpali errors.
- *
- * @param error - The Kenpali error object.
- * @param kpcallback - The `kpcallback` function to use for evaluation.
- */
 export class KenpaliError extends Error {
   constructor(error, kpcallback, message = "Kenpali encountered an error") {
     super(`${message}: ${display(error, kpcallback)}`);

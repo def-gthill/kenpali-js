@@ -1,7 +1,13 @@
 import { platformClass, platformFunction } from "./src/builtins.js";
-import { kpcall, toKpFunction } from "./src/interop.js";
+import { kpcall, kpcallbackInNewSession, toKpFunction } from "./src/interop.js";
 import kpcompile from "./src/kpcompile.js";
-import { errorClass, isError, kpcatch, kptry } from "./src/kperror.js";
+import {
+  errorClass,
+  isError,
+  KenpaliError,
+  kpcatch,
+  kptry,
+} from "./src/kperror.js";
 import kpeval from "./src/kpeval.js";
 import kpobject, { deepToKpobject, toJsObject } from "./src/kpobject.js";
 import kpparse from "./src/kpparse.js";
@@ -46,11 +52,19 @@ import {
 } from "./src/values.js";
 
 function matches(value, schema) {
-  return internalMatches(value, deepToKpobject(schema), (f, [arg]) => f(arg));
+  return internalMatches(value, deepToKpobject(schema), kpcallbackInNewSession);
 }
 
 function validate(value, schema) {
-  internalValidate(value, deepToKpobject(schema), (f, [arg]) => f(arg));
+  try {
+    internalValidate(value, deepToKpobject(schema), kpcallbackInNewSession);
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession);
+    } else {
+      throw error;
+    }
+  }
 }
 
 function jsOneOfValues(values) {
@@ -101,6 +115,7 @@ export {
   functionClass,
   instanceProtocol,
   isError,
+  KenpaliError,
   kpcall,
   kpcatch,
   KpClass,
