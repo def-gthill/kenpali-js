@@ -64,7 +64,12 @@ export default function* kplex(code) {
       value = JSON.parse(text);
     } else if (kind === "STRING") {
       kind = "LITERAL";
-      value = JSON.parse(text);
+      // Handle JS-style "\u{xxxxxx}" escapes
+      value = JSON.parse(
+        text.replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, hex) =>
+          String.fromCodePoint(parseInt(hex, 16))
+        )
+      );
     } else if (kind === "RAW_STRING") {
       kind = "LITERAL";
       value = text.slice(1, text.length - 1);

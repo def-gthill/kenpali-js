@@ -577,10 +577,12 @@ const rawBuiltins = [
     "length",
     { posParams: [{ name: "sequence", type: sequenceProtocol }] },
     function ([sequence]) {
-      if (isStream(sequence)) {
-        return toArray(sequence).length;
-      } else {
+      if (isString(sequence)) {
+        return [...sequence].length;
+      } else if (isArray(sequence)) {
         return sequence.length;
+      } else {
+        return toArray(sequence).length;
       }
     }
   ),
@@ -1802,7 +1804,9 @@ export function indexCollection(
   kpcallback,
   valueForError = collection
 ) {
-  if (isString(collection) || isArray(collection)) {
+  if (isString(collection)) {
+    return indexString(collection, index, default_, kpcallback, valueForError);
+  } else if (isArray(collection)) {
     return indexArray(collection, index, default_, kpcallback, valueForError);
   } else if (isStream(collection)) {
     return indexStream(collection, index, default_, kpcallback, valueForError);
@@ -1814,6 +1818,49 @@ export function indexCollection(
       ["value", collection],
       ["expectedType", either("sequence", "object")]
     );
+  }
+}
+
+export function indexString(
+  string,
+  index,
+  default_,
+  kpcallback,
+  valueForError = string
+) {
+  if (index > 0) {
+    let i = 1;
+    for (const codePoint of string) {
+      if (i === index) {
+        return codePoint;
+      }
+      i += 1;
+    }
+    return badIndex();
+  } else if (index < 0) {
+    let i = 1;
+    for (const codePoint of [...string].reverse()) {
+      if (i === -index) {
+        return codePoint;
+      }
+      i += 1;
+    }
+    return badIndex();
+  } else {
+    return badIndex();
+  }
+
+  function badIndex() {
+    if (default_) {
+      return kpcallback(default_, [], kpobject());
+    } else {
+      throw kperror(
+        "indexOutOfBounds",
+        ["value", valueForError],
+        ["length", string.length],
+        ["index", index]
+      );
+    }
   }
 }
 

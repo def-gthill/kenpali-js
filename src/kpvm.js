@@ -2,6 +2,7 @@ import {
   indexArray,
   indexInstance,
   indexMapping,
+  indexString,
   toArray,
   toObject,
 } from "./builtins.js";
@@ -856,7 +857,9 @@ export class Vm {
     }
     const index = this.stack.pop();
     const collection = this.stack.pop();
-    if (isString(collection) || isArray(collection)) {
+    if (isString(collection)) {
+      this.indexString(collection, index);
+    } else if (isArray(collection)) {
       this.indexArray(collection, index);
     } else if (isStream(collection)) {
       this.indexStream(collection, index);
@@ -872,6 +875,22 @@ export class Vm {
         )
       );
     }
+  }
+
+  indexString(string, index) {
+    if (!isNumber(index)) {
+      this.throw_(wrongType(index, numberClass));
+      return;
+    }
+    kptry(
+      () => indexString(string, index),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
   }
 
   indexArray(array, index) {
