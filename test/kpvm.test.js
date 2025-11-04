@@ -5,7 +5,7 @@ import { Vm } from "../src/kpvm.js";
 import { assertIsError, assertThrows } from "./assertions.js";
 
 test("The VALUE instruction pushes its argument onto the stack", (t) => {
-  const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97] });
+  const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97, op.RETURN] });
 
   vm.run();
 
@@ -13,7 +13,7 @@ test("The VALUE instruction pushes its argument onto the stack", (t) => {
 });
 
 test("The ALIAS instruction pushes another reference to the top of the stack", (t) => {
-  const vm = new Vm({ instructions: [op.VALUE, 42, op.ALIAS] });
+  const vm = new Vm({ instructions: [op.VALUE, 42, op.ALIAS, op.RETURN] });
 
   vm.run();
 
@@ -21,7 +21,9 @@ test("The ALIAS instruction pushes another reference to the top of the stack", (
 });
 
 test("The DISCARD instruction throws away the top of the stack", (t) => {
-  const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97, op.DISCARD] });
+  const vm = new Vm({
+    instructions: [op.VALUE, 42, op.VALUE, 97, op.DISCARD, op.RETURN],
+  });
 
   vm.run();
 
@@ -30,7 +32,7 @@ test("The DISCARD instruction throws away the top of the stack", (t) => {
 
 test("The RESERVE instruction reserves space on the stack without putting any values there", (t) => {
   const vm = new Vm({
-    instructions: [op.VALUE, 42, op.RESERVE, 2, op.VALUE, 97],
+    instructions: [op.VALUE, 42, op.RESERVE, 2, op.VALUE, 97, op.RETURN],
   });
 
   vm.run();
@@ -46,6 +48,7 @@ test("The WRITE_LOCAL instruction moves the top of the stack to the specified lo
       ...[op.VALUE, 73],
       ...[op.VALUE, 216],
       ...[op.WRITE_LOCAL, 1],
+      op.RETURN,
     ],
   });
 
@@ -61,6 +64,7 @@ test("The READ_LOCAL 0 instruction aliases the specified local slot to the top o
       ...[op.VALUE, 216],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 1],
+      op.RETURN,
     ],
   });
 
@@ -77,6 +81,7 @@ test("The PUSH 0 instruction adds a new stack frame with slot 0 at the top of th
       ...[op.PUSH_SCOPE, 0],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
+      op.RETURN,
     ],
   });
 
@@ -93,6 +98,7 @@ test("With a positive argument, PUSH puts slot 0 above the current top of the st
       ...[op.PUSH_SCOPE, 1],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
+      op.RETURN,
     ],
   });
 
@@ -109,6 +115,7 @@ test("With a negative argument, PUSH puts slot 0 below the current top of the st
       ...[op.PUSH_SCOPE, -1],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
+      op.RETURN,
     ],
   });
 
@@ -125,6 +132,7 @@ test("The THROW instruction throws the value on the top of the stack", (t) => {
       ...[op.VALUE, kperror("bad")],
       ...[op.THROW],
       ...[op.VALUE, 42],
+      op.RETURN,
     ],
   });
 
@@ -140,6 +148,7 @@ test("The CATCH instruction causes the next error to jump to the specified offse
       ...[op.THROW],
       ...[op.VALUE, 42],
       ...[op.VALUE, 73],
+      op.RETURN,
     ],
   });
 
@@ -159,6 +168,7 @@ test("The UNCATCH instruction cancels the last CATCH", (t) => {
       ...[op.THROW],
       ...[op.VALUE, 42],
       ...[op.VALUE, 73],
+      op.RETURN,
     ],
   });
 

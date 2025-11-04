@@ -190,7 +190,7 @@ export class Vm {
       new CallFrame(
         functionName(f),
         this.stack.length,
-        this.instructions.length // Make run() return when this call finishes
+        -1 // Make run() return when this call finishes
       )
     );
     this.stack.push(f, posArgs, namedArgs);
@@ -211,7 +211,7 @@ export class Vm {
   }
 
   run() {
-    while (this.cursor < this.instructions.length) {
+    while (this.cursor >= 0) {
       this.stepNumber += 1;
       if (this.stepLimit > 0 && this.stepNumber >= this.stepLimit) {
         this.throw_("stepLimitExceeded", ["stepLimit", this.stepLimit]);
@@ -761,7 +761,7 @@ export class Vm {
       this.logInstruction("RETURN");
     }
     if (this.callFrames.length === 0) {
-      this.cursor = this.instructions.length;
+      this.cursor = -1;
     } else {
       this.popCallFrame();
     }
@@ -1172,7 +1172,7 @@ export class Vm {
       ) {
         const callFrame = this.callFrames.pop();
         error.properties.calls.push(kpobject(["function", callFrame.name]));
-        if (callFrame.returnIndex === this.instructions.length) {
+        if (callFrame.returnIndex < 0) {
           // We've unwound to a callback boundary, throw the error to the caller
           throw error;
         }
