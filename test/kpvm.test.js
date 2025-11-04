@@ -74,7 +74,7 @@ test("The PUSH 0 instruction adds a new stack frame with slot 0 at the top of th
     instructions: [
       ...[op.VALUE, 42],
       ...[op.VALUE, 216],
-      ...[op.PUSH, 0],
+      ...[op.PUSH_SCOPE, 0],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
     ],
@@ -90,7 +90,7 @@ test("With a positive argument, PUSH puts slot 0 above the current top of the st
     instructions: [
       ...[op.VALUE, 42],
       ...[op.VALUE, 216],
-      ...[op.PUSH, 1],
+      ...[op.PUSH_SCOPE, 1],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
     ],
@@ -106,7 +106,7 @@ test("With a negative argument, PUSH puts slot 0 below the current top of the st
     instructions: [
       ...[op.VALUE, 42],
       ...[op.VALUE, 216],
-      ...[op.PUSH, -1],
+      ...[op.PUSH_SCOPE, -1],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
     ],

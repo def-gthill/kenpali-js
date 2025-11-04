@@ -1,63 +1,111 @@
 import { toKpobject } from "./kpobject.js";
 import { displaySimple } from "./values.js";
 
-export const BEGIN = 0;
-export const VALUE = 1;
+// ----------------------------
+// -- BASIC STACK OPERATIONS --
+// ----------------------------
+
+// Push the specified value onto the stack.
+export const VALUE = 0x01;
 // Create an alias of the top of the stack, and push it onto the stack.
-export const ALIAS = 43;
+export const ALIAS = 0x02;
 // Pop the top of the stack and throw it away.
-export const DISCARD = 10;
-export const RESERVE = 8;
-export const WRITE_LOCAL = 7;
-export const READ_LOCAL = 2;
-export const PUSH = 3;
-export const POP = 5;
-export const EMPTY_ARRAY = 24;
-export const ARRAY_PUSH = 6;
-export const ARRAY_EXTEND = 11;
-export const ARRAY_REVERSE = 27;
-export const ARRAY_POP = 9;
-export const ARRAY_POP_OR_DEFAULT = 19;
-export const ARRAY_CUT = 12;
+export const DISCARD = 0x03;
+// Reserve the specified number of empty slots at the top of the stack.
+export const RESERVE = 0x04;
+// Write the value at the top of the stack to the local variable at the specified index.
+export const WRITE_LOCAL = 0x05;
+// Read the value from the local variable at the specified index and push it onto the stack.
+export const READ_LOCAL = 0x06;
+// Push a new scope frame onto the scope stack.
+export const PUSH_SCOPE = 0x07;
+// Pop the top scope frame from the scope stack.
+export const POP_SCOPE = 0x08;
+// Read the value from the specified number of steps down the stack, and push it onto the stack.
+// READ_RELATIVE 0 is the same as ALIAS.
+export const READ_RELATIVE = 0x09;
+
+// ----------------------------
+// -- ARRAY OPERATIONS --------
+// ----------------------------
+
+// Create an empty array and push it onto the stack.
+export const EMPTY_ARRAY = 0x10;
+export const ARRAY_PUSH = 0x11;
+export const ARRAY_EXTEND = 0x12;
+export const ARRAY_REVERSE = 0x13;
+export const ARRAY_POP = 0x14;
+export const ARRAY_POP_OR_DEFAULT = 0x15;
+export const ARRAY_CUT = 0x16;
 // Replace the array at the top of the stack with a copy of it, breaking any alias relationships.
-export const ARRAY_COPY = 28;
-export const ARRAY_IS_EMPTY = 47;
-export const EMPTY_OBJECT = 25;
-export const OBJECT_PUSH = 13;
-export const OBJECT_MERGE = 14;
-export const OBJECT_POP = 15;
-export const OBJECT_POP_OR_DEFAULT = 26;
-export const OBJECT_COPY = 29;
-export const JUMP = 44;
-export const JUMP_IF_TRUE = 45;
-export const JUMP_IF_FALSE = 46;
-export const FUNCTION = 16;
-export const CLOSURE = 21;
-export const CALL = 17;
-export const CAPTURE = 22;
-export const READ_UPVALUE = 20;
-export const RETURN = 18;
-export const CALL_BUILTIN = 41;
-export const SELF = 52;
-export const INDEX = 30;
-export const THROW = 49;
-export const CATCH = 23;
-export const UNCATCH = 50;
-export const IS_NULL = 48;
-export const IS_BOOLEAN = 31;
-export const IS_NUMBER = 32;
-export const IS_STRING = 33;
-export const IS_ARRAY = 34;
-export const IS_STREAM = 51;
-export const IS_OBJECT = 35;
-export const IS_FUNCTION = 39;
-export const IS_ERROR = 38;
-export const IS_CLASS = 53;
-export const IS_PROTOCOL = 54;
-export const IS_SEQUENCE = 40;
-export const IS_TYPE = 55;
-export const IS_INSTANCE = 56;
-export const ERROR_IF_INVALID = 42;
+export const ARRAY_COPY = 0x17;
+export const ARRAY_IS_EMPTY = 0x18;
+
+// ----------------------------
+// -- OBJECT OPERATIONS -------
+// ----------------------------
+
+export const EMPTY_OBJECT = 0x20;
+export const OBJECT_PUSH = 0x21;
+export const OBJECT_MERGE = 0x22;
+export const OBJECT_POP = 0x23;
+export const OBJECT_POP_OR_DEFAULT = 0x24;
+export const OBJECT_COPY = 0x25;
+export const OBJECT_KEYS = 0x26;
+export const OBJECT_VALUES = 0x27;
+export const OBJECT_HAS = 0x28;
+
+// ----------------------------
+// -- JUMPS -------------------
+// ----------------------------
+
+export const JUMP = 0x30;
+export const JUMP_IF_TRUE = 0x31;
+export const JUMP_IF_FALSE = 0x32;
+
+// ----------------------------
+// -- FUNCTIONS ---------------
+// ----------------------------
+
+export const BEGIN = 0x40;
+export const FUNCTION = 0x41;
+export const CLOSURE = 0x42;
+export const CALL = 0x43;
+export const CAPTURE = 0x44;
+export const READ_UPVALUE = 0x45;
+export const RETURN = 0x46;
+export const CALL_BUILTIN = 0x47;
+export const SELF = 0x48;
+
+// ----------------------------
+// -- CORE IMPLEMENTATION -----
+// ----------------------------
+
+export const INDEX = 0x50;
+export const EQUALS = 0x51;
+
+// ----------------------------
+// -- VALIDATION AND ERRORS ---
+// ----------------------------
+
+export const THROW = 0x80;
+export const CATCH = 0x81;
+export const UNCATCH = 0x82;
+export const IS_NULL = 0x83;
+export const IS_BOOLEAN = 0x84;
+export const IS_NUMBER = 0x85;
+export const IS_STRING = 0x86;
+export const IS_ARRAY = 0x87;
+export const IS_STREAM = 0x88;
+export const IS_OBJECT = 0x89;
+export const IS_FUNCTION = 0x8a;
+export const IS_ERROR = 0x8b;
+export const IS_CLASS = 0x8c;
+export const IS_PROTOCOL = 0x8d;
+export const IS_SEQUENCE = 0x8e;
+export const IS_TYPE = 0x8f;
+export const IS_INSTANCE = 0x90;
+export const ERROR_IF_INVALID = 0x91;
 
 export function disassemble(program) {
   return new Disassembler(program).disassemble();
@@ -71,15 +119,15 @@ class Disassembler {
     this.cursor = 0;
 
     this.instructionTable = [];
-    this.instructionTable[BEGIN] = this.disassembleBegin;
     this.instructionTable[VALUE] = this.disassembleValue;
     this.instructionTable[ALIAS] = this.disassembleAlias;
     this.instructionTable[DISCARD] = this.disassembleDiscard;
     this.instructionTable[RESERVE] = this.disassembleReserve;
     this.instructionTable[WRITE_LOCAL] = this.disassembleWriteLocal;
     this.instructionTable[READ_LOCAL] = this.disassembleReadLocal;
-    this.instructionTable[PUSH] = this.disassemblePush;
-    this.instructionTable[POP] = this.disassemblePop;
+    this.instructionTable[PUSH_SCOPE] = this.disassemblePushScope;
+    this.instructionTable[POP_SCOPE] = this.disassemblePopScope;
+    this.instructionTable[READ_RELATIVE] = this.disassembleReadRelative;
     this.instructionTable[EMPTY_ARRAY] = this.disassembleEmptyArray;
     this.instructionTable[ARRAY_PUSH] = this.disassembleArrayPush;
     this.instructionTable[ARRAY_EXTEND] = this.disassembleArrayExtend;
@@ -97,9 +145,13 @@ class Disassembler {
     this.instructionTable[OBJECT_POP_OR_DEFAULT] =
       this.disassembleObjectPopOrDefault;
     this.instructionTable[OBJECT_COPY] = this.disassembleObjectCopy;
+    this.instructionTable[OBJECT_KEYS] = this.disassembleObjectKeys;
+    this.instructionTable[OBJECT_VALUES] = this.disassembleObjectValues;
+    this.instructionTable[OBJECT_HAS] = this.disassembleObjectHas;
     this.instructionTable[JUMP] = this.disassembleJump;
     this.instructionTable[JUMP_IF_TRUE] = this.disassembleJumpIfTrue;
     this.instructionTable[JUMP_IF_FALSE] = this.disassembleJumpIfFalse;
+    this.instructionTable[BEGIN] = this.disassembleBegin;
     this.instructionTable[FUNCTION] = this.disassembleFunction;
     this.instructionTable[CLOSURE] = this.disassembleClosure;
     this.instructionTable[CALL] = this.disassembleCall;
@@ -108,6 +160,7 @@ class Disassembler {
     this.instructionTable[RETURN] = this.disassembleReturn;
     this.instructionTable[CALL_BUILTIN] = this.disassembleCallBuiltin;
     this.instructionTable[SELF] = this.disassembleSelf;
+    this.instructionTable[EQUALS] = this.disassembleEquals;
     this.instructionTable[INDEX] = this.disassembleIndex;
     this.instructionTable[THROW] = this.disassembleThrow;
     this.instructionTable[CATCH] = this.disassembleCatch;
@@ -164,10 +217,6 @@ class Disassembler {
     return this.instructionTable[instructionType]();
   }
 
-  disassembleBegin() {
-    return "BEGIN";
-  }
-
   disassembleValue() {
     return `VALUE ${displaySimple(this.next())}`;
   }
@@ -192,12 +241,16 @@ class Disassembler {
     return `READ_LOCAL ${this.next()} ${this.next()}`;
   }
 
-  disassemblePush() {
-    return `PUSH ${this.next()}`;
+  disassemblePushScope() {
+    return `PUSH_SCOPE ${this.next()}`;
   }
 
-  disassemblePop() {
-    return "POP";
+  disassemblePopScope() {
+    return "POP_SCOPE";
+  }
+
+  disassembleReadRelative() {
+    return `READ_RELATIVE ${this.next()}`;
   }
 
   disassembleEmptyArray() {
@@ -260,6 +313,18 @@ class Disassembler {
     return "OBJECT_COPY";
   }
 
+  disassembleObjectKeys() {
+    return "OBJECT_KEYS";
+  }
+
+  disassembleObjectValues() {
+    return "OBJECT_VALUES";
+  }
+
+  disassembleObjectHas() {
+    return "OBJECT_HAS";
+  }
+
   disassembleJump() {
     return `JUMP ${this.next()}`;
   }
@@ -270,6 +335,10 @@ class Disassembler {
 
   disassembleJumpIfFalse() {
     return `JUMP_IF_FALSE ${this.next()}`;
+  }
+
+  disassembleBegin() {
+    return "BEGIN";
   }
 
   disassembleFunction() {
@@ -302,6 +371,10 @@ class Disassembler {
 
   disassembleSelf() {
     return "SELF";
+  }
+
+  disassembleEquals() {
+    return "EQUALS";
   }
 
   disassembleIndex() {

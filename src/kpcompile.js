@@ -171,9 +171,9 @@ class Compiler {
     this.addInstruction(op.VALUE, expression);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames);
+    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
     this.addInstruction(op.CALL_BUILTIN, name);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.addInstruction(op.DISCARD); // The positional arguments handoff
@@ -219,9 +219,9 @@ class Compiler {
     this.addInstruction(op.SELF);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames - 1);
+    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames - 1);
     this.addInstruction(op.CALL_BUILTIN, fullName);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.popScope();
@@ -486,13 +486,13 @@ class Compiler {
   compileBlock(expression) {
     this.reserveSlots(1); // For the result
     this.pushScope();
-    this.addInstruction(op.PUSH, 0);
+    this.addInstruction(op.PUSH_SCOPE, 0);
     this.defineNames(expression.defs);
     this.compileExpression(expression.result);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     this.popScope();
   }
 
@@ -617,39 +617,28 @@ class Compiler {
     this.addInstruction(op.OBJECT_COPY);
     let rest = null;
     for (const entry of pattern.entries) {
-      if (entry.type === "rest") {
-        throw new Error("Is anyone still using this?");
+      const [key, name] = entry;
+      if (key.type === "rest") {
         if (rest !== null) {
           throw kperror("overlappingRestPatterns", [
             "names",
-            [rest, entry.name].map((x) => this.toNamePatternString(x)),
+            [rest, name].map((x) => this.toNamePatternString(x)),
           ]);
         }
-        rest = entry.name;
+        rest = name;
       } else {
-        const [key, name] = entry;
-        if (key.type === "rest") {
-          if (rest !== null) {
-            throw kperror("overlappingRestPatterns", [
-              "names",
-              [rest, name].map((x) => this.toNamePatternString(x)),
-            ]);
-          }
-          rest = name;
+        this.compileExpression(key);
+        if (typeof name === "object" && name.type === "optional") {
+          this.compileExpression(name.defaultValue);
+          this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
+          this.assignNames(name.name, { isArgument: isArgumentPattern });
         } else {
-          this.compileExpression(key);
-          if (typeof name === "object" && name.type === "optional") {
-            this.compileExpression(name.defaultValue);
-            this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
-            this.assignNames(name.name, { isArgument: isArgumentPattern });
-          } else {
-            this.addInstruction(op.OBJECT_POP);
-            this.addDiagnostic({
-              name: key,
-              isArgument: isArgumentPattern,
-            });
-            this.assignNames(name, { isArgument: isArgumentPattern });
-          }
+          this.addInstruction(op.OBJECT_POP);
+          this.addDiagnostic({
+            name: key,
+            isArgument: isArgumentPattern,
+          });
+          this.assignNames(name, { isArgument: isArgumentPattern });
         }
       }
     }
@@ -755,9 +744,9 @@ class Compiler {
     this.compileExpression(expression.callee);
     this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
-    this.addInstruction(op.PUSH, -2);
+    this.addInstruction(op.PUSH_SCOPE, -2);
     this.addInstruction(op.CALL);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     if (this.trace) {
       this.logNodeEnd("Finished call");
     }
@@ -892,7 +881,21 @@ class Compiler {
   }
 
   validateConditionSchema(schema) {
-    throw new Error("Not implemented");
+    this.validateEach(
+      () => this.validateRecursive(schema.get("schema")),
+      () => this.validateCondition(schema.get("condition"))
+    );
+  }
+
+  validateCondition(condition) {
+    this.addInstruction(op.VALUE, condition);
+    this.addInstruction(op.EMPTY_ARRAY);
+    this.addInstruction(op.READ_RELATIVE, 2);
+    this.addInstruction(op.ARRAY_PUSH);
+    this.addInstruction(op.EMPTY_OBJECT);
+    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstruction(op.CALL);
+    this.addInstruction(op.POP_SCOPE);
   }
 
   validateArraySchema(schema) {
@@ -985,6 +988,7 @@ class Compiler {
     const failJumpIndices = [];
     for (const [key, valueSchema] of shape) {
       if (isObject(valueSchema) && valueSchema.get("form") === "optional") {
+        this.addInstruction(op.ALIAS);
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
@@ -999,6 +1003,7 @@ class Compiler {
           this.nextInstructionIndex() - jumpIndex
         );
       } else {
+        this.addInstruction(op.ALIAS);
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);

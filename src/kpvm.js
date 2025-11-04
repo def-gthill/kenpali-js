@@ -22,6 +22,7 @@ import validate, {
 } from "./validate.js";
 import {
   display,
+  equals,
   functionName,
   instanceProtocol,
   isArray,
@@ -114,15 +115,15 @@ export class Vm {
     this.openUpvalues = [];
 
     this.instructionTable = [];
-    this.instructionTable[op.BEGIN] = this.runBegin;
     this.instructionTable[op.VALUE] = this.runValue;
     this.instructionTable[op.ALIAS] = this.runAlias;
     this.instructionTable[op.DISCARD] = this.runDiscard;
     this.instructionTable[op.RESERVE] = this.runReserve;
     this.instructionTable[op.WRITE_LOCAL] = this.runWriteLocal;
     this.instructionTable[op.READ_LOCAL] = this.runReadLocal;
-    this.instructionTable[op.PUSH] = this.runPush;
-    this.instructionTable[op.POP] = this.runPop;
+    this.instructionTable[op.PUSH_SCOPE] = this.runPushScope;
+    this.instructionTable[op.POP_SCOPE] = this.runPopScope;
+    this.instructionTable[op.READ_RELATIVE] = this.runReadRelative;
     this.instructionTable[op.EMPTY_ARRAY] = this.runEmptyArray;
     this.instructionTable[op.ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[op.ARRAY_EXTEND] = this.runArrayExtend;
@@ -139,9 +140,13 @@ export class Vm {
     this.instructionTable[op.OBJECT_POP_OR_DEFAULT] =
       this.runObjectPopOrDefault;
     this.instructionTable[op.OBJECT_COPY] = this.runObjectCopy;
+    this.instructionTable[op.OBJECT_KEYS] = this.runObjectKeys;
+    this.instructionTable[op.OBJECT_VALUES] = this.runObjectValues;
+    this.instructionTable[op.OBJECT_HAS] = this.runObjectHas;
     this.instructionTable[op.JUMP] = this.runJump;
     this.instructionTable[op.JUMP_IF_TRUE] = this.runJumpIfTrue;
     this.instructionTable[op.JUMP_IF_FALSE] = this.runJumpIfFalse;
+    this.instructionTable[op.BEGIN] = this.runBegin;
     this.instructionTable[op.FUNCTION] = this.runFunction;
     this.instructionTable[op.CLOSURE] = this.runClosure;
     this.instructionTable[op.CALL] = this.runCall;
@@ -151,6 +156,7 @@ export class Vm {
     this.instructionTable[op.CALL_BUILTIN] = this.runCallBuiltin;
     this.instructionTable[op.SELF] = this.runSelf;
     this.instructionTable[op.INDEX] = this.runIndex;
+    this.instructionTable[op.EQUALS] = this.runEquals;
     this.instructionTable[op.THROW] = this.runThrow;
     this.instructionTable[op.CATCH] = this.runCatch;
     this.instructionTable[op.UNCATCH] = this.runUncatch;
@@ -257,12 +263,6 @@ export class Vm {
     console.log(`${this.instructionStart} ${message}`);
   }
 
-  runBegin() {
-    if (this.trace) {
-      this.logInstruction("BEGIN");
-    }
-  }
-
   runValue() {
     const value = this.next();
     if (this.trace) {
@@ -327,21 +327,30 @@ export class Vm {
     this.stack.push(value);
   }
 
-  runPush() {
+  runPushScope() {
     const offset = this.next();
     const stackIndex = this.stack.length - 1 + offset;
     if (this.trace) {
-      this.logInstruction(`PUSH ${offset} (at ${stackIndex})`);
+      this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
     }
     this.scopeFrames.push(new ScopeFrame(stackIndex));
   }
 
-  runPop() {
+  runPopScope() {
     const frame = this.scopeFrames.pop();
     if (this.trace) {
-      this.logInstruction(`POP (at ${frame.stackIndex})`);
+      this.logInstruction(`POP_SCOPE (at ${frame.stackIndex})`);
     }
     this.stack.length = frame.stackIndex + 1;
+  }
+
+  runReadRelative() {
+    const stepsOut = this.next();
+    if (this.trace) {
+      this.logInstruction(`READ_RELATIVE ${stepsOut}`);
+    }
+    const value = this.stack.at(-1 - stepsOut);
+    this.stack.push(value);
   }
 
   runEmptyArray() {
@@ -556,6 +565,31 @@ export class Vm {
     this.stack.push(kpobject(...kpoEntries(toObject(object))));
   }
 
+  runObjectKeys() {
+    if (this.trace) {
+      this.logInstruction("OBJECT_KEYS");
+    }
+    const object = this.stack.pop();
+    this.stack.push([...object.keys()]);
+  }
+
+  runObjectValues() {
+    if (this.trace) {
+      this.logInstruction("OBJECT_VALUES");
+    }
+    const object = this.stack.pop();
+    this.stack.push([...object.values()]);
+  }
+
+  runObjectHas() {
+    if (this.trace) {
+      this.logInstruction("OBJECT_HAS");
+    }
+    const key = this.stack.pop();
+    const object = this.stack.pop();
+    this.stack.push(object.has(key));
+  }
+
   runJump() {
     const distance = this.next();
     if (this.trace) {
@@ -583,6 +617,12 @@ export class Vm {
     const condition = this.stack.pop();
     if (!condition) {
       this.cursor += distance;
+    }
+  }
+
+  runBegin() {
+    if (this.trace) {
+      this.logInstruction("BEGIN");
     }
   }
 
@@ -799,6 +839,15 @@ export class Vm {
       });
     }
     throw new Error(`Method ${constructorName}/${name} not found`);
+  }
+
+  runEquals() {
+    if (this.trace) {
+      this.logInstruction("EQUALS");
+    }
+    const right = this.stack.pop();
+    const left = this.stack.pop();
+    this.stack.push(equals(left, right));
   }
 
   runIndex() {
