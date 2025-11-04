@@ -1,3 +1,5 @@
+import kperror from "./kperror.js";
+
 const r = String.raw;
 
 const tokenSpec = [
@@ -64,12 +66,24 @@ export default function* kplex(code) {
       value = JSON.parse(text);
     } else if (kind === "STRING") {
       kind = "LITERAL";
-      // Handle JS-style "\u{xxxxxx}" escapes
-      value = JSON.parse(
-        text.replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, hex) =>
-          String.fromCodePoint(parseInt(hex, 16))
-        )
-      );
+      try {
+        // Handle JS-style "\u{xxxxxx}" escapes
+        value = JSON.parse(
+          text.replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, hex) =>
+            String.fromCodePoint(parseInt(hex, 16))
+          )
+        );
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw kperror(
+            "invalidStringLiteral",
+            ["value", text],
+            ["message", error.message]
+          );
+        } else {
+          throw error;
+        }
+      }
     } else if (kind === "RAW_STRING") {
       kind = "LITERAL";
       value = text.slice(1, text.length - 1);
@@ -79,6 +93,13 @@ export default function* kplex(code) {
       continue;
     } else if (kind === "WHITESPACE") {
       continue;
+    } else if (kind === "INVALID") {
+      throw kperror(
+        "invalidCharacter",
+        ["character", text],
+        ["line", lineNum],
+        ["column", column]
+      );
     }
     yield { type: kind, value, text, line: lineNum, column };
   }
