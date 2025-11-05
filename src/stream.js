@@ -66,7 +66,7 @@ export function stream({ value, next }) {
 
 export class EmptyStream extends Stream {
   constructor() {
-    super({ isEmpty: () => true, display: () => "stream []" });
+    super({ isEmpty: () => true, display: () => "Stream []" });
   }
 }
 

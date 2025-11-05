@@ -46,6 +46,13 @@ butIf = (value, condition, ifTrue) => if(
     else: $ value,
 );
 ifs = (*conditions, else:) => null | switch(*conditions, else:);
+build = (start, next) => (
+    streamFrom = (state) => newStream(
+        value: $ state,
+        next: $ streamFrom(next(state)),
+    );
+    streamFrom(start)
+);
 to = (start, end, by: = 1) => (
     isNoFurtherThan = if(
         by | isMoreThan(0),
@@ -111,8 +118,76 @@ groupBy = (sequence, by, onGroup: = (x) => x) => (
 );
 isEmpty = (sequence) => sequence | keepFirst(1) | length | equals(0);
 first = (sequence) => sequence @ 1;
+transform = (sequence, f) => (
+    start = sequence | toStream;
+    streamFrom = (current) => if(
+        current.isEmpty(),
+        then: emptyStream,
+        else: $ newStream(
+            value: $ f(current.value()),
+            next: $ streamFrom(current.next()),
+        )
+    );
+    streamFrom(start)
+);
+running = (in, start:, next:) => (
+    inStream = in | toStream;
+    streamFrom = (current, state) => newStream(
+        value: $ state,
+        next: $ if(
+            current.isEmpty(),
+            then: emptyStream,
+            else: $ streamFrom(
+                current.next(),
+                next(current.value(), state:)
+            ),
+        )
+    );
+    streamFrom(inStream, start)
+);
+withIndex = (sequence) => (
+    1 | build(up) | zip(sequence)
+);
 slice = (sequence, from:, to:) => (
     sequence | keepFirst(to) | dropFirst(from | down)
+);
+while = (sequence, condition) => (
+    start = sequence | toStream;
+    streamFrom = (current) => if(
+        current.isEmpty(),
+        then: emptyStream,
+        else: $ (
+            value = current.value();
+            if(
+                condition(value),
+                then: $ newStream(
+                    value: $ value,
+                    next: $ streamFrom(current.next()),
+                ),
+                else: emptyStream,
+            )
+        )
+    );
+    streamFrom(start)
+);
+continueIf = (sequence, condition) => (
+    start = sequence | toStream;
+    streamFrom = (current) => if(
+        current.isEmpty(),
+        then: emptyStream,
+        else: $ (
+            value = current.value();
+            newStream(
+                value: $ value,
+                next: $ if(
+                    condition(value),
+                    then: $ streamFrom(current.next()),
+                    else: emptyStream,
+                ),
+            )
+        )
+    );
+    streamFrom(start)
 );
 thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
 sliding = (sequence, size) => (
@@ -122,6 +197,88 @@ sliding = (sequence, size) => (
         next: (element, state: [first, *rest]) => [*rest, element]
     )
     | dropFirst(size)
+);
+where = (sequence, condition) => (
+    sequence
+    | transform((value) => (
+        if(
+            condition(value),
+            then: $ [value],
+            else: $ [],
+        )
+    ))
+    | flatten
+);
+zip = (*sequences) => (
+    streams = sequences | transform(toStream);
+    streamFrom = (currents) => if(
+        currents | forSome(|.isEmpty()),
+        then: emptyStream,
+        else: $ newStream(
+            value: $ currents | transform(|.value()) | toArray,
+            next: $ streamFrom(currents | transform(|.next())),
+        )
+    );
+    streamFrom(streams)
+);
+unzip = (sequence, numStreams: = 2) => (
+    stream = sequence | toStream;
+    streamFrom = (current, i) => if(
+        current.isEmpty(),
+        then: emptyStream,
+        else: $ newStream(
+            value: $ current.value() @ i,
+            next: $ streamFrom(current.next(), i),
+        )
+    );
+    1 | to(numStreams) | transform((i) => streamFrom(stream, i)) | toArray
+);
+flatten = (sequence) => (
+    outer = toStream(sequence);
+    streamFrom = (startOuter, startInner) => (
+        [outer, inner] = [startOuter, startInner]
+        | build(([outer, inner]) => (
+            [outer.next(), outer.value() | toStream]
+        ))
+        | continueIf(([outer, inner]) => (
+            outer.isEmpty() | not | and(
+                $ inner.isEmpty()
+            )
+        ))
+        | last;
+        if(
+            inner.isEmpty(),
+            then: emptyStream,
+            else: $ newStream(
+                value: $ inner.value(),
+                next: $ streamFrom(outer, inner.next()),
+            )
+        )
+    );
+    streamFrom(outer, emptyStream())
+);
+dissect = (sequence, condition) => (
+    start = sequence | toStream;
+    streamFrom = (start) => if(
+        start.isEmpty(),
+        then: emptyStream,
+        else: $ (
+            states = [start.value(), start.next()]
+            | build(([element, rest]) => (
+                [rest.value(), rest.next()]
+            ))
+            | continueIf(([element, rest]) => (
+                rest.isEmpty() | not | and(
+                    $ element | condition | not
+                )
+            ));
+            newStream(
+                value: $ states | transform(([element]) => element) | toArray,
+                next: $ streamFrom(states | last @ 2)
+            )
+        )
+    );
+    streamFrom(start)
 );
 chunk = (sequence, size) => (
     sequence

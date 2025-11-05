@@ -62,27 +62,6 @@ import {
 
 const rawBuiltins = [
   platformFunction(
-    "debug",
-    {
-      posParams: [
-        "value",
-        {
-          name: "name",
-          type: either(stringClass, nullClass),
-          defaultValue: literal(null),
-        },
-      ],
-    },
-    function ([value, name], { debugLog, kpcallback }) {
-      if (name) {
-        debugLog(`${name}: ${display(value, kpcallback)}`);
-      } else {
-        debugLog(display(value, kpcallback));
-      }
-      return value;
-    }
-  ),
-  platformFunction(
     "plus",
     { posParams: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
@@ -360,6 +339,7 @@ const rawBuiltins = [
   constant("Class", value(classClass)),
   constant("Protocol", value(protocolClass)),
   constant("Sequence", value(sequenceProtocol)),
+  constant("Instance", value(instanceProtocol)),
   constant("Type", value(typeProtocol)),
   constant("Any", value(anyProtocol)),
   platformFunction("classOf", { posParams: ["value"] }, function ([value]) {
@@ -420,6 +400,20 @@ const rawBuiltins = [
   platformFunction("isObject", { posParams: ["value"] }, function ([value]) {
     return isObject(value);
   }),
+  platformFunction(
+    "toObject",
+    {
+      posParams: [
+        {
+          name: "value",
+          type: either(arrayClass, instanceProtocol),
+        },
+      ],
+    },
+    function ([value]) {
+      return toObject(value);
+    }
+  ),
   platformFunction("isFunction", { posParams: ["value"] }, function ([value]) {
     return isFunction(value);
   }),
@@ -484,26 +478,6 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "build",
-    {
-      posParams: ["start", { name: "next", type: functionClass }],
-    },
-    function ([start, next], { kpcallback }) {
-      function streamFrom(state) {
-        return stream({
-          value() {
-            return state;
-          },
-          next() {
-            return streamFrom(kpcallback(next, [state], kpobject()));
-          },
-        });
-      }
-
-      return streamFrom(start);
-    }
-  ),
-  platformFunction(
     "newStream",
     {
       namedParams: [
@@ -521,58 +495,6 @@ const rawBuiltins = [
   platformFunction("emptyStream", {}, function () {
     return emptyStream();
   }),
-  platformFunction(
-    "at",
-    {
-      posParams: [
-        {
-          name: "collection",
-          type: either(sequenceProtocol, objectClass, instanceProtocol),
-        },
-        { name: "index", type: either(numberClass, stringClass) },
-      ],
-      namedParams: [optionalFunctionParameter("default")],
-    },
-    function ([collection, index, default_], { kpcallback }) {
-      if (isString(collection) || isArray(collection)) {
-        if (!isNumber(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "Number"]
-          );
-        }
-        return indexArray(collection, index, default_, kpcallback);
-      } else if (isStream(collection)) {
-        if (!(isNumber(index) || isString(index))) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "either(Number, String)"]
-          );
-        }
-        return indexStream(collection, index, default_, kpcallback);
-      } else if (isObject(collection)) {
-        if (!isString(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "String"]
-          );
-        }
-        return indexMapping(collection, index, default_, kpcallback);
-      } else {
-        if (!isString(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "String"]
-          );
-        }
-        return indexInstance(collection, index, default_, kpcallback);
-      }
-    }
-  ),
   platformFunction(
     "length",
     { posParams: [{ name: "sequence", type: sequenceProtocol }] },
@@ -628,64 +550,6 @@ const rawBuiltins = [
         kpcallback(action, [element], kpobject());
       }
       return array;
-    }
-  ),
-  platformFunction(
-    "transform",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "f", type: functionClass },
-      ],
-    },
-    function ([sequence, f], { kpcallback }) {
-      const start = toStream(sequence);
-      function streamFrom(current) {
-        if (current.properties.isEmpty()) {
-          return emptyStream();
-        } else {
-          return stream({
-            value() {
-              return kpcallback(f, [current.properties.value()], kpobject());
-            },
-            next() {
-              return streamFrom(current.properties.next());
-            },
-          });
-        }
-      }
-      return streamFrom(start);
-    }
-  ),
-  platformFunction(
-    "running",
-    {
-      posParams: [{ name: "sequence", type: sequenceProtocol }],
-      namedParams: ["start", { name: "next", type: functionClass }],
-    },
-    function ([in_, start, next], { kpcallback }) {
-      const inStream = toStream(in_);
-      function streamFrom(current, state) {
-        return stream({
-          value() {
-            return state;
-          },
-          next() {
-            return current.properties.isEmpty()
-              ? emptyStream()
-              : streamFrom(
-                  current.properties.next(state),
-                  kpcallback(
-                    next,
-                    [current.properties.value(state)],
-                    kpobject(["state", state])
-                  )
-                );
-          },
-        });
-      }
-
-      return streamFrom(inStream, start);
     }
   ),
   platformFunction(
@@ -749,264 +613,6 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "while",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "condition", type: functionClass },
-      ],
-    },
-    function ([sequence, condition], { kpcallback }) {
-      const start = toStream(sequence);
-
-      function streamFrom(current) {
-        if (current.properties.isEmpty()) {
-          return emptyStream();
-        }
-        const conditionSatisfied = kpcallback(
-          condition,
-          [current.properties.value()],
-          kpobject()
-        );
-        validateReturn(conditionSatisfied, booleanClass);
-        if (!conditionSatisfied) {
-          return emptyStream();
-        }
-        return stream({
-          value() {
-            return current.properties.value();
-          },
-          next() {
-            return streamFrom(current.properties.next());
-          },
-        });
-      }
-
-      return streamFrom(start);
-    }
-  ),
-  platformFunction(
-    "continueIf",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "condition", type: functionClass },
-      ],
-    },
-    function ([sequence, condition], { kpcallback }) {
-      const start = toStream(sequence);
-
-      function streamFrom(current) {
-        if (current.properties.isEmpty()) {
-          return emptyStream();
-        }
-        const conditionSatisfied = kpcallback(
-          condition,
-          [current.properties.value()],
-          kpobject()
-        );
-        validateReturn(conditionSatisfied, booleanClass);
-        return stream({
-          value() {
-            return current.properties.value();
-          },
-          next() {
-            return conditionSatisfied
-              ? streamFrom(current.properties.next())
-              : emptyStream();
-          },
-        });
-      }
-
-      return streamFrom(start);
-    }
-  ),
-  platformFunction(
-    "where",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "condition", type: functionClass },
-      ],
-    },
-    function ([sequence, condition], { kpcallback }) {
-      const inStream = toStream(sequence);
-
-      function streamFrom(start) {
-        let current = start;
-
-        function satisfied() {
-          const conditionSatisfied = kpcallback(
-            condition,
-            [current.properties.value()],
-            kpobject()
-          );
-          validateReturn(conditionSatisfied, booleanClass);
-          return conditionSatisfied;
-        }
-
-        while (!current.properties.isEmpty() && !satisfied()) {
-          current = current.properties.next();
-        }
-
-        if (current.properties.isEmpty()) {
-          return emptyStream();
-        }
-
-        return stream({
-          value() {
-            return current.properties.value();
-          },
-          next() {
-            return streamFrom(current.properties.next());
-          },
-        });
-      }
-
-      return streamFrom(inStream);
-    }
-  ),
-  platformFunction(
-    "zip",
-    {
-      posParams: [
-        { rest: { name: "sequences", type: arrayOf(sequenceProtocol) } },
-      ],
-    },
-    function ([sequences]) {
-      const streams = sequences.map(toStream);
-
-      function streamFrom(currents) {
-        if (currents.some((current) => current.properties.isEmpty())) {
-          return emptyStream();
-        } else {
-          return stream({
-            value() {
-              return currents.map((current) => current.properties.value());
-            },
-            next() {
-              return streamFrom(
-                currents.map((current) => current.properties.next())
-              );
-            },
-          });
-        }
-      }
-
-      return streamFrom(streams);
-    }
-  ),
-  platformFunction(
-    "unzip",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "numStreams", type: numberClass, defaultValue: literal(2) },
-      ],
-    },
-    function ([sequence, numStreams]) {
-      const inStream = toStream(sequence);
-
-      function streamFrom(current, i) {
-        if (current.properties.isEmpty()) {
-          return emptyStream();
-        } else {
-          return stream({
-            value() {
-              return indexCollection(current.properties.value(), i);
-            },
-            next() {
-              return streamFrom(current.properties.next(), i);
-            },
-          });
-        }
-      }
-
-      return [...Array(numStreams)].map((_, i) => streamFrom(inStream, i + 1));
-    }
-  ),
-  platformFunction(
-    "flatten",
-    { posParams: [{ name: "sequences", type: sequenceProtocol }] },
-    function ([sequences]) {
-      const outer = toStream(sequences);
-
-      function streamFrom(startOuter, startInner) {
-        let outer = startOuter;
-        let inner = startInner;
-        while (inner.properties.isEmpty()) {
-          if (outer.properties.isEmpty()) {
-            return emptyStream();
-          }
-          const innerResult = outer.properties.value();
-          validateReturn(innerResult, either(arrayClass, streamClass));
-          inner = toStream(innerResult);
-          outer = outer.properties.next();
-        }
-        return stream({
-          value() {
-            return inner.properties.value();
-          },
-          next() {
-            return streamFrom(outer, inner.properties.next());
-          },
-        });
-      }
-
-      return streamFrom(outer, emptyStream());
-    }
-  ),
-  platformFunction(
-    "dissect",
-    {
-      posParams: [
-        { name: "sequence", type: sequenceProtocol },
-        { name: "condition", type: functionClass },
-      ],
-    },
-    function ([sequence, condition], { kpcallback }) {
-      const start = toStream(sequence);
-      function streamFrom(start) {
-        let current = start;
-        const out = [];
-
-        function satisfied() {
-          const conditionSatisfied = kpcallback(
-            condition,
-            [current.properties.value()],
-            kpobject()
-          );
-          validateReturn(conditionSatisfied, booleanClass);
-          return conditionSatisfied;
-        }
-
-        while (!current.properties.isEmpty() && !satisfied()) {
-          out.push(current.properties.value());
-          current = current.properties.next();
-        }
-
-        if (!current.properties.isEmpty()) {
-          out.push(current.properties.value());
-          current = current.properties.next();
-        }
-
-        if (out.length > 0) {
-          return stream({
-            value() {
-              return out;
-            },
-            next() {
-              return streamFrom(current);
-            },
-          });
-        } else {
-          return emptyStream();
-        }
-      }
-      return streamFrom(start);
-    }
-  ),
-  platformFunction(
     "keys",
     { posParams: [{ name: "object", type: objectClass }] },
     function ([object]) {
@@ -1014,17 +620,76 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "toObject",
+    "at",
     {
       posParams: [
         {
-          name: "value",
-          type: either(arrayClass, instanceProtocol),
+          name: "collection",
+          type: either(sequenceProtocol, objectClass, instanceProtocol),
+        },
+        { name: "index", type: either(numberClass, stringClass) },
+      ],
+      namedParams: [optionalFunctionParameter("default")],
+    },
+    function ([collection, index, default_], { kpcallback }) {
+      if (isString(collection) || isArray(collection)) {
+        if (!isNumber(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "Number"]
+          );
+        }
+        return indexArray(collection, index, default_, kpcallback);
+      } else if (isStream(collection)) {
+        if (!(isNumber(index) || isString(index))) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "either(Number, String)"]
+          );
+        }
+        return indexStream(collection, index, default_, kpcallback);
+      } else if (isObject(collection)) {
+        if (!isString(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "String"]
+          );
+        }
+        return indexMapping(collection, index, default_, kpcallback);
+      } else {
+        if (!isString(index)) {
+          throw kperror(
+            "wrongType",
+            ["value", index],
+            ["expectedType", "String"]
+          );
+        }
+        return indexInstance(collection, index, default_, kpcallback);
+      }
+    }
+  ),
+  platformFunction(
+    "debug",
+    {
+      posParams: [
+        "value",
+        {
+          name: "name",
+          type: either(stringClass, nullClass),
+          defaultValue: literal(null),
         },
       ],
     },
-    function ([value]) {
-      return toObject(value);
+    function ([value, name], { debugLog, kpcallback }) {
+      if (name) {
+        debugLog(`${name}: ${display(value, kpcallback)}`);
+      } else {
+        debugLog(display(value, kpcallback));
+      }
+      return value;
     }
   ),
   ...platformClass("Set", {
@@ -1439,6 +1104,47 @@ const rawBuiltins = [
     },
   }),
   platformFunction(
+    "newError",
+    {
+      posParams: [{ name: "type", type: stringClass }],
+      namedParams: [{ rest: "details" }],
+    },
+    function ([type, details]) {
+      return kperror(type, ...kpoEntries(details));
+    }
+  ),
+  platformFunction(
+    "throw",
+    {
+      posParams: [{ name: "error", type: errorClass }],
+    },
+    function ([error]) {
+      throw error;
+    }
+  ),
+  platformFunction(
+    "try",
+    {
+      posParams: [{ name: "f", type: functionClass }],
+      namedParams: [
+        { name: "onError", type: functionClass },
+        optionalFunctionParameter("onSuccess"),
+      ],
+    },
+    function ([f, onError, onSuccess], { kpcallback }) {
+      try {
+        const result = kpcallback(f, [], kpobject());
+        if (onSuccess) {
+          return kpcallback(onSuccess, [result], kpobject());
+        } else {
+          return result;
+        }
+      } catch (error) {
+        return kpcallback(onError, [error], kpobject());
+      }
+    }
+  ),
+  platformFunction(
     "validate",
     { posParams: ["value", "schema"] },
     function ([value, schema], { kpcallback }) {
@@ -1520,47 +1226,6 @@ const rawBuiltins = [
     },
     function ([schema]) {
       return optional(schema);
-    }
-  ),
-  platformFunction(
-    "newError",
-    {
-      posParams: [{ name: "type", type: stringClass }],
-      namedParams: [{ rest: "details" }],
-    },
-    function ([type, details]) {
-      return kperror(type, ...kpoEntries(details));
-    }
-  ),
-  platformFunction(
-    "throw",
-    {
-      posParams: [{ name: "error", type: errorClass }],
-    },
-    function ([error]) {
-      throw error;
-    }
-  ),
-  platformFunction(
-    "try",
-    {
-      posParams: [{ name: "f", type: functionClass }],
-      namedParams: [
-        { name: "onError", type: functionClass },
-        optionalFunctionParameter("onSuccess"),
-      ],
-    },
-    function ([f, onError, onSuccess], { kpcallback }) {
-      try {
-        const result = kpcallback(f, [], kpobject());
-        if (onSuccess) {
-          return kpcallback(onSuccess, [result], kpobject());
-        } else {
-          return result;
-        }
-      } catch (error) {
-        return kpcallback(onError, [error], kpobject());
-      }
     }
   ),
 ];
