@@ -567,7 +567,7 @@ const rawBuiltins = [
       const start = toStream(sequence);
 
       function streamFrom(current, i) {
-        if (current.properties.isEmpty() || i > n) {
+        if (current.properties.isEmpty()) {
           return emptyStream();
         } else {
           return stream({
@@ -575,13 +575,21 @@ const rawBuiltins = [
               return current.properties.value();
             },
             next() {
-              return streamFrom(current.properties.next(), i + 1);
+              if (i >= n) {
+                return emptyStream();
+              } else {
+                return streamFrom(current.properties.next(), i + 1);
+              }
             },
           });
         }
       }
 
-      return streamFrom(start, 1);
+      if (n < 1) {
+        return emptyStream();
+      } else {
+        return streamFrom(start, 1);
+      }
     }
   ),
   platformFunction(
@@ -690,6 +698,21 @@ const rawBuiltins = [
         debugLog(display(value, kpcallback));
       }
       return value;
+    }
+  ),
+  platformFunction(
+    "callOnce",
+    {
+      posParams: [{ name: "body", type: functionClass }],
+    },
+    function ([body], { kpcallback }) {
+      let result;
+      return () => {
+        if (result === undefined) {
+          result = kpcallback(body, [], kpobject());
+        }
+        return result;
+      };
     }
   ),
   ...platformClass("Set", {
@@ -1568,12 +1591,13 @@ export function indexStream(
       let j = 0;
       while (!current.properties.isEmpty() && j < index) {
         last = current;
-        current = current.properties.next();
         j += 1;
+        if (j === index) {
+          return last.properties.value();
+        }
+        current = current.properties.next();
       }
-      if (j === index) {
-        return last.properties.value();
-      } else if (default_) {
+      if (default_) {
         return kpcallback(default_, [], kpobject());
       } else {
         throw kperror(

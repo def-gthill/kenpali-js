@@ -47,11 +47,14 @@ butIf = (value, condition, ifTrue) => if(
 );
 ifs = (*conditions, else:) => null | switch(*conditions, else:);
 build = (start, next) => (
-    streamFrom = (state) => newStream(
-        value: $ state,
-        next: $ streamFrom(next(state)),
+    streamFrom = (getState) => (
+        getStateOnce = callOnce(getState);
+        newStream(
+            value: getStateOnce,
+            next: $ streamFrom($ next(getStateOnce())),
+        )
     );
-    streamFrom(start)
+    streamFrom($ start)
 );
 to = (start, end, by: = 1) => (
     isNoFurtherThan = if(
@@ -116,7 +119,11 @@ groupBy = (sequence, by, onGroup: = (x) => x) => (
     | transform((element) => [by(element), element])
     | group(onGroup: onGroup)
 );
-isEmpty = (sequence) => sequence | keepFirst(1) | length | equals(0);
+isEmpty = (sequence) => if(
+    sequence | isStream,
+    then: $ sequence.isEmpty(),
+    else: $ sequence | keepFirst(1) | length | equals(0),
+);
 first = (sequence) => sequence @ 1;
 transform = (sequence, f) => (
     start = sequence | toStream;
@@ -132,18 +139,21 @@ transform = (sequence, f) => (
 );
 running = (in, start:, next:) => (
     inStream = in | toStream;
-    streamFrom = (current, state) => newStream(
-        value: $ state,
-        next: $ if(
-            current.isEmpty(),
-            then: emptyStream,
-            else: $ streamFrom(
-                current.next(),
-                next(current.value(), state:)
-            ),
+    streamFrom = (current, getState) => (
+        getStateOnce = callOnce(getState);
+        newStream(
+            value: getStateOnce,
+            next: $ if(
+                current.isEmpty(),
+                then: emptyStream,
+                else: $ streamFrom(
+                    current.next(),
+                    $ next(current.value(), state: getStateOnce())
+                ),
+            )
         )
     );
-    streamFrom(inStream, start)
+    streamFrom(inStream, $ start)
 );
 withIndex = (sequence) => (
     1 | build(up) | zip(sequence)
@@ -200,12 +210,10 @@ sliding = (sequence, size) => (
 );
 where = (sequence, condition) => (
     sequence
-    | transform((value) => (
-        if(
-            condition(value),
-            then: $ [value],
-            else: $ [],
-        )
+    | transform((value) => if(
+        condition(value),
+        then: $ [value],
+        else: $ [],
     ))
     | flatten
 );
@@ -250,7 +258,7 @@ flatten = (sequence) => (
             inner.isEmpty(),
             then: emptyStream,
             else: $ newStream(
-                value: $ inner.value(),
+                value: inner.value,
                 next: $ streamFrom(outer, inner.next()),
             )
         )

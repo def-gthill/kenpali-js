@@ -931,12 +931,14 @@ export class Vm {
         let j = 0;
         while (!current.properties.isEmpty() && j < index) {
           last = current;
-          current = current.properties.next();
           j += 1;
+          if (j === index) {
+            this.stack.push(last.properties.value());
+            break;
+          }
+          current = current.properties.next();
         }
-        if (j === index) {
-          this.stack.push(last.properties.value());
-        } else {
+        if (j < index) {
           this.throw_(
             kperror(
               "indexOutOfBounds",
