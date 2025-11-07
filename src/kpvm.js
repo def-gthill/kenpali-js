@@ -154,7 +154,8 @@ export class Vm {
     this.instructionTable[op.CAPTURE] = this.runCapture;
     this.instructionTable[op.READ_UPVALUE] = this.runReadUpvalue;
     this.instructionTable[op.RETURN] = this.runReturn;
-    this.instructionTable[op.CALL_BUILTIN] = this.runCallBuiltin;
+    this.instructionTable[op.CALL_PLATFORM_FUNCTION] =
+      this.runCallPlatformFunction;
     this.instructionTable[op.SELF] = this.runSelf;
     this.instructionTable[op.INDEX] = this.runIndex;
     this.instructionTable[op.EQUALS] = this.runEquals;
@@ -672,15 +673,15 @@ export class Vm {
     }
     const callee = this.stack.at(-3);
     if (typeof callee === "object" && "target" in callee) {
-      this.callGiven(callee);
+      this.callNaturalFunction(callee);
     } else if (isPlatformFunction(callee)) {
-      this.callBuiltin(callee);
+      this.callPlatformFunction(callee);
     } else {
       this.throw_(kperror("notCallable", ["value", callee]));
     }
   }
 
-  callGiven(callee) {
+  callNaturalFunction(callee) {
     this.pushCallFrame(callee.name);
     const target = callee.target;
     if (this.trace) {
@@ -689,7 +690,7 @@ export class Vm {
     this.cursor = target;
   }
 
-  callBuiltin(callee) {
+  callPlatformFunction(callee) {
     const calleeName = functionName(callee);
     if (this.trace) {
       console.log(`Call builtin "${calleeName}"`);
@@ -771,10 +772,10 @@ export class Vm {
     }
   }
 
-  runCallBuiltin() {
+  runCallPlatformFunction() {
     const calleeName = this.next();
     if (this.trace) {
-      this.logInstruction(`CALL_BUILTIN ${calleeName}`);
+      this.logInstruction(`CALL_PLATFORM_FUNCTION ${calleeName}`);
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
@@ -840,15 +841,6 @@ export class Vm {
       });
     }
     throw new Error(`Method ${constructorName}/${name} not found`);
-  }
-
-  runEquals() {
-    if (this.trace) {
-      this.logInstruction("EQUALS");
-    }
-    const right = this.stack.pop();
-    const left = this.stack.pop();
-    this.stack.push(equals(left, right));
   }
 
   runIndex() {
@@ -996,6 +988,15 @@ export class Vm {
         this.stack.push(result);
       }
     );
+  }
+
+  runEquals() {
+    if (this.trace) {
+      this.logInstruction("EQUALS");
+    }
+    const right = this.stack.pop();
+    const left = this.stack.pop();
+    this.stack.push(equals(left, right));
   }
 
   runThrow() {

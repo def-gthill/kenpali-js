@@ -31,80 +31,157 @@ export const READ_RELATIVE = 0x09;
 
 // Create an empty array and push it onto the stack.
 export const EMPTY_ARRAY = 0x10;
+// Pop the value at the top of the stack and push it onto the array now at the top of the stack.
 export const ARRAY_PUSH = 0x11;
+// Pop the sequence at the top of the stack and push all its values onto the array now at the top,
+// preserving their order.
 export const ARRAY_EXTEND = 0x12;
+// Reverse the order of the values in the array now at the top of the stack.
 export const ARRAY_REVERSE = 0x13;
+// Pop the last value from the array at the top of the stack and push it onto the stack.
 export const ARRAY_POP = 0x14;
+// If there are elements in the array at the top of the stack, pop the last value and
+// push it onto the stack. Otherwise, push the default value onto the stack.
 export const ARRAY_POP_OR_DEFAULT = 0x15;
+// Pop the sequence at the top of the stack, split it at the specified position, and push both
+// parts onto the stack. After this instruction, the second value from the top of the stack
+// is an array whose length is the specified position.
 export const ARRAY_CUT = 0x16;
 // Replace the array at the top of the stack with a copy of it, breaking any alias relationships.
 export const ARRAY_COPY = 0x17;
+// Pop the array at the top of the stack and push a boolean indicating whether it is empty.
 export const ARRAY_IS_EMPTY = 0x18;
 
 // ----------------------------
 // -- OBJECT OPERATIONS -------
 // ----------------------------
 
+// Create an empty object and push it onto the stack.
 export const EMPTY_OBJECT = 0x20;
+// Pop the top two values from the stack and add them as a key-value pair to the object
+// now at the top of the stack. The key is the value that was originally at the top of the stack.
 export const OBJECT_PUSH = 0x21;
+// Pop the object at the top of the stack and add all its key-value pairs to the object
+// now at the top of the stack. The key-value pairs from the popped object take precedence
+// over any existing key-value pairs in the object at the top of the stack.
 export const OBJECT_MERGE = 0x22;
+// Pop the value corresponding to the specified key from the object at the top of the stack
+// and push it onto the stack.
 export const OBJECT_POP = 0x23;
+// Pop the value corresponding to the specified key from the object at the top of the stack
+// and push it onto the stack. If the object does not have a value for the specified key,
+// push the default value onto the stack instead.
 export const OBJECT_POP_OR_DEFAULT = 0x24;
+// Replace the object at the top of the stack with a copy of it, breaking any alias relationships.
 export const OBJECT_COPY = 0x25;
+// Pop the object at the top of the stack and push an array of all its keys.
 export const OBJECT_KEYS = 0x26;
+// Pop the object at the top of the stack and push an array of all its values.
 export const OBJECT_VALUES = 0x27;
+// Pop the object at the top of the stack and push a boolean indicating whether it has a value
+// for the specified key.
 export const OBJECT_HAS = 0x28;
 
 // ----------------------------
 // -- JUMPS -------------------
 // ----------------------------
 
+// Move the cursor forward by the specified number of steps.
 export const JUMP = 0x30;
+// Pop the value at the top of the stack and move the cursor forward by the specified number of steps
+// if the value is `true`.
 export const JUMP_IF_TRUE = 0x31;
+// Pop the value at the top of the stack and move the cursor forward by the specified number of steps
+// if the value is `false`.
 export const JUMP_IF_FALSE = 0x32;
 
 // ----------------------------
 // -- FUNCTIONS ---------------
 // ----------------------------
 
+// Do nothing. This simply marks the beginning of a function.
 export const BEGIN = 0x40;
+// Push the function starting at the specified instruction index onto the stack.
 export const FUNCTION = 0x41;
+// Prepare an upvalue for the variable the specified number of scope frames out at the
+// specified index. If the number of steps is -1, instead prepare a chained upvalue referring
+// to the specified variable in the enclosing function's closure.
 export const CLOSURE = 0x42;
+// Call a function. The function is expected to be third from the top of the stack,
+// with the array of positional arguments immediately above it and the object of named arguments
+// above that. If the function is a natural function, this instruction just pushes a call frame
+// and jumps to the start of the function; otherwise, it manages the entire lifecycle of the
+// call, ending with the function's result at the top of the stack.
 export const CALL = 0x43;
+// Capture the value at the top of the stack into the corresponding upvalue.
 export const CAPTURE = 0x44;
+// Read the value from the upvalue at the specified index and push it onto the stack.
 export const READ_UPVALUE = 0x45;
+// Pops the current call frame and moves the cursor to the return instruction indicated
+// in the frame.
 export const RETURN = 0x46;
-export const CALL_BUILTIN = 0x47;
+// Call a function defined using `platformFunction` or `platformClass`, with the specified
+// name. The arguments are pre-bound and occupy as many slots at the top of the stack as
+// there are parameters defined for the function.
+export const CALL_PLATFORM_FUNCTION = 0x47;
+// Pop the specified constructor function off the stack, and push its `self` value onto the stack.
 export const SELF = 0x48;
 
 // ----------------------------
 // -- CORE IMPLEMENTATION -----
 // ----------------------------
 
+// Pop the top two values from the stack, use the top value as an index into the second-from-top value,
+// and push the result onto the stack.
 export const INDEX = 0x50;
+// Pop the top two values from the stack, and push a boolean indicating whether they are equal,
+// as per the core `equals` function.
 export const EQUALS = 0x51;
 
 // ----------------------------
 // -- VALIDATION AND ERRORS ---
 // ----------------------------
 
+// Pop the error value at the top of the stack and throw it.
 export const THROW = 0x80;
+// Push a recovery handler onto the recovery stack, targeting the specified number of
+// steps forward from the current cursor.
 export const CATCH = 0x81;
+// Pop the top recovery handler from the recovery stack.
 export const UNCATCH = 0x82;
+// Pop the value at the top of the stack and push a boolean indicating whether it is `null`.
 export const IS_NULL = 0x83;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a boolean.
 export const IS_BOOLEAN = 0x84;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a number.
 export const IS_NUMBER = 0x85;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a string.
 export const IS_STRING = 0x86;
+// Pop the value at the top of the stack and push a boolean indicating whether it is an array.
 export const IS_ARRAY = 0x87;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a stream.
 export const IS_STREAM = 0x88;
+// Pop the value at the top of the stack and push a boolean indicating whether it is an object.
 export const IS_OBJECT = 0x89;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a function.
 export const IS_FUNCTION = 0x8a;
+// Pop the value at the top of the stack and push a boolean indicating whether it is an error.
 export const IS_ERROR = 0x8b;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a class.
 export const IS_CLASS = 0x8c;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a protocol.
 export const IS_PROTOCOL = 0x8d;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a sequence.
 export const IS_SEQUENCE = 0x8e;
+// Pop the value at the top of the stack and push a boolean indicating whether it is a type.
 export const IS_TYPE = 0x8f;
+// Pop the value at the top of the stack and push a boolean indicating whether it is an instance.
 export const IS_INSTANCE = 0x90;
+// Pop the top two values from the stack. The top value is treated as a validation schema, and
+// the second-from-top value is a boolean indicating whether the value was found to match the
+// schema using fast comparison. The value now at the top of the stack is the value to validate.
+// If the value does not match the schema, push an error value onto the stack indicating why.
+// Otherwise, do nothing.
 export const ERROR_IF_INVALID = 0x91;
 
 export function disassemble(program) {
@@ -158,10 +235,11 @@ class Disassembler {
     this.instructionTable[CAPTURE] = this.disassembleCapture;
     this.instructionTable[READ_UPVALUE] = this.disassembleReadUpvalue;
     this.instructionTable[RETURN] = this.disassembleReturn;
-    this.instructionTable[CALL_BUILTIN] = this.disassembleCallBuiltin;
+    this.instructionTable[CALL_PLATFORM_FUNCTION] =
+      this.disassembleCallPlatformFunction;
     this.instructionTable[SELF] = this.disassembleSelf;
-    this.instructionTable[EQUALS] = this.disassembleEquals;
     this.instructionTable[INDEX] = this.disassembleIndex;
+    this.instructionTable[EQUALS] = this.disassembleEquals;
     this.instructionTable[THROW] = this.disassembleThrow;
     this.instructionTable[CATCH] = this.disassembleCatch;
     this.instructionTable[UNCATCH] = this.disassembleUncatch;
@@ -365,20 +443,20 @@ class Disassembler {
     return "RETURN";
   }
 
-  disassembleCallBuiltin() {
-    return `CALL_BUILTIN ${this.next()}`;
+  disassembleCallPlatformFunction() {
+    return `CALL_PLATFORM_FUNCTION ${this.next()}`;
   }
 
   disassembleSelf() {
     return "SELF";
   }
 
-  disassembleEquals() {
-    return "EQUALS";
-  }
-
   disassembleIndex() {
     return "INDEX";
+  }
+
+  disassembleEquals() {
+    return "EQUALS";
   }
 
   disassembleThrow() {

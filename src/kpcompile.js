@@ -172,7 +172,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
-    this.addInstruction(op.CALL_BUILTIN, name);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, name);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
@@ -220,7 +220,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
     this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames - 1);
-    this.addInstruction(op.CALL_BUILTIN, fullName);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullName);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
