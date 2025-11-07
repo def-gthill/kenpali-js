@@ -2,28 +2,35 @@ import { toJsObject, toKpobject } from "./kpobject.js";
 import { kpvmCall } from "./kpvm.js";
 import { display as internalDisplay } from "./values.js";
 
-export function kpcall(kpf, args, namedArgs, { timeLimitSeconds = 0 } = {}) {
-  return kpvmCall(kpf, args, toKpobject(namedArgs), { timeLimitSeconds });
+export function kpcall(
+  kpf,
+  posArgs,
+  namedArgs,
+  { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
+) {
+  return kpvmCall(kpf, posArgs, toKpobject(namedArgs), {
+    trace,
+    timeLimitSeconds,
+    debugLog,
+  });
 }
 
 export function kpcallbackInNewSession(
   kpf,
-  args,
+  posArgs,
   namedArgs,
   options = { timeLimitSeconds: 10 }
 ) {
-  return kpcall(kpf, args, namedArgs, options);
+  return kpcall(kpf, posArgs, namedArgs, options);
 }
 
 export function toKpFunction(jsf) {
-  return (args, namedArgs, { kpcallback }) =>
-    jsf(args, toJsObject(namedArgs), (callback, args, namedArgs) =>
-      kpcallback(callback, args, toKpobject(namedArgs))
+  return (posArgs, namedArgs, { kpcallback }) =>
+    jsf(posArgs, toJsObject(namedArgs), (callback, posArgs, namedArgs) =>
+      kpcallback(callback, posArgs, toKpobject(namedArgs))
     );
 }
 
-export function display(value, options = { timeLimitSeconds: 10 }) {
-  return internalDisplay(value, (...args) =>
-    kpcallbackInNewSession(...args, options)
-  );
+export function display(value, kpcallback = kpcallbackInNewSession) {
+  return internalDisplay(value, kpcallback);
 }

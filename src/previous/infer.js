@@ -1,10 +1,10 @@
-import { oneOf } from "./validate.js";
+import { oneOfValues } from "./validate.js";
 import { equals } from "./values.js";
 
 export function infer(node) {
   switch (node.type) {
     case "literal":
-      return oneOf([node.value]);
+      return oneOfValues([node.value]);
     case "name":
       return node.schema ?? "any";
     case "array":

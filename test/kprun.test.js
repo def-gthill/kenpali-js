@@ -5,7 +5,7 @@ import kpparse from "../src/kpparse.js";
 import { assertThrows } from "./assertions.js";
 
 test("A function can be called with spread positional arguments", (t) => {
-  const code = "arr = [1, 2, 3]; plus(*arr)";
+  const code = "arr = [1, 2, 3]; add(*arr)";
   const result = kpeval(kpparse(code));
   t.is(result, 6);
 });
@@ -42,22 +42,22 @@ test("A function can be defined with a named rest parameter", (t) => {
 });
 
 test("A wrong argument type error doesn't have a rest detail", (t) => {
-  const code = `1 | plus("two")`;
+  const code = `1 | add("two")`;
   assertThrows(t, () => kpeval(kpparse(code)), "wrongArgumentType");
 });
 
 test("Errors short-circuit through the @ operator", (t) => {
-  const code = `1 | plus("two") @ "three"`;
+  const code = `1 | add("two") @ "three"`;
   assertThrows(t, () => kpeval(kpparse(code)), "wrongArgumentType");
 });
 
 test("Using a name before it's assigned throws an error", (t) => {
-  const code = `foo = bar; bar = 42; foo | plus(3)`;
+  const code = `foo = bar; bar = 42; foo | add(3)`;
   assertThrows(t, () => kpeval(kpparse(code)), "nameUsedBeforeAssignment");
 });
 
 test("Destructuring can reference other names in the same scope", (t) => {
-  const code = `foo = [42, 97]; [bar, baz] = foo; bar | plus(baz)`;
+  const code = `foo = [42, 97]; [bar, baz] = foo; bar | add(baz)`;
   const result = kpeval(kpparse(code));
   t.is(result, 139);
 });
@@ -81,7 +81,7 @@ test("The time limit can't be subverted just by catching the error", (t) => {
 });
 
 test("Debug logging can be configured", (t) => {
-  const code = `1 | build(| times(2)) | while(| debug | isLessThan(100)) | toArray`;
+  const code = `1 | build(| mul(2)) | while(| debug | lt(100)) | toArray`;
   const debugLog = [];
   const result = kpeval(kpparse(code), { debugLog: (s) => debugLog.push(s) });
   t.deepEqual(result, [1, 2, 4, 8, 16, 32, 64]);

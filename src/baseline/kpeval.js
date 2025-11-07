@@ -1,12 +1,11 @@
 import kpcompile from "./kpcompile.js";
-import kpobject from "./kpobject.js";
 import kpvm from "./kpvm.js";
 
 export default function kpeval(
   expression,
   {
-    names = kpobject(),
-    modules = kpobject(),
+    names = new Map(),
+    modules = new Map(),
     trace = false,
     timeLimitSeconds = 0,
     debugLog = console.error,

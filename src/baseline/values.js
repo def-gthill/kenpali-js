@@ -195,12 +195,12 @@ export function equals(a, b) {
  * @returns - The string representation of the value.
  */
 export function displaySimple(value) {
-  return display(value, (display, args, namedArgs) => {
+  return display(value, (display, posArgs, namedArgs) => {
     if (typeof display === "function") {
       // A few types, like Class and Protocol, implement `display` as a plain
       // JavaScript function, so they don't need a `kpcallback`. This is useful
       // for disassembling.
-      return display(args, namedArgs);
+      return display(posArgs, namedArgs);
     } else {
       throw new Error(
         `Value of type ${classOf(display.self).properties.name} implements Display`

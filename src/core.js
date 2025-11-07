@@ -1,11 +1,11 @@
 export const core = String.raw`
-sum = (numbers) => plus(*toArray(numbers));
-absolute = (n) => n | butIf(n | isLessThan(0), $ negative(n));
-isDivisibleBy = (a, b) => a | remainderBy(b) | equals(0);
+sum = (numbers) => add(*toArray(numbers));
+absolute = (n) => n | butIf(n | lt(0), $ negative(n));
+isDivisibleBy = (a, b) => a | remainderBy(b) | eq(0);
 joinLines = (strings) => (strings | join(on: "\n"));
 splitLines = (string) => (string | split(on: "\n"));
 isBetween = (n, lower, upper) => (
-    n | isAtLeast(lower) | and($ n | isAtMost(upper))
+    n | ge(lower) | and($ n | le(upper))
 );
 least = (sequence) => (
     sequence
@@ -13,7 +13,7 @@ least = (sequence) => (
         start: null,
         next: (element, state: leastSoFar) => if(
             leastSoFar | isNull | or(
-                $ element | isLessThan(leastSoFar)
+                $ element | lt(leastSoFar)
             ),
             then: $ element,
             else: $ leastSoFar,
@@ -21,16 +21,16 @@ least = (sequence) => (
     )
     | last
 );
-most = (sequence) => (
+greatest = (sequence) => (
     sequence
     | running(
         start: null,
-        next: (element, state: mostSoFar) => if(
-            mostSoFar | isNull | or(
-                $ element | isMoreThan(mostSoFar)
+        next: (element, state: greatestSoFar) => if(
+            greatestSoFar | isNull | or(
+                $ element | gt(greatestSoFar)
             ),
             then: $ element,
-            else: $ mostSoFar,
+            else: $ greatestSoFar,
         )
     )
     | last
@@ -58,23 +58,23 @@ build = (start, next) => (
 );
 to = (start, end, by: = 1) => (
     isNoFurtherThan = if(
-        by | isMoreThan(0),
-        then: $ isAtMost,
-        else: $ isAtLeast,
+        by | gt(0),
+        then: $ le,
+        else: $ ge,
     );
     start
-    | build(| plus(by))
+    | build(| add(by))
     | while(| isNoFurtherThan(end))
 );
-toSize = (start, size) => (start | to(start | plus(size | down)));
+toSize = (start, size) => (start | to(start | add(size | down)));
 repeat = (value) => value | build((x) => x);
 last = (sequence) => sequence @ -1;
 keepLast = (sequence, n) => (
-    result = sequence | dropFirst(length(sequence) | minus(n));
+    result = sequence | dropFirst(length(sequence) | sub(n));
     result | butIf(result | isString | not, $ result | toArray)
 );
 dropLast = (sequence, n = 1) => (
-    result = sequence | keepFirst(length(sequence) | minus(n));
+    result = sequence | keepFirst(length(sequence) | sub(n));
     if(
         result | isString,
         then: $ result,
@@ -85,12 +85,12 @@ count = (sequence, condition) => sequence | where(condition) | toArray | length;
 forAll = (sequence, condition) => (
     sequence
     | count((element) => (element | condition | not))
-    | equals(0)
+    | eq(0)
 );
 forSome = (sequence, condition) => (
     sequence
     | count(condition)
-    | isMoreThan(0)
+    | gt(0)
 );
 reverse = (sequence) => (
     array = sequence | toArray;
@@ -122,7 +122,7 @@ groupBy = (sequence, by, onGroup: = (x) => x) => (
 isEmpty = (sequence) => if(
     sequence | isStream,
     then: $ sequence.isEmpty(),
-    else: $ sequence | keepFirst(1) | length | equals(0),
+    else: $ sequence | keepFirst(1) | length | eq(0),
 );
 first = (sequence) => sequence @ 1;
 transform = (sequence, f) => (
@@ -291,7 +291,7 @@ dissect = (sequence, condition) => (
 chunk = (sequence, size) => (
     sequence
     | zip(1 | to(size) | repeat | flatten)
-    | dissect(([element, i]) => i | equals(size))
+    | dissect(([element, i]) => i | eq(size))
     | transform(| transform(([element]) => element) | toArray)
 );
 properties = (object) => (

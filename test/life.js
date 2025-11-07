@@ -2,7 +2,6 @@ import {
   arrayOf,
   booleanClass,
   display,
-  errorClass,
   functionClass,
   kpcall,
   kpcatch,
@@ -26,8 +25,8 @@ export const defaultSetupCode = `glider = (centre) => (
   [[1, 1], [1, 0], [1, -1], [0, 1], [-1, 0]]
   | transform(
     (cell) => [
-      cell @ 1 | plus(centre @ 1),
-      cell @ 2 | plus(centre @ 2),
+      cell @ 1 | add(centre @ 1),
+      cell @ 2 | add(centre @ 2),
     ]
   )
 );
@@ -44,10 +43,10 @@ export const defaultRulesCode = `(isLive) => (
   if(
     currentCellIsLive,
     then: () => or(
-      numLiveNeighbors | equals(2),
+      numLiveNeighbors | eq(2),
       () => numLiveNeighbors | equals(3),
     ),
-    else: () => numLiveNeighbors | equals(3),
+    else: () => numLiveNeighbors | eq(3),
   )
 )
 `;
@@ -86,10 +85,11 @@ export function updateGameBoard(oldBoard, rules) {
         );
       };
 
-      const newState = rules(isLive);
-      if (matches(newState, errorClass)) {
-        return display(newState);
+      const result = rules(isLive);
+      if (result.status === "error") {
+        return display(result.error);
       }
+      const newState = result.value;
       if (!matches(newState, booleanClass)) {
         return `Rules must return a boolean, received: ${display(newState)}`;
       }
@@ -103,23 +103,22 @@ export function updateGameBoard(oldBoard, rules) {
 
 function runSetup() {
   const code = defaultSetupCode;
-  const liveCells = kpcatch(() =>
-    kpeval(kpparse(code), { timeLimitSeconds: 1 })
-  );
-  if (matches(liveCells, errorClass)) {
-    return display(liveCells);
+  const result = kpcatch(() => kpeval(kpparse(code), { timeLimitSeconds: 1 }));
+  if (result.status === "error") {
+    return display(result.error);
   }
+  const liveCells = result.value;
   return newGameBoard(liveCells);
 }
 
 function setUpRules() {
   const code = defaultRulesCode;
-  const rulesKpFunction = kpcatch(() =>
-    kpeval(kpparse(code), { timeLimitSeconds: 1 })
-  );
-  if (matches(rulesKpFunction, errorClass)) {
-    return display(rulesKpFunction);
-  } else if (!matches(rulesKpFunction, functionClass)) {
+  const result = kpcatch(() => kpeval(kpparse(code), { timeLimitSeconds: 1 }));
+  if (result.status === "error") {
+    return display(result.error);
+  }
+  const rulesKpFunction = result.value;
+  if (!matches(rulesKpFunction, functionClass)) {
     return `Not a function: ${display(rulesKpFunction)}`;
   } else {
     return (isLive) =>

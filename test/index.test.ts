@@ -1,8 +1,9 @@
-import test from "ava";
+import test, { ExecutionContext } from "ava";
 import * as tsdModule from "tsd";
 import {
   arrayOf,
   errorClass,
+  ExpressionNode,
   KenpaliError,
   kpcatch,
   kpeval,
@@ -174,8 +175,6 @@ test("Can define a platform function that checks for record shapes", (t) => {
 });
 
 test("Can define a platform function that checks an arbitrary condition", (t) => {
-  const code = "foo/bar(42)";
-  const ast = kpparse(code);
   const fooModule = new Map([
     [
       "bar",
@@ -190,8 +189,16 @@ test("Can define a platform function that checks an arbitrary condition", (t) =>
       ),
     ],
   ]);
-  const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
-  t.is(result, 43);
+
+  function evalWithFoo(ast: ExpressionNode): KpValue {
+    return kpeval(ast, { modules: new Map([["foo", fooModule]]) });
+  }
+  t.is(evalWithFoo(kpparse("foo/bar(42)")), 43);
+  assertThrows(
+    t,
+    () => evalWithFoo(kpparse("foo/bar(-42)")),
+    "badArgumentValue"
+  );
 });
 
 test("Can try a Kenpali function", (t) => {
@@ -223,3 +230,13 @@ test("Can validate a value against a schema", (t) => {
     t.assert(error instanceof KenpaliError);
   }
 });
+
+function assertThrows(
+  t: ExecutionContext<unknown>,
+  f: () => void,
+  expectedErrorType: string
+) {
+  kptry(f, (error) => {
+    t.is(error.properties.type, expectedErrorType);
+  });
+}

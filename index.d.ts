@@ -295,7 +295,7 @@ export interface UnionSchema<T extends KpValue> {
 export interface ConditionSchema<T extends KpValue> {
   form: "condition";
   schema: Schema<T>;
-  condition: (value: T) => boolean;
+  condition: (args: [T]) => boolean;
 }
 
 export interface ArraySchema<T extends KpValue> {

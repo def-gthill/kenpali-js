@@ -76,7 +76,12 @@ function jsEither(...schemas) {
 }
 
 function jsSatisfying(schema, condition) {
-  return toJsObject(satisfying(schema, toKpFunction(condition)));
+  return toJsObject(
+    satisfying(
+      schema,
+      toKpFunction(([value]) => condition(value))
+    )
+  );
 }
 
 function jsArrayOf(elementSchema) {

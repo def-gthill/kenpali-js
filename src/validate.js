@@ -5,7 +5,7 @@ import kperror, {
   withDetails,
   withErrorType,
 } from "./kperror.js";
-import kpobject from "./kpobject.js";
+import kpobject, { deepToKpobject } from "./kpobject.js";
 import {
   anyProtocol,
   arrayClass,
@@ -26,6 +26,10 @@ import {
 } from "./values.js";
 
 export default function validate(value, schema, kpcallback) {
+  return validateRecursive(value, deepToKpobject(schema), kpcallback);
+}
+
+function validateRecursive(value, schema, kpcallback) {
   if (schema instanceof Class || schema instanceof Protocol) {
     return validateTypeSchema(value, schema);
   } else if (isObject(schema) && schema.has("form")) {
@@ -81,7 +85,7 @@ function validateUnionSchema(value, schema, kpcallback) {
   const options = schema.get("options");
   const errors = [];
   for (const option of options) {
-    const result = kpcatch(() => validate(value, option, kpcallback));
+    const result = kpcatch(() => validateRecursive(value, option, kpcallback));
     if (result.status === "error") {
       errors.push(result.error);
     } else {
@@ -103,7 +107,7 @@ function combineUnionErrors(value, errors) {
 }
 
 function validateConditionSchema(value, schema, kpcallback) {
-  validate(value, schema.get("schema"), kpcallback);
+  validateRecursive(value, schema.get("schema"), kpcallback);
   if (!kpcallback(schema.get("condition"), [value], kpobject())) {
     throw badValue(value, ["condition", schema.get("condition")]);
   }
@@ -117,7 +121,7 @@ function validateArraySchema(value, schema, kpcallback) {
 function validateArrayElements(value, schema, kpcallback) {
   for (let i = 0; i < value.length; i++) {
     transformError(
-      () => validate(value[i], schema, kpcallback),
+      () => validateRecursive(value[i], schema, kpcallback),
       (err) => withReason(badElement(value, i + 1), err)
     );
   }
@@ -136,7 +140,7 @@ function validateTupleShape(value, schema, kpcallback) {
     if (i < value.length) {
       transformError(
         () =>
-          validate(
+          validateRecursive(
             value[i],
             isOptional ? shape[i].get("schema") : shape[i],
             kpcallback
@@ -160,7 +164,7 @@ function validateObjectSchema(value, schema, kpcallback) {
 function validateObjectKeys(value, schema, kpcallback) {
   for (const [key, _] of value) {
     transformError(
-      () => validate(key, schema, kpcallback),
+      () => validateRecursive(key, schema, kpcallback),
       (err) => withReason(badKey(value, key), err)
     );
   }
@@ -169,7 +173,7 @@ function validateObjectKeys(value, schema, kpcallback) {
 function validateObjectValues(value, schema, kpcallback) {
   for (const [key, propertyValue] of value) {
     transformError(
-      () => validate(propertyValue, schema, kpcallback),
+      () => validateRecursive(propertyValue, schema, kpcallback),
       (err) => withReason(badProperty(value, key), err)
     );
   }
@@ -187,7 +191,7 @@ function validateRecordShape(value, shape, kpcallback) {
     if (value.has(key)) {
       transformError(
         () =>
-          validate(
+          validateRecursive(
             value.get(key),
             isOptional ? propertySchema.get("schema") : propertySchema,
             kpcallback
@@ -202,7 +206,7 @@ function validateRecordShape(value, shape, kpcallback) {
 
 export function matches(value, schema, kpcallback) {
   return kptry(
-    () => validate(value, schema, kpcallback),
+    () => validateRecursive(value, schema, kpcallback),
     (error) => {
       if (error.properties.type === "invalidSchema") {
         throw error;

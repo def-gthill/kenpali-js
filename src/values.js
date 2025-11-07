@@ -86,6 +86,7 @@ export function classOf(value) {
   } else if (isInstance(value)) {
     return value.class_;
   } else {
+    console.log(value);
     throw new Error(`Not a valid Kenpali value: ${value}`);
   }
 }

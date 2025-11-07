@@ -18,6 +18,10 @@ export function objectPattern(...entries) {
   return { type: "objectPattern", entries };
 }
 
+export function ignore() {
+  return { type: "ignore" };
+}
+
 export function checked(name, schema) {
   return { type: "checked", name, schema };
 }
@@ -30,8 +34,16 @@ export function spread(value) {
   return { type: "spread", value };
 }
 
+export function spreadKey() {
+  return { type: "spread" };
+}
+
 export function rest(name) {
   return { type: "rest", name };
+}
+
+export function restKey() {
+  return { type: "rest" };
 }
 
 export function name(name, moduleName) {
@@ -72,10 +84,6 @@ export function call(f, posArgs = [], namedArgs = []) {
 
 export function index(collection, index) {
   return { type: "index", collection, index };
-}
-
-export function catch_(expression) {
-  return { type: "catch", expression };
 }
 
 //#region Syntactic sugar
@@ -136,10 +144,6 @@ export function at(index) {
   return { type: "at", index };
 }
 
-export function bang() {
-  return { type: "bang" };
-}
-
 export function keyName(key) {
   return { type: "keyName", key };
 }
@@ -197,8 +201,6 @@ export class TreeTransformer {
         return this.transformCall(expression);
       case "index":
         return this.transformIndex(expression);
-      case "catch":
-        return this.transformCatch(expression);
       default:
         return this.transformOtherExpression(expression);
     }
@@ -252,10 +254,10 @@ export class TreeTransformer {
     return spread(this.transformExpression(element.value));
   }
 
-  transformEntryObjectElement(element) {
+  transformEntryObjectElement([key, value]) {
     return [
-      this.transformExpression(element[0]),
-      this.transformExpression(element[1]),
+      key.type === "spread" ? key : this.transformExpression(key),
+      this.transformExpression(value),
     ];
   }
 
@@ -284,9 +286,6 @@ export class TreeTransformer {
   }
 
   transformNamePattern(name) {
-    if (typeof name === "string") {
-      return this.transformStringPattern(name);
-    }
     switch (name.type) {
       case "arrayPattern":
         return this.transformArrayPattern(name);
@@ -350,7 +349,10 @@ export class TreeTransformer {
   }
 
   transformEntryObjectPatternElement([key, pattern]) {
-    return [this.transformExpression(key), this.transformNamePattern(pattern)];
+    return [
+      key.type === "spread" ? key : this.transformExpression(key),
+      this.transformNamePattern(pattern),
+    ];
   }
 
   transformOtherObjectPatternElement(element) {
@@ -399,10 +401,6 @@ export class TreeTransformer {
       this.transformExpression(expression.collection),
       this.transformExpression(expression.index)
     );
-  }
-
-  transformCatch(expression) {
-    return catch_(this.transformExpression(expression.expression));
   }
 
   transformOtherExpression(expression) {

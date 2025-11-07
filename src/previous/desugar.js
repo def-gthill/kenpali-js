@@ -6,13 +6,14 @@ import {
   arrow,
   at,
   call,
-  catch_,
   constantFunction,
   entry,
   function_,
   group,
+  ignore,
   index,
   keyName,
+  literal,
   objectRest,
   objectSpread,
   optional,
@@ -22,7 +23,9 @@ import {
   pipeDot,
   pipeline,
   rest,
+  restKey,
   spread,
+  spreadKey,
   TreeTransformer,
 } from "./kpast.js";
 
@@ -31,6 +34,10 @@ export default function desugar(expression) {
 
   // This step splits argument and parameter lists into positional and named elements.
   result = splitMixedLists(result);
+
+  // Kenpali Code lets you write an expression where a statement is expected.
+  // This step converts those to actual statements, with an `ignore` node as the target.
+  result = normalizeExpressionStatements(result);
 
   // Kenpali Code uses different syntax for spreads in arrays than for spreads in objects.
   // This step converts both to the single `spread` node mandated by Kenpali JSON.
@@ -86,6 +93,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         this.transformExpression(element.key),
         this.transformExpression(element.value)
       );
+    } else if (element.type === "spread") {
+      return spread(this.transformExpression(element.value));
     } else {
       return super.transformObjectElement(element);
     }
@@ -114,6 +123,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         this.transformExpression(element.key),
         this.transformNamePattern(element.value)
       );
+    } else if (element.type === "rest") {
+      return rest(this.transformNamePattern(element.name));
     } else {
       return super.transformObjectPatternElement(element);
     }
@@ -193,8 +204,6 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformPipeStep(step);
       case "at":
         return this.transformAtStep(step);
-      case "bang":
-        return this.transformBangStep(step);
       default:
         return this.transformOtherStep(step);
     }
@@ -238,6 +247,23 @@ class SugaredTreeTransformer extends TreeTransformer {
   transformOtherStep(step) {
     return step;
   }
+}
+
+class ExpressionStatementNormalizer extends SugaredTreeTransformer {
+  transformDef(def) {
+    const [name, value] = def;
+    if (name === null) {
+      return super.transformDef([ignore(), value]);
+    } else {
+      return super.transformDef(def);
+    }
+  }
+}
+
+const expressionStatementNormalizer = new ExpressionStatementNormalizer();
+
+function normalizeExpressionStatements(expression) {
+  return expressionStatementNormalizer.transformExpression(expression);
 }
 
 class MixedListSplitter extends SugaredTreeTransformer {
@@ -399,9 +425,6 @@ class PipelineTransformer extends SugaredTreeTransformer {
         case "at":
           axis = index(axis, step.index);
           break;
-        case "bang":
-          axis = catch_(axis);
-          break;
         default:
           throw new Error(`Invalid pipeline step type "${step.type}"`);
       }
@@ -419,9 +442,14 @@ function convertPipelines(expression) {
 class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
   transformObjectElement(element) {
     if (element.type === "keyName") {
-      return this.transformEntryObjectElement([element.key.name, element.key]);
+      return this.transformEntryObjectElement([
+        literal(element.key.name),
+        element.key,
+      ]);
     } else if (element.type === "entry") {
       return this.transformEntryObjectElement([element.key, element.value]);
+    } else if (element.type === "spread") {
+      return this.transformEntryObjectElement([spreadKey(), element.value]);
     } else {
       return super.transformObjectElement(element);
     }
@@ -429,7 +457,11 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
 
   transformEntryObjectElement([key, value]) {
     const transformedKey =
-      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+      key.type === "name"
+        ? literal(key.name)
+        : key.type === "literal"
+          ? key
+          : key;
     return super.transformEntryObjectElement([transformedKey, value]);
   }
 
@@ -442,22 +474,23 @@ class ObjectSyntaxNormalizer extends SugaredTreeTransformer {
       ]);
     } else if (element.type === "keyName") {
       return this.transformEntryObjectPatternElement([
-        element.key.name,
-        element.key.name,
+        literal(element.key.name),
+        element.key,
       ]);
     } else if (element.type === "entry") {
       return this.transformEntryObjectPatternElement([
         element.key,
         element.value,
       ]);
+    } else if (element.type === "rest") {
+      return this.transformEntryObjectPatternElement([restKey(), element.name]);
     } else {
       return super.transformObjectPatternElement(element);
     }
   }
 
   transformEntryObjectPatternElement([key, pattern]) {
-    const transformedKey =
-      key.type === "name" ? key.name : key.type === "literal" ? key.value : key;
+    const transformedKey = key.type === "name" ? literal(key.name) : key;
     return super.transformEntryObjectPatternElement([transformedKey, pattern]);
   }
 }

@@ -16,14 +16,14 @@ const primePairs = `primesUpTo = (max) => (
   | build(
     ({index:, numbers:}) => {
       numbers: numbers | where(
-        (n) => n | equals(numbers @ index) | or(
+        (n) => n | eq(numbers @ index) | or(
           $ n | isDivisibleBy(numbers @ index) | not
         )
       ),
       index: index | up,
     }
   )
-  | while(({index:, numbers:}) => index | isAtMost(numbers | length))
+  | while(({index:, numbers:}) => index | le(numbers | length))
   | last
   |.numbers
 );
@@ -39,9 +39,9 @@ rows | transform((row) => (
 `;
 const naiveFib = `
 fib = (n) => if(
-  n | isAtMost(2),
+  n | le(2),
   then: () => 1,
-  else: () => plus(fib(n | minus(1)), fib(n | minus(2))),
+  else: () => n | sub(1) | fib | add(n | sub(2) | fib),
 );
 fib(14)
 `;

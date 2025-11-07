@@ -149,19 +149,19 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(name);
-    const { paramPattern, namedParamPattern } = getParamPatterns(expression);
-    if (paramPattern.names.length > 0) {
-      this.declareNames(paramPattern);
+    const { posParamPattern, namedParamPattern } = getParamPatterns(expression);
+    if (posParamPattern.names.length > 0) {
+      this.declareNames(posParamPattern);
     }
     if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
-    if (paramPattern.names.length > 0) {
+    if (posParamPattern.names.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
+      this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
@@ -171,9 +171,9 @@ class Compiler {
     this.addInstruction(op.VALUE, expression);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames);
-    this.addInstruction(op.CALL_BUILTIN, name);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, name);
+    this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.addInstruction(op.DISCARD); // The positional arguments handoff
@@ -192,19 +192,19 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(fullName);
-    const { paramPattern, namedParamPattern } = getParamPatterns(method);
-    if (paramPattern.names.length > 0) {
-      this.declareNames(paramPattern);
+    const { posParamPattern, namedParamPattern } = getParamPatterns(method);
+    if (posParamPattern.names.length > 0) {
+      this.declareNames(posParamPattern);
     }
     if (namedParamPattern.entries.length > 0) {
       this.declareNames(namedParamPattern);
     }
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
-    if (paramPattern.names.length > 0) {
+    if (posParamPattern.names.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 1);
       this.addDiagnostic({ name: "<posArgs>" });
-      this.assignNames(paramPattern, { isArgumentPattern: true });
+      this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
       this.addInstruction(op.READ_LOCAL, 0, 2);
@@ -219,9 +219,9 @@ class Compiler {
     this.addInstruction(op.SELF);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
-    this.addInstruction(op.PUSH, -numDeclaredNames - 1);
-    this.addInstruction(op.CALL_BUILTIN, fullName);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames - 1);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullName);
+    this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.popScope();
@@ -326,9 +326,6 @@ class Compiler {
       case "index":
         this.compileIndex(expression);
         break;
-      case "catch":
-        this.compileCatch(expression);
-        break;
       case "value":
         this.compileValue(expression);
         break;
@@ -365,17 +362,12 @@ class Compiler {
       this.logNodeStart("Starting object");
     }
     this.addInstruction(op.EMPTY_OBJECT);
-    for (const entry of expression.entries) {
-      if (entry.type === "spread") {
-        this.compileExpression(entry.value);
+    for (const [key, value] of expression.entries) {
+      if (key.type === "spread") {
+        this.compileExpression(value);
         this.addInstruction(op.OBJECT_MERGE);
       } else {
-        const [key, value] = entry;
-        if (typeof key === "string") {
-          this.addInstruction(op.VALUE, key);
-        } else {
-          this.compileExpression(key);
-        }
+        this.compileExpression(key);
         this.compileExpression(value);
         this.addInstruction(op.OBJECT_PUSH);
       }
@@ -494,13 +486,13 @@ class Compiler {
   compileBlock(expression) {
     this.reserveSlots(1); // For the result
     this.pushScope();
-    this.addInstruction(op.PUSH, 0);
+    this.addInstruction(op.PUSH_SCOPE, 0);
     this.defineNames(expression.defs);
     this.compileExpression(expression.result);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     this.popScope();
   }
 
@@ -512,7 +504,7 @@ class Compiler {
     this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames());
     for (const statement of statements) {
       const [pattern, expression] = statement;
-      const name = typeof pattern === "string" ? pattern : undefined;
+      const name = pattern.type === "name" ? pattern.name : undefined;
       this.compileExpression(expression, name);
       this.assignNames(pattern);
     }
@@ -522,14 +514,16 @@ class Compiler {
     const activeScope = this.activeScopes.at(-1);
     if (pattern === null) {
       return;
-    } else if (typeof pattern === "string") {
-      activeScope.declareName(pattern);
-      if (this.trace) {
-        this.log(`Declared name "${pattern}"`);
-      }
-      return;
     }
     switch (pattern.type) {
+      case "ignore":
+        break;
+      case "name":
+        activeScope.declareName(pattern.name);
+        if (this.trace) {
+          this.log(`Declared name "${pattern.name}"`);
+        }
+        break;
       case "arrayPattern":
         for (const element of pattern.names) {
           this.declareNames(element);
@@ -556,16 +550,15 @@ class Compiler {
 
   assignNames(pattern, { isArgumentPattern = false, isArgument = false } = {}) {
     const activeScope = this.activeScopes.at(-1);
-    if (pattern === null) {
-      // Expression statement, throw away the result
-      this.addInstruction(op.DISCARD);
-      return;
-    } else if (typeof pattern === "string") {
-      this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern));
-      this.addDiagnostic({ name: pattern });
-      return;
-    }
     switch (pattern.type) {
+      case "ignore":
+        // Expression statement, throw away the result
+        this.addInstruction(op.DISCARD);
+        break;
+      case "name":
+        this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern.name));
+        this.addDiagnostic({ name: pattern.name });
+        break;
       case "arrayPattern":
         this.assignNamesInArrayPattern(pattern, { isArgumentPattern });
         break;
@@ -583,11 +576,22 @@ class Compiler {
 
   assignNamesInArrayPattern(pattern, { isArgumentPattern }) {
     this.validate(either(arrayClass, streamClass));
+    this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
+    let existingRest = null;
     for (let i = 0; i < pattern.names.length; i++) {
       const element = pattern.names[i];
       if (typeof element === "object" && element.type === "rest") {
+        if (existingRest !== null) {
+          throw kperror("overlappingRestPatterns", [
+            "names",
+            [existingRest, element.name].map((x) =>
+              this.toNamePatternString(x)
+            ),
+          ]);
+        }
+        existingRest = element.name;
         this.addInstruction(op.ARRAY_CUT, pattern.names.length - i - 1);
         this.addInstruction(op.ARRAY_REVERSE);
         this.assignNames(element.name, { isArgumentPattern });
@@ -598,12 +602,13 @@ class Compiler {
       } else {
         this.addInstruction(op.ARRAY_POP);
         this.addDiagnostic({
-          name: this.paramName(element),
+          name: this.toNamePatternString(element),
           isArgument: isArgumentPattern,
         });
         this.assignNames(element, { isArgument: isArgumentPattern });
       }
     }
+    this.addInstruction(op.DISCARD);
     this.addInstruction(op.DISCARD);
   }
 
@@ -612,15 +617,17 @@ class Compiler {
     this.addInstruction(op.OBJECT_COPY);
     let rest = null;
     for (const entry of pattern.entries) {
-      if (entry.type === "rest") {
-        rest = entry.name;
-      } else {
-        const [key, name] = entry;
-        if (typeof key === "string") {
-          this.addInstruction(op.VALUE, key);
-        } else {
-          this.compileExpression(key);
+      const [key, name] = entry;
+      if (key.type === "rest") {
+        if (rest !== null) {
+          throw kperror("overlappingRestPatterns", [
+            "names",
+            [rest, name].map((x) => this.toNamePatternString(x)),
+          ]);
         }
+        rest = name;
+      } else {
+        this.compileExpression(key);
         if (typeof name === "object" && name.type === "optional") {
           this.compileExpression(name.defaultValue);
           this.addInstruction(op.OBJECT_POP_OR_DEFAULT);
@@ -639,6 +646,30 @@ class Compiler {
       this.assignNames(rest, { isArgumentPattern });
     } else {
       this.addInstruction(op.DISCARD);
+    }
+  }
+
+  toNamePatternString(pattern) {
+    switch (pattern.type) {
+      case "ignore":
+        return "_";
+      case "name":
+        return pattern.name;
+      case "arrayPattern":
+        return `[${pattern.names.map((x) => this.toNamePatternString(x)).join(", ")}]`;
+      case "objectPattern":
+        const entryStrings = pattern.entries.map((entry) =>
+          Array.isArray(entry)
+            ? `${entry[0]}: ${this.toNamePatternString(entry[1])}`
+            : this.toNamePatternString(entry)
+        );
+        return `{${entryStrings.join(", ")}}`;
+      case "checked":
+      case "optional":
+      case "rest":
+        return this.toNamePatternString(pattern.name);
+      default:
+        throw kperror("invalidPattern", ["pattern", pattern]);
     }
   }
 
@@ -713,9 +744,9 @@ class Compiler {
     this.compileExpression(expression.callee);
     this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
-    this.addInstruction(op.PUSH, -2);
+    this.addInstruction(op.PUSH_SCOPE, -2);
     this.addInstruction(op.CALL);
-    this.addInstruction(op.POP);
+    this.addInstruction(op.POP_SCOPE);
     if (this.trace) {
       this.logNodeEnd("Finished call");
     }
@@ -756,15 +787,31 @@ class Compiler {
   validateRecursive(schema) {
     if (schema instanceof Class || schema instanceof Protocol) {
       this.validateTypeSchema(schema);
-    } else if (isObject(schema)) {
-      if (schema.has("either")) {
-        this.validateEitherSchema(schema);
-      } else if (schema.has("oneOf")) {
-        this.validateOneOfSchema(schema);
-      } else if (schema.has("type")) {
-        this.validateTypeWithConditionsSchema(schema);
-      } else {
-        this.invalidSchema(schema);
+    } else if (isObject(schema) && schema.has("form")) {
+      switch (schema.get("form")) {
+        case "enum":
+          this.validateEnumSchema(schema);
+          break;
+        case "union":
+          this.validateUnionSchema(schema);
+          break;
+        case "condition":
+          this.validateConditionSchema(schema);
+          break;
+        case "array":
+          this.validateArraySchema(schema);
+          break;
+        case "tuple":
+          this.validateTupleSchema(schema);
+          break;
+        case "object":
+          this.validateObjectSchema(schema);
+          break;
+        case "record":
+          this.validateRecordSchema(schema);
+          break;
+        default:
+          this.invalidSchema(schema);
       }
     } else {
       this.invalidSchema(schema);
@@ -815,84 +862,63 @@ class Compiler {
     }
   }
 
-  validateEitherSchema(schema) {
-    const jumpIndices = [];
-    for (const option of schema.get("either")) {
-      this.validateRecursive(option);
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
-      jumpIndices.push(this.nextInstructionIndex());
-    }
-    this.addInstruction(op.VALUE, false);
-    this.addInstruction(op.JUMP, 2);
-    for (const jumpIndex of jumpIndices) {
-      const toIndex = this.nextInstructionIndex();
-      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
-    }
-    this.addInstruction(op.VALUE, true);
+  validateEnumSchema(schema) {
+    this.validateAny(
+      ...schema.get("values").map((option) => () => {
+        this.addInstruction(op.ALIAS);
+        this.addInstruction(op.VALUE, option);
+        this.addInstruction(op.EQUALS);
+      })
+    );
   }
 
-  validateOneOfSchema(schema) {
-    const jumpIndices = [];
-    for (const option of schema.get("oneOf")) {
-      this.addInstruction(op.ALIAS);
-      this.addInstruction(op.VALUE, option);
-      this.addInstruction(op.EQUALS);
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
-      jumpIndices.push(this.nextInstructionIndex());
-    }
-    this.addInstruction(op.VALUE, false);
-    this.addInstruction(op.JUMP, 2);
-    for (const jumpIndex of jumpIndices) {
-      const toIndex = this.nextInstructionIndex();
-      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
-    }
-    this.addInstruction(op.VALUE, true);
+  validateUnionSchema(schema) {
+    this.validateAny(
+      ...schema.get("options").map((option) => () => {
+        this.validateRecursive(option);
+      })
+    );
   }
 
-  validateTypeWithConditionsSchema(schema) {
-    const jumpIndices = [];
-
-    const failIfFalse = () => {
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
-      jumpIndices.push(this.nextInstructionIndex());
-    };
-
-    this.validateTypeSchema(schema.get("type"));
-    failIfFalse();
-
-    if (schema.get("type") === arrayClass) {
-      if (schema.has("shape")) {
-        this.validateArrayShape(schema.get("shape"));
-        failIfFalse();
-      }
-      if (schema.has("elements")) {
-        this.validateArrayElements(schema.get("elements"));
-        failIfFalse();
-      }
-    } else if (schema.get("type") === objectClass) {
-      if (schema.has("shape")) {
-        this.validateObjectShape(schema.get("shape"));
-        failIfFalse();
-      }
-      if (schema.has("keys")) {
-        this.validateObjectKeys(schema.get("keys"));
-        failIfFalse();
-      }
-      if (schema.has("values")) {
-        this.validateObjectValues(schema.get("values"));
-        failIfFalse();
-      }
-    }
-    this.addInstruction(op.VALUE, true);
-    this.addInstruction(op.JUMP, 2);
-    for (const jumpIndex of jumpIndices) {
-      const toIndex = this.nextInstructionIndex();
-      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
-    }
-    this.addInstruction(op.VALUE, false);
+  validateConditionSchema(schema) {
+    this.validateEach(
+      () => this.validateRecursive(schema.get("schema")),
+      () => this.validateCondition(schema.get("condition"))
+    );
   }
 
-  validateArrayShape(shape) {
+  validateCondition(condition) {
+    this.addInstruction(op.VALUE, condition);
+    this.addInstruction(op.EMPTY_ARRAY);
+    this.addInstruction(op.READ_RELATIVE, 2);
+    this.addInstruction(op.ARRAY_PUSH);
+    this.addInstruction(op.EMPTY_OBJECT);
+    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstruction(op.CALL);
+    this.addInstruction(op.POP_SCOPE);
+  }
+
+  validateArraySchema(schema) {
+    this.validateEach(
+      () => this.validateTypeSchema(arrayClass),
+      () => this.validateArrayElements(schema.get("elements"))
+    );
+  }
+
+  validateArrayElements(schema) {
+    this.addInstruction(op.ALIAS);
+    this.addInstruction(op.ARRAY_COPY);
+    this.validateAll(schema);
+  }
+
+  validateTupleSchema(schema) {
+    this.validateEach(
+      () => this.validateTypeSchema(arrayClass),
+      () => this.validateTupleShape(schema.get("shape"))
+    );
+  }
+
+  validateTupleShape(shape) {
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_COPY);
     this.addInstruction(op.ARRAY_REVERSE);
@@ -903,8 +929,8 @@ class Compiler {
       this.addInstruction(op.ARRAY_IS_EMPTY);
       this.addInstruction(op.JUMP_IF_TRUE, 0);
       let subschema;
-      if (isObject(element) && element.has("optional")) {
-        subschema = element.get("optional");
+      if (isObject(element) && element.get("form") === "optional") {
+        subschema = element.get("schema");
         passJumpIndices.push(this.nextInstructionIndex());
       } else {
         subschema = element;
@@ -930,25 +956,46 @@ class Compiler {
     this.addInstruction(op.VALUE, false);
   }
 
-  validateArrayElements(schema) {
+  validateObjectSchema(schema) {
+    this.validateEach(
+      () => this.validateTypeSchema(objectClass),
+      () => this.validateObjectValues(schema.get("values"))
+    );
+  }
+
+  validateObjectKeys(schema) {
     this.addInstruction(op.ALIAS);
-    this.addInstruction(op.ARRAY_COPY);
+    this.addInstruction(op.OBJECT_KEYS);
     this.validateAll(schema);
   }
 
-  validateObjectShape(shape) {
+  validateObjectValues(schema) {
+    this.addInstruction(op.ALIAS);
+    this.addInstruction(op.OBJECT_VALUES);
+    this.validateAll(schema);
+  }
+
+  validateRecordSchema(schema) {
+    this.validateEach(
+      () => this.validateTypeSchema(objectClass),
+      () => this.validateRecordShape(schema.get("shape"))
+    );
+  }
+
+  validateRecordShape(shape) {
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.OBJECT_COPY);
     const failJumpIndices = [];
     for (const [key, valueSchema] of shape) {
-      if (isObject(valueSchema) && valueSchema.has("optional")) {
+      if (isObject(valueSchema) && valueSchema.get("form") === "optional") {
+        this.addInstruction(op.ALIAS);
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         const jumpIndex = this.nextInstructionIndex();
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_POP);
-        this.validateRecursive(valueSchema.get("optional"));
+        this.validateRecursive(valueSchema.get("schema"));
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         failJumpIndices.push(this.nextInstructionIndex());
         this.setInstruction(
@@ -956,6 +1003,7 @@ class Compiler {
           this.nextInstructionIndex() - jumpIndex
         );
       } else {
+        this.addInstruction(op.ALIAS);
         this.addInstruction(op.VALUE, key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
@@ -978,16 +1026,36 @@ class Compiler {
     this.addInstruction(op.VALUE, false);
   }
 
-  validateObjectKeys(schema) {
-    this.addInstruction(op.ALIAS);
-    this.addInstruction(op.OBJECT_KEYS);
-    this.validateAll(schema);
+  validateAny(...validators) {
+    const jumpIndices = [];
+    for (const validator of validators) {
+      validator();
+      this.addInstruction(op.JUMP_IF_TRUE, 0);
+      jumpIndices.push(this.nextInstructionIndex());
+    }
+    this.addInstruction(op.VALUE, false);
+    this.addInstruction(op.JUMP, 2);
+    for (const jumpIndex of jumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(op.VALUE, true);
   }
 
-  validateObjectValues(schema) {
-    this.addInstruction(op.ALIAS);
-    this.addInstruction(op.OBJECT_VALUES);
-    this.validateAll(schema);
+  validateEach(...validators) {
+    const jumpIndices = [];
+    for (const validator of validators) {
+      validator();
+      this.addInstruction(op.JUMP_IF_FALSE, 0);
+      jumpIndices.push(this.nextInstructionIndex());
+    }
+    this.addInstruction(op.VALUE, true);
+    this.addInstruction(op.JUMP, 2);
+    for (const jumpIndex of jumpIndices) {
+      const toIndex = this.nextInstructionIndex();
+      this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
+    }
+    this.addInstruction(op.VALUE, false);
   }
 
   validateAll(schema) {
@@ -1024,16 +1092,6 @@ class Compiler {
 
   invalidSchema(schema) {
     throw kperror("invalidSchema", ["schema", schema]);
-  }
-
-  paramName(param) {
-    if (typeof param === "string") {
-      return param;
-    } else if ("property" in param) {
-      return param.property;
-    } else {
-      return param.name;
-    }
   }
 
   currentScope() {

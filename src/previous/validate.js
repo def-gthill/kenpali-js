@@ -1,6 +1,6 @@
 import kperror, {
-  foldError,
   kpcatch,
+  kptry,
   transformError,
   withDetails,
   withErrorType,
@@ -11,6 +11,7 @@ import {
   arrayClass,
   Class,
   classOf,
+  displaySimple,
   equals,
   instanceProtocol,
   isInstance,
@@ -20,26 +21,31 @@ import {
   objectClass,
   Protocol,
   sequenceProtocol,
+  stringClass,
   typeProtocol,
 } from "./values.js";
 
 export default function validate(value, schema, kpcallback) {
   if (schema instanceof Class || schema instanceof Protocol) {
     return validateTypeSchema(value, schema);
-  } else if (isObject(schema)) {
-    if (schema.has("either")) {
-      return validateEitherSchema(value, schema, kpcallback);
-    } else if (schema.has("oneOf")) {
-      return validateOneOfSchema(value, schema);
-    } else if (schema.has("type")) {
-      const result = validateTypeWithConditionsSchema(
-        value,
-        schema,
-        kpcallback
-      );
-      return result;
-    } else {
-      throw invalidSchema(schema);
+  } else if (isObject(schema) && schema.has("form")) {
+    switch (schema.get("form")) {
+      case "enum":
+        return validateEnumSchema(value, schema);
+      case "union":
+        return validateUnionSchema(value, schema, kpcallback);
+      case "condition":
+        return validateConditionSchema(value, schema, kpcallback);
+      case "array":
+        return validateArraySchema(value, schema, kpcallback);
+      case "tuple":
+        return validateTupleSchema(value, schema, kpcallback);
+      case "object":
+        return validateObjectSchema(value, schema, kpcallback);
+      case "record":
+        return validateRecordSchema(value, schema, kpcallback);
+      default:
+        throw invalidSchema(schema);
     }
   } else {
     throw invalidSchema(schema);
@@ -62,21 +68,30 @@ function validateTypeSchema(value, schema) {
   }
 }
 
-function validateEitherSchema(value, schema, kpcallback) {
-  const options = schema.get("either");
+function validateEnumSchema(value, schema) {
+  for (const option of schema.get("values")) {
+    if (equals(value, option)) {
+      return;
+    }
+  }
+  throw badValue(value, ["options", schema.get("values")]);
+}
+
+function validateUnionSchema(value, schema, kpcallback) {
+  const options = schema.get("options");
   const errors = [];
   for (const option of options) {
     const result = kpcatch(() => validate(value, option, kpcallback));
-    if (result) {
-      errors.push(result);
+    if (result.status === "error") {
+      errors.push(result.error);
     } else {
       return;
     }
   }
-  throw combineEitherErrors(value, errors);
+  throw combineUnionErrors(value, errors);
 }
 
-function combineEitherErrors(value, errors) {
+function combineUnionErrors(value, errors) {
   if (errors.every((err) => err.properties.type === "wrongType")) {
     return wrongType(
       value,
@@ -87,61 +102,16 @@ function combineEitherErrors(value, errors) {
   }
 }
 
-function validateOneOfSchema(value, schema) {
-  for (const option of schema.get("oneOf")) {
-    if (equals(value, option)) {
-      return;
-    }
-  }
-  throw badValue(value, ["options", schema.get("oneOf")]);
-}
-
-function validateTypeWithConditionsSchema(value, schema, kpcallback) {
-  validateTypeSchema(value, schema.get("type"));
-  if (schema.get("type") === arrayClass) {
-    if (schema.has("shape")) {
-      validateArrayShape(value, schema, kpcallback);
-    }
-    if (schema.has("elements")) {
-      validateArrayElements(value, schema.get("elements"), kpcallback);
-    }
-  } else if (schema.get("type") === objectClass) {
-    if (schema.has("shape")) {
-      validateObjectShape(value, schema.get("shape"), kpcallback);
-    }
-    if (schema.has("keys")) {
-      validateObjectKeys(value, schema.get("keys"), kpcallback);
-    }
-    if (schema.has("values")) {
-      validateObjectValues(value, schema.get("values"), kpcallback);
-    }
-  }
-  if (
-    schema.get("where") &&
-    !kpcallback(schema.get("where"), [value], kpobject())
-  ) {
-    throw badValue(value, ["condition", schema.get("where")]);
+function validateConditionSchema(value, schema, kpcallback) {
+  validate(value, schema.get("schema"), kpcallback);
+  if (!kpcallback(schema.get("condition"), [value], kpobject())) {
+    throw badValue(value, ["condition", schema.get("condition")]);
   }
 }
 
-function validateArrayShape(value, schema, kpcallback) {
-  const shape = schema.get("shape");
-  for (let i = 0; i < shape.length; i++) {
-    const isOptional = isObject(shape[i]) && shape[i].has("optional");
-    if (i < value.length) {
-      transformError(
-        () =>
-          validate(
-            value[i],
-            isOptional ? shape[i].get("optional") : shape[i],
-            kpcallback
-          ),
-        (err) => withReason(badElement(value, i + 1), err)
-      );
-    } else if (!isOptional) {
-      throw missingElement(value, i + 1, schema);
-    }
-  }
+function validateArraySchema(value, schema, kpcallback) {
+  validateTypeSchema(value, arrayClass);
+  validateArrayElements(value, schema.get("elements"), kpcallback);
 }
 
 function validateArrayElements(value, schema, kpcallback) {
@@ -153,24 +123,38 @@ function validateArrayElements(value, schema, kpcallback) {
   }
 }
 
-function validateObjectShape(value, shape, kpcallback) {
-  for (const [key, propertySchema] of shape) {
+function validateTupleSchema(value, schema, kpcallback) {
+  validateTypeSchema(value, arrayClass);
+  validateTupleShape(value, schema, kpcallback);
+}
+
+function validateTupleShape(value, schema, kpcallback) {
+  const shape = schema.get("shape");
+  for (let i = 0; i < shape.length; i++) {
     const isOptional =
-      isObject(propertySchema) && propertySchema.has("optional");
-    if (value.has(key)) {
+      isObject(shape[i]) && shape[i].get("form") === "optional";
+    if (i < value.length) {
       transformError(
         () =>
           validate(
-            value.get(key),
-            isOptional ? propertySchema.get("optional") : propertySchema,
+            value[i],
+            isOptional ? shape[i].get("schema") : shape[i],
             kpcallback
           ),
-        (err) => withReason(badProperty(value, key), err)
+        (err) => withReason(badElement(value, i + 1), err)
       );
     } else if (!isOptional) {
-      throw missingProperty(value, key);
+      throw missingElement(value, i + 1, schema);
     }
   }
+}
+
+function validateObjectSchema(value, schema, kpcallback) {
+  validateTypeSchema(value, objectClass);
+  if (schema.has("keys")) {
+    validateObjectKeys(value, schema.get("keys"), kpcallback);
+  }
+  validateObjectValues(value, schema.get("values"), kpcallback);
 }
 
 function validateObjectKeys(value, schema, kpcallback) {
@@ -191,60 +175,84 @@ function validateObjectValues(value, schema, kpcallback) {
   }
 }
 
+function validateRecordSchema(value, schema, kpcallback) {
+  validateTypeSchema(value, objectClass);
+  validateRecordShape(value, schema.get("shape"), kpcallback);
+}
+
+function validateRecordShape(value, shape, kpcallback) {
+  for (const [key, propertySchema] of shape) {
+    const isOptional =
+      isObject(propertySchema) && propertySchema.get("form") === "optional";
+    if (value.has(key)) {
+      transformError(
+        () =>
+          validate(
+            value.get(key),
+            isOptional ? propertySchema.get("schema") : propertySchema,
+            kpcallback
+          ),
+        (err) => withReason(badProperty(value, key), err)
+      );
+    } else if (!isOptional) {
+      throw missingProperty(value, key);
+    }
+  }
+}
+
 export function matches(value, schema, kpcallback) {
-  return foldError(
+  return kptry(
     () => validate(value, schema, kpcallback),
-    () => true,
-    () => false
+    (error) => {
+      if (error.properties.type === "invalidSchema") {
+        throw error;
+      } else {
+        return false;
+      }
+    },
+    () => true
   );
 }
 
-export function is(type, where) {
-  const result = kpobject(["type", type]);
-  if (where) {
-    result.set("where", where);
-  }
-  return result;
+export function oneOfValues(values) {
+  return kpobject(["form", "enum"], ["values", values]);
 }
 
-export function oneOf(values) {
-  return kpobject(["oneOf", values]);
+export function either(...schemas) {
+  return kpobject(["form", "union"], ["options", schemas]);
 }
 
-export function arrayOf(elementSchema, where) {
-  const result = kpobject(["type", arrayClass], ["elements", elementSchema]);
-  if (where) {
-    result.set("where", where);
-  }
-  return result;
+export function satisfying(schema, condition) {
+  return kpobject(
+    ["form", "condition"],
+    ["schema", schema],
+    ["condition", condition]
+  );
+}
+
+export function arrayOf(elements) {
+  return kpobject(["form", "array"], ["elements", elements]);
 }
 
 export function tupleLike(shape) {
-  return kpobject(["type", arrayClass], ["shape", shape]);
+  return kpobject(["form", "tuple"], ["shape", shape]);
 }
 
-export function objectOf(keys, values, where) {
+export function objectOf(keys, values) {
   const result = kpobject(
-    ["type", objectClass],
+    ["form", "object"],
     ["keys", keys],
     ["values", values]
   );
-  if (where) {
-    result.set("where", where);
-  }
   return result;
 }
 
 export function recordLike(shape) {
-  return kpobject(["type", objectClass], ["shape", shape]);
+  return kpobject(["form", "record"], ["shape", shape]);
 }
 
 export function optional(schema) {
-  return kpobject(["optional", schema]);
-}
-
-export function either(...schemas) {
-  return kpobject(["either", schemas]);
+  return kpobject(["form", "optional"], ["schema", schema]);
 }
 
 function invalidSchema(schema) {
@@ -323,38 +331,39 @@ export function argumentPatternError(err) {
 }
 
 function toTypeName(schema) {
-  if (schema instanceof Class || schema instanceof Protocol) {
+  if (typeof schema === "string") {
+    // Already got converted to a string.
+    return schema;
+  } else if (schema instanceof Class || schema instanceof Protocol) {
     return schema.properties.name;
-  } else if (isObject(schema)) {
-    if (schema.has("either")) {
-      return `either(${schema.get("either").map(toTypeName).join(", ")})`;
-    } else if (schema.has("oneOf")) {
-      return `oneOf(${schema.get("oneOf").join(", ")})`;
-    } else if (schema.has("type")) {
-      if (schema.get("type") === arrayClass) {
-        if (schema.has("shape")) {
-          return `tupleLike([${schema.get("shape").map(toTypeName).join(", ")}])`;
-        } else if (schema.has("elements")) {
-          return `arrayOf(${toTypeName(schema.get("elements"))})`;
-        } else {
-          return toTypeName(schema.get("type"));
-        }
-      } else if (schema.get("type") === objectClass) {
-        if (schema.has("shape")) {
-          return `recordLike({${schema
-            .get("shape")
-            .map(([key, value]) => `${key}: ${toTypeName(value)}`)
-            .join(", ")}})`;
-        } else if (schema.has("keys") || schema.has("values")) {
-          return `objectOf(${toTypeName(schema.get("keys") ?? anyProtocol)}, ${toTypeName(schema.get("values") ?? anyProtocol)})`;
-        } else {
-          return toTypeName(schema.get("type"));
-        }
-      } else {
-        return toTypeName(schema.get("type"));
-      }
+  } else if (isObject(schema) && schema.has("form")) {
+    switch (schema.get("form")) {
+      case "enum":
+        return `oneOfValues(${schema
+          .get("values")
+          .map((value) => displaySimple(value))
+          .join(", ")})`;
+      case "union":
+        return `either(${schema.get("options").map(toTypeName).join(", ")})`;
+      case "condition":
+        return `satisfying(${toTypeName(schema.get("schema"))}, ${displaySimple(schema.get("condition"))})`;
+      case "array":
+        return `arrayOf(${toTypeName(schema.get("elements"))})`;
+      case "tuple":
+        return `tupleLike([${schema.get("shape").map(toTypeName).join(", ")}])`;
+      case "object":
+        return `objectOf(${toTypeName(schema.get("keys") ?? stringClass)}, ${toTypeName(schema.get("values"))})`;
+      case "record":
+        return `recordLike({${schema
+          .get("shape")
+          .map(([key, value]) => `${key}: ${toTypeName(value)}`)
+          .join(", ")}})`;
+      case "optional":
+        return `optional(${toTypeName(schema.get("schema"))})`;
+      default:
+        throw invalidSchema(schema);
     }
   } else {
-    return schema;
+    throw invalidSchema(schema);
   }
 }

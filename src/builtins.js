@@ -62,14 +62,14 @@ import {
 
 const rawBuiltins = [
   platformFunction(
-    "plus",
+    "add",
     { posParams: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc + value, 0);
     }
   ),
   platformFunction(
-    "minus",
+    "sub",
     {
       posParams: [
         { name: "a", type: numberClass },
@@ -102,14 +102,14 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "times",
+    "mul",
     { posParams: [{ rest: { name: "numbers", type: arrayOf(numberClass) } }] },
     function ([numbers]) {
       return numbers.reduce((acc, value) => acc * value, 1);
     }
   ),
   platformFunction(
-    "dividedBy",
+    "div",
     {
       posParams: [
         { name: "a", type: numberClass },
@@ -197,11 +197,11 @@ const rawBuiltins = [
       return string.split(on);
     }
   ),
-  platformFunction("equals", { posParams: ["a", "b"] }, function ([a, b]) {
+  platformFunction("eq", { posParams: ["a", "b"] }, function ([a, b]) {
     return equals(a, b);
   }),
   platformFunction(
-    "isLessThan",
+    "lt",
     {
       posParams: [
         {
@@ -220,7 +220,7 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "isAtMost",
+    "le",
     {
       posParams: [
         {
@@ -239,7 +239,7 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "isMoreThan",
+    "gt",
     {
       posParams: [
         {
@@ -258,7 +258,7 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
-    "isAtLeast",
+    "ge",
     {
       posParams: [
         {

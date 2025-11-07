@@ -7,7 +7,6 @@ import {
   arraySpread,
   arrow,
   at,
-  bang,
   block,
   constantFunction,
   entry,
@@ -40,7 +39,7 @@ export default function kpparse(code, { trace = false } = {}) {
 
 export function kpparseModule(code, { trace = false } = {}) {
   return kpparseSugared(code, { parseRoot: parseModule, trace }).map(
-    ([name, f]) => [name, desugar(f)]
+    ([name, f]) => [name.name, desugar(f)]
   );
 }
 
@@ -141,7 +140,7 @@ function parseStatement(parser, start) {
 function parseNamePattern(parser, start) {
   return parseAnyOf(
     "namePattern",
-    convert(parseName, (name) => name.name),
+    parseName,
     parseArrayPattern,
     parseObjectPattern
   )(parser, start);
@@ -293,7 +292,7 @@ function parsePipeline(parser, start) {
 
 function parsePointFreePipeline(parser, start) {
   return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
-    function_(pipeline(name("pipelineArg"), ...calls), ["pipelineArg"])
+    function_(pipeline(name("pipelineArg"), ...calls), [name("pipelineArg")])
   )(parser, start);
 }
 
@@ -304,8 +303,7 @@ function parsePipelineStep(parser, start) {
     parsePipeArgs,
     parsePipeDot,
     parsePipe,
-    parseAt,
-    parseBang
+    parseAt
   )(parser, start);
 }
 
@@ -343,10 +341,6 @@ function parseAt(parser, start) {
     [consume("AT", "expectedAt"), parseTightPipeline],
     at
   )(parser, start);
-}
-
-function parseBang(parser, start) {
-  return convert(consume("BANG", "expectedBang"), bang)(parser, start);
 }
 
 function parseArrowFunction(parser, start) {
