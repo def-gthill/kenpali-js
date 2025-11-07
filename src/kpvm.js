@@ -779,7 +779,7 @@ export class Vm {
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
-    this.pushCallFrame(calleeName);
+    this.pushCallFrame(calleeName, { isCompiledPlatformFunction: true });
     const args = this.stack.slice(frameIndex + 1);
     this.stack.length = frameIndex;
     const kpcallback = this.kpcallback.bind(this);
@@ -811,9 +811,9 @@ export class Vm {
     this.stack.push(this.stack.pop().self);
   }
 
-  pushCallFrame(name) {
+  pushCallFrame(name, options = {}) {
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
-    this.callFrames.push(new CallFrame(name, frameIndex, this.cursor));
+    this.callFrames.push(new CallFrame(name, frameIndex, this.cursor, options));
   }
 
   popCallFrame() {
@@ -1193,7 +1193,9 @@ export class Vm {
         this.callFrames.at(-1).stackIndex >= frame.stackIndex
       ) {
         const callFrame = this.callFrames.pop();
-        error.properties.calls.push(kpobject(["function", callFrame.name]));
+        if (!callFrame.isCompiledPlatformFunction) {
+          error.properties.calls.push(kpobject(["function", callFrame.name]));
+        }
         if (callFrame.returnIndex < 0) {
           // We've unwound to a callback boundary, throw the error to the caller
           throw error;
@@ -1264,9 +1266,15 @@ class ScopeFrame {
 }
 
 class CallFrame {
-  constructor(name, stackIndex, returnIndex) {
+  constructor(
+    name,
+    stackIndex,
+    returnIndex,
+    { isCompiledPlatformFunction = false } = {}
+  ) {
     this.name = name;
     this.stackIndex = stackIndex;
     this.returnIndex = returnIndex;
+    this.isCompiledPlatformFunction = isCompiledPlatformFunction;
   }
 }
