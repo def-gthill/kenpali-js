@@ -104,7 +104,7 @@ group = (pairs, onGroup: = (x) => x) => (
     | forEach(([key, value]) => (
         if(
             result.has(key),
-            then: $ result.at(key) |.append(value),
+            then: $ result.at(key).append(value),
             else: $ result.set(key, newMutableArray([value])),
         )
     ));

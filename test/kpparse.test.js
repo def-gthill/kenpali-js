@@ -13,6 +13,7 @@ import {
   objectSpread,
   pipe,
   pipeline,
+  tightPipeline,
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
 import { assertThrows } from "./assertions.js";
@@ -59,7 +60,7 @@ test("An array spread operator in an argument list parses to an arraySpread node
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(
+    tightPipeline(
       name("foo"),
       args(mixedArgList([literal(1), arraySpread(name("bar")), literal(3)]))
     )
@@ -80,7 +81,7 @@ test("An object spread operator in an argument list parses to an objectSpread no
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    pipeline(
+    tightPipeline(
       name("foo"),
       args(
         mixedArgList([

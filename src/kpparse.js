@@ -9,10 +9,10 @@ import {
   at,
   block,
   constantFunction,
+  dot,
   entry,
   function_,
   group,
-  index,
   keyName,
   literal,
   mixedArgList,
@@ -27,6 +27,7 @@ import {
   pipeArgs,
   pipeDot,
   pipeline,
+  tightPipeline,
 } from "./kpast.js";
 import kperror, { isError } from "./kperror.js";
 import kplex from "./kplex.js";
@@ -282,7 +283,7 @@ function parsePipeline(parser, start) {
     [parseTightPipeline, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
     (expression, calls) => {
       if (calls.length > 0) {
-        return pipeline(expression, ...calls);
+        return pipeline(expression, ...calls.map(makePipeArgs));
       } else {
         return expression;
       }
@@ -292,38 +293,55 @@ function parsePipeline(parser, start) {
 
 function parsePointFreePipeline(parser, start) {
   return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
-    function_(pipeline(name("pipelineArg"), ...calls), [name("pipelineArg")])
+    function_(pipeline(name("pipelineArg"), ...calls.map(makePipeArgs)), [
+      name("pipelineArg"),
+    ])
   )(parser, start);
+}
+
+function makePipeArgs(call) {
+  if (call.type === "pipe") {
+    const callee = call.callee;
+    if (
+      callee.type === "tightPipeline" &&
+      callee.steps.at(-1).type === "args"
+    ) {
+      const otherSteps = callee.steps.slice(0, -1);
+      const lastStep = callee.steps.at(-1);
+      if (otherSteps.length === 0) {
+        return pipeArgs(callee.start, lastStep.args);
+      } else {
+        return pipeArgs(
+          tightPipeline(callee.start, ...otherSteps),
+          lastStep.args
+        );
+      }
+    } else {
+      return call;
+    }
+  } else {
+    return call;
+  }
 }
 
 function parsePipelineStep(parser, start) {
   return parseAnyOf(
     "pipelineStep",
-    parseArgs,
-    parsePipeArgs,
     parsePipeDot,
     parsePipe,
     parseAt
   )(parser, start);
 }
 
-function parseArgs(parser, start) {
-  return convert(parseArgumentList, args)(parser, start);
-}
-
-function parsePipeArgs(parser, start) {
-  return parseAllOf(
-    "pipeCall",
-    [consume("PIPE", "expectedPipe"), parseTightPipeline, parseArgumentList],
-    pipeArgs
-  )(parser, start);
-}
-
 function parsePipeDot(parser, start) {
   return parseAllOf(
     "pipeDot",
-    [consume("PIPE_DOT", "expectedPipeDot"), parseName],
-    (name) => pipeDot(literal(name.name))
+    [
+      consume("PIPE_DOT", "expectedPipeDot"),
+      parseName,
+      parseZeroOrMore("tightPipelineSteps", parseTightPipelineStep),
+    ],
+    (name, steps) => pipeDot(literal(name.name), steps)
   )(parser, start);
 }
 
@@ -378,6 +396,31 @@ function parseParameter(parser, start) {
   )(parser, start);
 }
 
+function parseTightPipeline(parser, start) {
+  return parseAllOf(
+    "tightPipeline",
+    [
+      parseAtomic,
+      parseZeroOrMore("tightPipelineSteps", parseTightPipelineStep),
+    ],
+    (expression, calls) => {
+      if (calls.length > 0) {
+        return tightPipeline(expression, ...calls);
+      } else {
+        return expression;
+      }
+    }
+  )(parser, start);
+}
+
+function parseTightPipelineStep(parser, start) {
+  return parseAnyOf("tightPipelineStep", parseArgs, parseDot)(parser, start);
+}
+
+function parseArgs(parser, start) {
+  return convert(parseArgumentList, args)(parser, start);
+}
+
 function parseArgumentList(parser, start) {
   return parseAllOf(
     "argumentList",
@@ -401,25 +444,9 @@ function parseArgument(parser, start) {
   )(parser, start);
 }
 
-function parseTightPipeline(parser, start) {
-  return parseAllOf(
-    "tightPipeline",
-    [parseAtomic, parseZeroOrMore("propertyIndexes", parsePropertyIndex)],
-    (expression, indexes) => {
-      let axis = expression;
-      for (const i of indexes) {
-        axis = index(axis, i);
-      }
-      return axis;
-    }
-  )(parser, start);
-}
-
-function parsePropertyIndex(parser, start) {
-  return parseAllOf(
-    "propertyIndex",
-    [consume("DOT", "expectedPropertyIndex"), parseName],
-    (name) => literal(name.name)
+function parseDot(parser, start) {
+  return parseAllOf("dot", [consume("DOT", "expectedDot"), parseName], (name) =>
+    dot(literal(name.name))
   )(parser, start);
 }
 

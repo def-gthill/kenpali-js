@@ -7,6 +7,7 @@ import {
   at,
   call,
   constantFunction,
+  dot,
   entry,
   function_,
   group,
@@ -26,6 +27,7 @@ import {
   restKey,
   spread,
   spreadKey,
+  tightPipeline,
   TreeTransformer,
 } from "./kpast.js";
 
@@ -158,6 +160,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformConstantFunction(expression);
       case "pipeline":
         return this.transformPipeline(expression);
+      case "tightPipeline":
+        return this.transformTightPipeline(expression);
       default:
         return super.transformOtherExpression(expression);
     }
@@ -194,8 +198,6 @@ class SugaredTreeTransformer extends TreeTransformer {
 
   transformPipelineStep(step) {
     switch (step.type) {
-      case "args":
-        return this.transformArgsStep(step);
       case "pipeArgs":
         return this.transformPipeArgsStep(step);
       case "pipeDot":
@@ -205,17 +207,8 @@ class SugaredTreeTransformer extends TreeTransformer {
       case "at":
         return this.transformAtStep(step);
       default:
-        return this.transformOtherStep(step);
+        return this.transformOtherPipelineStep(step);
     }
-  }
-
-  transformArgsStep(step) {
-    return args(
-      argList(
-        step.args.posArgs.map((arg) => this.transformArrayElement(arg)),
-        step.args.namedArgs.map((arg) => this.transformObjectElement(arg))
-      )
-    );
   }
 
   transformPipeArgsStep(step) {
@@ -229,7 +222,10 @@ class SugaredTreeTransformer extends TreeTransformer {
   }
 
   transformPipeDotStep(step) {
-    return pipeDot(this.transformExpression(step.index));
+    return pipeDot(
+      this.transformExpression(step.index),
+      step.steps.map((step) => this.transformTightPipelineStep(step))
+    );
   }
 
   transformPipeStep(step) {
@@ -240,11 +236,42 @@ class SugaredTreeTransformer extends TreeTransformer {
     return at(this.transformExpression(step.index));
   }
 
-  transformBangStep(step) {
+  transformOtherPipelineStep(step) {
     return step;
   }
 
-  transformOtherStep(step) {
+  transformTightPipeline(expression) {
+    return tightPipeline(
+      this.transformExpression(expression.start),
+      ...expression.steps.map((step) => this.transformTightPipelineStep(step))
+    );
+  }
+
+  transformTightPipelineStep(step) {
+    switch (step.type) {
+      case "args":
+        return this.transformArgsStep(step);
+      case "dot":
+        return this.transformDotStep(step);
+      default:
+        return this.transformOtherTightPipelineStep(step);
+    }
+  }
+
+  transformArgsStep(step) {
+    return args(
+      argList(
+        step.args.posArgs.map((arg) => this.transformArrayElement(arg)),
+        step.args.namedArgs.map((arg) => this.transformObjectElement(arg))
+      )
+    );
+  }
+
+  transformDotStep(step) {
+    return dot(this.transformExpression(step.index));
+  }
+
+  transformOtherTightPipelineStep(step) {
     return step;
   }
 }
@@ -406,9 +433,6 @@ class PipelineTransformer extends SugaredTreeTransformer {
     let axis = pipeline.start;
     for (const step of pipeline.steps) {
       switch (step.type) {
-        case "args":
-          axis = call(axis, step.args.posArgs, step.args.namedArgs);
-          break;
         case "pipeArgs":
           axis = call(
             step.callee,
@@ -417,7 +441,9 @@ class PipelineTransformer extends SugaredTreeTransformer {
           );
           break;
         case "pipeDot":
-          axis = index(axis, step.index);
+          axis = this.transformTightPipeline(
+            tightPipeline(axis, dot(step.index), ...step.steps)
+          );
           break;
         case "pipe":
           axis = call(step.callee, [axis]);
@@ -427,6 +453,23 @@ class PipelineTransformer extends SugaredTreeTransformer {
           break;
         default:
           throw new Error(`Invalid pipeline step type "${step.type}"`);
+      }
+    }
+    return this.transformExpression(axis);
+  }
+
+  transformTightPipeline(pipeline) {
+    let axis = pipeline.start;
+    for (const step of pipeline.steps) {
+      switch (step.type) {
+        case "args":
+          axis = call(axis, step.args.posArgs, step.args.namedArgs);
+          break;
+        case "dot":
+          axis = index(axis, step.index);
+          break;
+        default:
+          throw new Error(`Invalid tight pipeline step type "${step.type}"`);
       }
     }
     return this.transformExpression(axis);
