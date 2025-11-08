@@ -720,4 +720,31 @@ export function platformFunction<P extends ParamTypes>(
   f: FunctionImpl<P>
 ): FunctionSpec<P>;
 
+interface ConstructorSpec {
+  posParams?: SingleParamSpec<KpValue>[];
+  namedParams?: SingleParamSpec<KpValue, string>[];
+  body: (
+    args: KpValue[],
+    context: { getMethod: (methodName: string) => KpFunction }
+  ) => {
+    internals: Record<string, KpValue>;
+    properties: Record<string, KpValue>;
+  };
+}
+
+interface MethodSpec {
+  posParams?: SingleParamSpec<KpValue>[];
+  namedParams?: SingleParamSpec<KpValue, string>[];
+  body: (args: KpValue[], context: VmContext) => KpValue;
+}
+
+export function platformClass(
+  name: string,
+  members: {
+    protocols?: KpProtocol<KpValue>[];
+    constructors: Record<string, ConstructorSpec>;
+    methods: Record<string, MethodSpec>;
+  }
+): KpClass<KpValue> | FunctionSpec<{}>;
+
 //#endregion
