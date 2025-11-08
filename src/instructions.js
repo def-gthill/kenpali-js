@@ -271,7 +271,7 @@ class Disassembler {
     for (const { name, offset } of this.functions) {
       instructionStrings.push(`Function ${name} at ${offset}`);
     }
-    while (this.cursor >= 0) {
+    while (this.cursor < this.instructions.length) {
       const instructionStart = this.cursor;
       let instructionString = this.disassembleInstruction();
       const diagnostic = this.getDiagnostic();
