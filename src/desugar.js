@@ -15,6 +15,7 @@ import {
   index,
   keyName,
   literal,
+  name,
   objectRest,
   objectSpread,
   optional,
@@ -23,6 +24,7 @@ import {
   pipeArgs,
   pipeDot,
   pipeline,
+  pointFreePipeline,
   rest,
   restKey,
   spread,
@@ -52,6 +54,10 @@ export default function desugar(expression) {
   // This step converts Kenpali's function syntax, with its mixed arguments and
   // shorthand for common function types, to Kenpali JSON's function syntax.
   result = convertFunctionSyntax(result);
+
+  // This step converts pipeline steps of the form `| <expr>(<args>)` into `pipeArgs`
+  // steps, preparing them for argument injection.
+  result = makePipeArgs(result);
 
   // This step converts Kenpali's pipeline syntax into ordinary function calls
   // and operators.
@@ -160,6 +166,8 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformConstantFunction(expression);
       case "pipeline":
         return this.transformPipeline(expression);
+      case "pointFreePipeline":
+        return this.transformPointFreePipeline(expression);
       case "tightPipeline":
         return this.transformTightPipeline(expression);
       default:
@@ -192,6 +200,12 @@ class SugaredTreeTransformer extends TreeTransformer {
   transformPipeline(expression) {
     return pipeline(
       this.transformExpression(expression.start),
+      ...expression.steps.map((step) => this.transformPipelineStep(step))
+    );
+  }
+
+  transformPointFreePipeline(expression) {
+    return pointFreePipeline(
       ...expression.steps.map((step) => this.transformPipelineStep(step))
     );
   }
@@ -420,12 +434,50 @@ class FunctionSyntaxConverter extends SugaredTreeTransformer {
   transformConstantFunction(expression) {
     return this.transformFunction(function_(expression.body));
   }
+
+  transformPointFreePipeline(expression) {
+    return this.transformFunction(
+      function_(pipeline(name("pipelineArg"), ...expression.steps), [
+        name("pipelineArg"),
+      ])
+    );
+  }
 }
 
 const functionSyntaxConverter = new FunctionSyntaxConverter();
 
 function convertFunctionSyntax(expression) {
   return functionSyntaxConverter.transformExpression(expression);
+}
+
+class PipeArgsMaker extends SugaredTreeTransformer {
+  transformPipeStep(step) {
+    const callee = step.callee;
+    if (
+      callee.type === "tightPipeline" &&
+      callee.steps.at(-1).type === "args"
+    ) {
+      const otherSteps = callee.steps.slice(0, -1);
+      const lastStep = callee.steps.at(-1);
+      if (otherSteps.length === 0) {
+        return this.transformPipeArgsStep(
+          pipeArgs(callee.start, lastStep.args)
+        );
+      } else {
+        return this.transformPipeArgsStep(
+          pipeArgs(tightPipeline(callee.start, ...otherSteps), lastStep.args)
+        );
+      }
+    } else {
+      return step;
+    }
+  }
+}
+
+const pipeArgsMaker = new PipeArgsMaker();
+
+function makePipeArgs(expression) {
+  return pipeArgsMaker.transformExpression(expression);
 }
 
 class PipelineTransformer extends SugaredTreeTransformer {

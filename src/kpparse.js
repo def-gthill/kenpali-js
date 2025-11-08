@@ -11,7 +11,6 @@ import {
   constantFunction,
   dot,
   entry,
-  function_,
   group,
   keyName,
   literal,
@@ -24,9 +23,9 @@ import {
   objectSpread,
   optional,
   pipe,
-  pipeArgs,
   pipeDot,
   pipeline,
+  pointFreePipeline,
   tightPipeline,
 } from "./kpast.js";
 import kperror, { isError } from "./kperror.js";
@@ -283,7 +282,7 @@ function parsePipeline(parser, start) {
     [parseTightPipeline, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
     (expression, calls) => {
       if (calls.length > 0) {
-        return pipeline(expression, ...calls.map(makePipeArgs));
+        return pipeline(expression, ...calls);
       } else {
         return expression;
       }
@@ -292,36 +291,9 @@ function parsePipeline(parser, start) {
 }
 
 function parsePointFreePipeline(parser, start) {
-  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (calls) =>
-    function_(pipeline(name("pipelineArg"), ...calls.map(makePipeArgs)), [
-      name("pipelineArg"),
-    ])
+  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (steps) =>
+    pointFreePipeline(...steps)
   )(parser, start);
-}
-
-function makePipeArgs(call) {
-  if (call.type === "pipe") {
-    const callee = call.callee;
-    if (
-      callee.type === "tightPipeline" &&
-      callee.steps.at(-1).type === "args"
-    ) {
-      const otherSteps = callee.steps.slice(0, -1);
-      const lastStep = callee.steps.at(-1);
-      if (otherSteps.length === 0) {
-        return pipeArgs(callee.start, lastStep.args);
-      } else {
-        return pipeArgs(
-          tightPipeline(callee.start, ...otherSteps),
-          lastStep.args
-        );
-      }
-    } else {
-      return call;
-    }
-  } else {
-    return call;
-  }
 }
 
 function parsePipelineStep(parser, start) {
