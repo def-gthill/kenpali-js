@@ -124,16 +124,12 @@ export function argList(posArgs, namedArgs) {
   return { type: "argList", posArgs, namedArgs };
 }
 
-export function args(args) {
-  return { type: "args", args };
-}
-
 export function pipeArgs(callee, args) {
   return { type: "pipeArgs", callee, args };
 }
 
-export function pipeDot(index) {
-  return { type: "pipeDot", index };
+export function pipeDot(index, steps) {
+  return { type: "pipeDot", index, steps };
 }
 
 export function pipe(callee) {
@@ -166,6 +162,18 @@ export function arrayRest(name) {
 
 export function objectRest(name) {
   return { type: "objectRest", name };
+}
+
+export function tightPipeline(start, ...steps) {
+  return { type: "tightPipeline", start, steps };
+}
+
+export function args(args) {
+  return { type: "args", args };
+}
+
+export function dot(index) {
+  return { type: "dot", index };
 }
 
 //#endregion

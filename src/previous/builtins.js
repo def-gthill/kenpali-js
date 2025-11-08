@@ -552,6 +552,34 @@ const rawBuiltins = [
       return array;
     }
   ),
+  // Override the natural implementation for performance.
+  platformFunction(
+    "transform",
+    {
+      posParams: [
+        { name: "sequence", type: sequenceProtocol },
+        { name: "f", type: functionClass },
+      ],
+    },
+    function ([sequence, f], { kpcallback }) {
+      const start = toStream(sequence);
+      function streamFrom(current) {
+        if (current.properties.isEmpty()) {
+          return emptyStream();
+        } else {
+          return stream({
+            value() {
+              return kpcallback(f, [current.properties.value()], kpobject());
+            },
+            next() {
+              return streamFrom(current.properties.next());
+            },
+          });
+        }
+      }
+      return streamFrom(start);
+    }
+  ),
   platformFunction(
     "keepFirst",
     {

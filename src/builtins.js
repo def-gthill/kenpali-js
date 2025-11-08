@@ -552,6 +552,34 @@ const rawBuiltins = [
       return array;
     }
   ),
+  // Override the natural implementation for performance.
+  platformFunction(
+    "transform",
+    {
+      posParams: [
+        { name: "sequence", type: sequenceProtocol },
+        { name: "f", type: functionClass },
+      ],
+    },
+    function ([sequence, f], { kpcallback }) {
+      const start = toStream(sequence);
+      function streamFrom(current) {
+        if (current.properties.isEmpty()) {
+          return emptyStream();
+        } else {
+          return stream({
+            value() {
+              return kpcallback(f, [current.properties.value()], kpobject());
+            },
+            next() {
+              return streamFrom(current.properties.next());
+            },
+          });
+        }
+      }
+      return streamFrom(start);
+    }
+  ),
   platformFunction(
     "keepFirst",
     {
@@ -618,6 +646,37 @@ const rawBuiltins = [
       }
 
       return start;
+    }
+  ),
+  // Override the natural implementation for performance.
+  platformFunction(
+    "flatten",
+    { posParams: [{ name: "sequence", type: sequenceProtocol }] },
+    function ([sequence]) {
+      const outer = toStream(sequence);
+      function streamFrom(startOuter, startInner) {
+        let outer = startOuter;
+        let inner = startInner;
+        while (!outer.properties.isEmpty() && inner.properties.isEmpty()) {
+          const rawInner = outer.properties.value();
+          validateReturn(rawInner, sequenceProtocol);
+          inner = toStream(rawInner);
+          outer = outer.properties.next();
+        }
+        if (inner.properties.isEmpty()) {
+          return emptyStream();
+        } else {
+          return stream({
+            value() {
+              return inner.properties.value();
+            },
+            next() {
+              return streamFrom(outer, inner.properties.next());
+            },
+          });
+        }
+      }
+      return streamFrom(outer, emptyStream());
     }
   ),
   platformFunction(
