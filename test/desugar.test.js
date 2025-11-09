@@ -10,10 +10,11 @@ import {
   group,
   index,
   literal,
+  loosePipeline,
   name,
   object,
   pipe,
-  pipeline,
+  pipelineCall,
   spread,
 } from "../src/kpast.js";
 
@@ -46,13 +47,13 @@ test("A simple array desugars to itself", (t) => {
   t.deepEqual(result, expression);
 });
 
-test("A forward pipe desugars to a function call", (t) => {
-  const expression = pipeline(name("x"), pipe(name("f")));
+test("A pipeline call desugars to an ordinary function call", (t) => {
+  const expression = pipelineCall(name("x"), loosePipeline(pipe(name("f"))));
   const result = desugar(expression);
   t.deepEqual(result, call(name("f"), [name("x")]));
 });
 
-const pipeSugared = pipeline(name("x"), pipe(name("f")));
+const pipeSugared = pipelineCall(name("x"), loosePipeline(pipe(name("f"))));
 const pipeDesugared = call(name("f"), [name("x")]);
 
 test("Desugaring propagates through arrays", (t) => {
@@ -86,7 +87,10 @@ test("Desugaring propagates through function definitions", (t) => {
 });
 
 test("Desugaring propagates through pipelines", (t) => {
-  const expression = pipeline(pipeSugared, pipe(pipeSugared), at(pipeSugared));
+  const expression = pipelineCall(
+    pipeSugared,
+    loosePipeline(pipe(pipeSugared), at(pipeSugared))
+  );
   const result = desugar(expression);
   t.deepEqual(
     result,

@@ -14,6 +14,7 @@ import {
   group,
   keyName,
   literal,
+  loosePipeline,
   mixedArgList,
   mixedParamList,
   name,
@@ -24,8 +25,7 @@ import {
   optional,
   pipe,
   pipeDot,
-  pipeline,
-  pointFreePipeline,
+  pipelineCall,
   tightPipeline,
 } from "./kpast.js";
 import kperror, { isError } from "./kperror.js";
@@ -262,8 +262,8 @@ function parseAssignable(parser, start) {
   return parseAnyOf(
     "assignable",
     parseArrowFunction,
-    parsePipeline,
-    parsePointFreePipeline,
+    parseLoosePipelineCall,
+    parseLoosePipeline,
     parseConstantFunction
   )(parser, start);
 }
@@ -276,29 +276,33 @@ function parseConstantFunction(parser, start) {
   )(parser, start);
 }
 
-function parsePipeline(parser, start) {
+function parseLoosePipelineCall(parser, start) {
   return parseAllOf(
-    "pipeline",
-    [parseTightPipeline, parseZeroOrMore("pipelineSteps", parsePipelineStep)],
-    (expression, calls) => {
-      if (calls.length > 0) {
-        return pipeline(expression, ...calls);
+    "loosePipelineCall",
+    [
+      parseTightPipelineCall,
+      parseOptional("loosePipeline", parseLoosePipeline),
+    ],
+    (start, pipeline) => {
+      if (pipeline) {
+        return pipelineCall(start, pipeline);
       } else {
-        return expression;
+        return start;
       }
     }
   )(parser, start);
 }
 
-function parsePointFreePipeline(parser, start) {
-  return convert(parseOneOrMore("pipelineSteps", parsePipelineStep), (steps) =>
-    pointFreePipeline(...steps)
+function parseLoosePipeline(parser, start) {
+  return convert(
+    parseOneOrMore("loosePipelineSteps", parseLoosePipelineStep),
+    (steps) => loosePipeline(...steps)
   )(parser, start);
 }
 
-function parsePipelineStep(parser, start) {
+function parseLoosePipelineStep(parser, start) {
   return parseAnyOf(
-    "pipelineStep",
+    "loosePipelineStep",
     parsePipeDot,
     parsePipe,
     parseAt
@@ -320,7 +324,7 @@ function parsePipeDot(parser, start) {
 function parsePipe(parser, start) {
   return parseAllOf(
     "pipe",
-    [consume("PIPE", "expectedPipe"), parseTightPipeline],
+    [consume("PIPE", "expectedPipe"), parseTightPipelineCall],
     pipe
   )(parser, start);
 }
@@ -328,7 +332,7 @@ function parsePipe(parser, start) {
 function parseAt(parser, start) {
   return parseAllOf(
     "at",
-    [consume("AT", "expectedAt"), parseTightPipeline],
+    [consume("AT", "expectedAt"), parseTightPipelineCall],
     at
   )(parser, start);
 }
@@ -368,20 +372,24 @@ function parseParameter(parser, start) {
   )(parser, start);
 }
 
-function parseTightPipeline(parser, start) {
+function parseTightPipelineCall(parser, start) {
   return parseAllOf(
-    "tightPipeline",
-    [
-      parseAtomic,
-      parseZeroOrMore("tightPipelineSteps", parseTightPipelineStep),
-    ],
-    (expression, calls) => {
-      if (calls.length > 0) {
-        return tightPipeline(expression, ...calls);
+    "tightPipelineCall",
+    [parseAtomic, parseOptional("tightPipeline", parseTightPipeline)],
+    (start, pipeline) => {
+      if (pipeline) {
+        return pipelineCall(start, pipeline);
       } else {
-        return expression;
+        return start;
       }
     }
+  )(parser, start);
+}
+
+function parseTightPipeline(parser, start) {
+  return convert(
+    parseOneOrMore("tightPipelineSteps", parseTightPipelineStep),
+    (steps) => tightPipeline(...steps)
   )(parser, start);
 }
 

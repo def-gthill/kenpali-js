@@ -7,12 +7,13 @@ import {
   entry,
   group,
   literal,
+  loosePipeline,
   mixedArgList,
   name,
   object,
   objectSpread,
   pipe,
-  pipeline,
+  pipelineCall,
   tightPipeline,
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
@@ -43,10 +44,13 @@ test("An expression in parentheses parses to a group node", (t) => {
   t.deepEqual(result, group(literal(42)));
 });
 
-test("A pipeline parses to a pipeline node", (t) => {
+test("A pipeline call parses to a pipeline call node", (t) => {
   const code = "a | b @ c";
   const result = kpparseSugared(code);
-  t.deepEqual(result, pipeline(name("a"), pipe(name("b")), at(name("c"))));
+  t.deepEqual(
+    result,
+    pipelineCall(name("a"), loosePipeline(pipe(name("b")), at(name("c"))))
+  );
 });
 
 test("An array spread operator in an array parses to an arraySpread node", (t) => {
@@ -60,9 +64,11 @@ test("An array spread operator in an argument list parses to an arraySpread node
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    tightPipeline(
+    pipelineCall(
       name("foo"),
-      args(mixedArgList([literal(1), arraySpread(name("bar")), literal(3)]))
+      tightPipeline(
+        args(mixedArgList([literal(1), arraySpread(name("bar")), literal(3)]))
+      )
     )
   );
 });
@@ -81,13 +87,15 @@ test("An object spread operator in an argument list parses to an objectSpread no
   const result = kpparseSugared(code);
   t.deepEqual(
     result,
-    tightPipeline(
+    pipelineCall(
       name("foo"),
-      args(
-        mixedArgList([
-          entry(name("question"), literal(42)),
-          objectSpread(name("foo")),
-        ])
+      tightPipeline(
+        args(
+          mixedArgList([
+            entry(name("question"), literal(42)),
+            objectSpread(name("foo")),
+          ])
+        )
       )
     )
   );
