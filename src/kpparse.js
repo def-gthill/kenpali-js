@@ -24,7 +24,6 @@ import {
   objectSpread,
   optional,
   pipe,
-  pipeDot,
   pipelineCall,
   tightPipeline,
 } from "./kpast.js";
@@ -279,10 +278,7 @@ function parseConstantFunction(parser, start) {
 function parseLoosePipelineCall(parser, start) {
   return parseAllOf(
     "loosePipelineCall",
-    [
-      parseTightPipelineCall,
-      parseOptional("loosePipeline", parseLoosePipeline),
-    ],
+    [parseTight, parseOptional("loosePipeline", parseLoosePipeline)],
     (start, pipeline) => {
       if (pipeline) {
         return pipelineCall(start, pipeline);
@@ -301,30 +297,13 @@ function parseLoosePipeline(parser, start) {
 }
 
 function parseLoosePipelineStep(parser, start) {
-  return parseAnyOf(
-    "loosePipelineStep",
-    parsePipeDot,
-    parsePipe,
-    parseAt
-  )(parser, start);
-}
-
-function parsePipeDot(parser, start) {
-  return parseAllOf(
-    "pipeDot",
-    [
-      consume("PIPE_DOT", "expectedPipeDot"),
-      parseName,
-      parseZeroOrMore("tightPipelineSteps", parseTightPipelineStep),
-    ],
-    (name, steps) => pipeDot(literal(name.name), steps)
-  )(parser, start);
+  return parseAnyOf("loosePipelineStep", parsePipe, parseAt)(parser, start);
 }
 
 function parsePipe(parser, start) {
   return parseAllOf(
     "pipe",
-    [consume("PIPE", "expectedPipe"), parseTightPipelineCall],
+    [consume("PIPE", "expectedPipe"), parseTight],
     pipe
   )(parser, start);
 }
@@ -372,6 +351,14 @@ function parseParameter(parser, start) {
   )(parser, start);
 }
 
+function parseTight(parser, start) {
+  return parseAnyOf(
+    "tight",
+    parseTightPipelineCall,
+    parsePointFreeTightPipeline
+  )(parser, start);
+}
+
 function parseTightPipelineCall(parser, start) {
   return parseAllOf(
     "tightPipelineCall",
@@ -383,6 +370,17 @@ function parseTightPipelineCall(parser, start) {
         return start;
       }
     }
+  )(parser, start);
+}
+
+function parsePointFreeTightPipeline(parser, start) {
+  // In a point-free context, a tight pipeline can't start with
+  // an args step, because that would just be a thing in parens,
+  // which needs to be interpreted as an ordinary group.
+  return parseAllOf(
+    "pointFreeTightPipeline",
+    [parseDot, parseZeroOrMore("tightPipelineSteps", parseTightPipelineStep)],
+    (dot, steps) => tightPipeline(dot, ...steps)
   )(parser, start);
 }
 

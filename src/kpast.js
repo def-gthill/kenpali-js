@@ -128,10 +128,6 @@ export function pipeArgs(callee, args) {
   return { type: "pipeArgs", callee, args };
 }
 
-export function pipeDot(index, steps) {
-  return { type: "pipeDot", index, steps };
-}
-
 export function pipe(callee) {
   return { type: "pipe", callee };
 }
