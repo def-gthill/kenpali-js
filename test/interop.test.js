@@ -79,6 +79,16 @@ test("We can pass a JavaScript callback to a Kenpali function using kpcall", (t)
   t.is(result, 42);
 });
 
+test("The result of toKpFunction can be used directly as a callee in kpcall", (t) => {
+  // This seems weird—the Kenpali interpreter doesn't actually need to be invoked at all.
+  // But it's important for separation of concerns: we want to be able to call any Kenpali
+  // function using `kpcall`, even if it happens to have come from JavaScript in the first place.
+  const kpf = toKpFunction(() => 42);
+  const result = kpcall(kpf, [], {});
+
+  t.is(result, 42);
+});
+
 test("A JavaScript callback can accept positional arguments", (t) => {
   const code = "(callback) => callback(3, 4)";
   const kpf = kpeval(kpparse(code));

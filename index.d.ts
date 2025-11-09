@@ -330,7 +330,7 @@ export type Schema<T extends KpValue> =
   | UnionSchema<T>
   | ConditionSchema<T>
   | (T extends KpArray<infer E> ? ArraySchema<E> : never)
-  | (T extends KpTuple<infer T> ? TupleSchema<T> : never)
+  | (T extends KpValue[] ? TupleSchema<T> : never)
   | (T extends KpObject<infer K, infer V>
       ? ObjectSchema<K, V> | RecordSchema<K, V>
       : never);
@@ -559,13 +559,13 @@ export type KpCallback = (
  * @param f - The JavaScript function to wrap.
  * @returns The wrapped function.
  */
-export function toKpFunction<
-  P extends KpTuple<KpValue[]>,
-  K extends string,
-  V extends KpValue,
->(
-  f: (posArgs: P, namedArgs: Record<K, V>, kpcallback: KpCallback) => KpValue
-): Callback<KpTuple<P>, KpObject<K, V>>;
+export function toKpFunction<R extends KpValue>(
+  f: (
+    posArgs: KpValue[],
+    namedArgs: Record<string, KpValue>,
+    kpcallback: KpCallback
+  ) => R
+): Callback<KpValue[], KpObject<string, KpValue>>;
 
 /**
  * Calls the specified function, then invokes one of the specified handlers
@@ -620,12 +620,29 @@ export function kpobject<K extends string, V extends KpValue>(
   ...entries: [NoInfer<K>, NoInfer<V>][]
 ): KpObject<K, V>;
 
+/**
+ * Checks whether the value matches the schema.
+ *
+ * @param value - The value to check.
+ * @param schema - The schema to check against.
+ * @returns True if the value matches the schema, false otherwise.
+ */
 export function matches<T extends KpValue>(
   value: KpValue,
   schema: Schema<T>
 ): value is T;
 
-export function validate(value: KpValue, schema: Schema<KpValue>): void;
+/**
+ * Validates that the value matches the schema, throwing the validation error if it doesn't.
+ *
+ * @param value - The value to validate.
+ * @param schema - The schema to validate against.
+ * @returns The value, cast to the type of the schema.
+ */
+export function validate<T extends KpValue>(
+  value: KpValue,
+  schema: Schema<T>
+): T;
 
 export function display(value: KpValue): string;
 

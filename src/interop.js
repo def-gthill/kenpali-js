@@ -8,11 +8,15 @@ export function kpcall(
   namedArgs,
   { trace = false, timeLimitSeconds = 0, debugLog = console.error } = {}
 ) {
-  return kpvmCall(kpf, posArgs, toKpobject(namedArgs), {
-    trace,
-    timeLimitSeconds,
-    debugLog,
-  });
+  if (typeof kpf === "function") {
+    return kpf(posArgs, toKpobject(namedArgs), { kpcallbackInNewSession });
+  } else {
+    return kpvmCall(kpf, posArgs, toKpobject(namedArgs), {
+      trace,
+      timeLimitSeconds,
+      debugLog,
+    });
+  }
 }
 
 export function kpcallbackInNewSession(

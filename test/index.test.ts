@@ -4,7 +4,6 @@ import {
   arrayOf,
   errorClass,
   ExpressionNode,
-  KenpaliError,
   kpcatch,
   kpeval,
   KpObject,
@@ -20,6 +19,7 @@ import {
   satisfying,
   Schema,
   stringClass,
+  tupleLike,
   validate,
   type KpValue,
 } from "../index.js";
@@ -223,12 +223,46 @@ test("Can catch errors thrown by Kenpali code", (t) => {
 test("Can validate a value against a schema", (t) => {
   const value = "foo";
   const schema = numberClass;
-  try {
-    validate(value, schema);
-    t.fail("Validation should have failed");
-  } catch (error) {
-    t.assert(error instanceof KenpaliError);
-  }
+  kptry(
+    () => validate(value, schema),
+    (error) => {
+      t.is(error.properties.type, "wrongType");
+    },
+    (value) => {
+      const _: number = value;
+      t.fail("Validation should have failed");
+    }
+  );
+});
+
+test("Can validate a value against a tuple schema", (t) => {
+  const value = [1, 2];
+  const schema = tupleLike([numberClass, stringClass]);
+  kptry(
+    () => validate(value, schema),
+    (error) => {
+      t.is(error.properties.type, "badElement");
+    },
+    (value) => {
+      const _: [number, string] = value;
+      t.fail("Validation should have failed");
+    }
+  );
+});
+
+test("Can validate a value against a condition schema", (t) => {
+  const value = -42;
+  const schema = satisfying(numberClass, (n) => n > 0);
+  kptry(
+    () => validate(value, schema),
+    (error) => {
+      t.is(error.properties.type, "badValue");
+    },
+    (value) => {
+      const _: number = value;
+      t.fail("Validation should have failed");
+    }
+  );
 });
 
 function assertThrows(

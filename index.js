@@ -56,15 +56,8 @@ function matches(value, schema) {
 }
 
 function validate(value, schema) {
-  try {
-    internalValidate(value, deepToKpobject(schema), kpcallbackInNewSession);
-  } catch (error) {
-    if (isError(error)) {
-      throw new KenpaliError(error, kpcallbackInNewSession);
-    } else {
-      throw error;
-    }
-  }
+  internalValidate(value, deepToKpobject(schema), kpcallbackInNewSession);
+  return value;
 }
 
 function jsOneOfValues(values) {
