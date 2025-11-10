@@ -30,6 +30,7 @@ const tokenSpec = [
   ["STAR", r`\*`],
   // Other
   ["NAME", "[A-Za-z][A-Za-z0-9]*"],
+  ["UNDERSCORE", "_"],
   ["NEWLINE", r`\r\n|\r|\n`],
   ["WHITESPACE", r`[ \t]+`],
   ["COMMENT", r`//[^\r\n]*(\r\n|\r|\n)?`],

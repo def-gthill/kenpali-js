@@ -12,6 +12,7 @@ import {
   dot,
   entry,
   group,
+  ignore,
   keyName,
   literal,
   loosePipeline,
@@ -141,8 +142,17 @@ function parseNamePattern(parser, start) {
   return parseAnyOf(
     "namePattern",
     parseName,
+    parseIgnore,
     parseArrayPattern,
     parseObjectPattern
+  )(parser, start);
+}
+
+function parseIgnore(parser, start) {
+  return parseAllOf(
+    "ignore",
+    [consume("UNDERSCORE", "expectedIgnore")],
+    ignore
   )(parser, start);
 }
 
