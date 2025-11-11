@@ -464,7 +464,7 @@ class PipeArgsMaker extends SugaredTreeTransformer {
         );
       }
     } else {
-      return step;
+      return super.transformPipeStep(step);
     }
   }
 }
