@@ -51,7 +51,10 @@ build = (start, next) => (
         getStateOnce = callOnce(getState);
         newStream(
             value: getStateOnce,
-            next: $ streamFrom($ next(getStateOnce())),
+            next: $ (
+                state = getStateOnce();
+                streamFrom($ next(state))
+            ),
         )
     );
     streamFrom($ start)
@@ -146,9 +149,12 @@ running = (in, start:, next:) => (
             next: $ if(
                 current.isEmpty(),
                 then: emptyStream,
-                else: $ streamFrom(
-                    current.next(),
-                    $ next(current.value(), state: getStateOnce())
+                else: $ (
+                    state = getStateOnce();
+                    streamFrom(
+                        current.next(),
+                        $ next(current.value(), state:)
+                    )
                 ),
             )
         )
