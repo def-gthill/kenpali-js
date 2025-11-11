@@ -882,7 +882,14 @@ const rawBuiltins = [
         namedParams: [optionalFunctionParameter("default")],
         body: ([self, key, default_], { kpcallback }) => {
           const realKey = toKey(key);
-          return indexMapping(self.map, realKey, default_, kpcallback, self);
+          return indexMapping(
+            self.map,
+            realKey,
+            default_,
+            kpcallback,
+            "missingKey",
+            self
+          );
         },
       },
       display: {
@@ -1169,7 +1176,14 @@ const rawBuiltins = [
         namedParams: [optionalFunctionParameter("default")],
         body: ([self, key, default_], { kpcallback }) => {
           const realKey = toKey(key);
-          return indexMapping(self.map, realKey, default_, kpcallback, self);
+          return indexMapping(
+            self.map,
+            realKey,
+            default_,
+            kpcallback,
+            "missingKey",
+            self
+          );
         },
       },
       clear: {
@@ -1558,7 +1572,14 @@ export function indexCollection(
   } else if (isStream(collection)) {
     return indexStream(collection, index, default_, kpcallback, valueForError);
   } else if (isObject(collection)) {
-    return indexMapping(collection, index, default_, kpcallback, valueForError);
+    return indexMapping(
+      collection,
+      index,
+      default_,
+      kpcallback,
+      "missingProperty",
+      valueForError
+    );
   } else {
     throw kperror(
       "wrongType",
@@ -1681,6 +1702,7 @@ export function indexMapping(
   index,
   default_,
   kpcallback,
+  errorType = "missingProperty",
   valueForError = mapping
 ) {
   if (mapping.has(index)) {
@@ -1688,7 +1710,7 @@ export function indexMapping(
   } else if (default_) {
     return kpcallback(default_, [], kpobject());
   } else {
-    throw kperror("missingProperty", ["value", valueForError], ["key", index]);
+    throw kperror(errorType, ["value", valueForError], ["key", index]);
   }
 }
 
