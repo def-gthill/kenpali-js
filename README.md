@@ -9,7 +9,7 @@ This is an implementation of the [Kenpali](https://github.com/def-gthill/kenpali
 Kenpali is available as an [npm package](https://www.npmjs.com/package/kenpali). You can install it with
 
 ```
-npm install --save-exact kenpali@0.16.0
+npm install --save-exact kenpali@0.18.0
 ```
 
 Pinning the exact version is highly recommended, given that this package is still experimental and routinely makes backward-incompatible changes.
