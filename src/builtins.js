@@ -1228,15 +1228,16 @@ const rawBuiltins = [
       ],
     },
     function ([f, onError, onSuccess], { kpcallback }) {
+      let result;
       try {
-        const result = kpcallback(f, [], kpobject());
-        if (onSuccess) {
-          return kpcallback(onSuccess, [result], kpobject());
-        } else {
-          return result;
-        }
+        result = kpcallback(f, [], kpobject());
       } catch (error) {
         return kpcallback(onError, [error], kpobject());
+      }
+      if (onSuccess) {
+        return kpcallback(onSuccess, [result], kpobject());
+      } else {
+        return result;
       }
     }
   ),
