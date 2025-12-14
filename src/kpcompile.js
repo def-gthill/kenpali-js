@@ -346,6 +346,7 @@ class Compiler {
     for (const element of expression.elements) {
       if (element.type === "spread") {
         this.compileExpression(element.value);
+        this.validate(sequenceProtocol);
         this.addInstruction(op.ARRAY_EXTEND);
       } else {
         this.compileExpression(element);
@@ -365,9 +366,11 @@ class Compiler {
     for (const [key, value] of expression.entries) {
       if (key.type === "spread") {
         this.compileExpression(value);
+        this.validate(objectClass);
         this.addInstruction(op.OBJECT_MERGE);
       } else {
         this.compileExpression(key);
+        this.validate(stringClass);
         this.compileExpression(value);
         this.addInstruction(op.OBJECT_PUSH);
       }
