@@ -327,21 +327,21 @@ const rawBuiltins = [
       return !x;
     }
   ),
-  constant("Null", value(nullClass)),
-  constant("Boolean", value(booleanClass)),
-  constant("Number", value(numberClass)),
-  constant("String", value(stringClass)),
-  constant("Array", value(arrayClass)),
-  constant("Stream", value(streamClass)),
-  constant("Object", value(objectClass)),
-  constant("Function", value(functionClass)),
-  constant("Error", value(errorClass)),
-  constant("Class", value(classClass)),
-  constant("Protocol", value(protocolClass)),
-  constant("Sequence", value(sequenceProtocol)),
-  constant("Instance", value(instanceProtocol)),
-  constant("Type", value(typeProtocol)),
-  constant("Any", value(anyProtocol)),
+  constant("Null", nullClass),
+  constant("Boolean", booleanClass),
+  constant("Number", numberClass),
+  constant("String", stringClass),
+  constant("Array", arrayClass),
+  constant("Stream", streamClass),
+  constant("Object", objectClass),
+  constant("Function", functionClass),
+  constant("Error", errorClass),
+  constant("Class", classClass),
+  constant("Protocol", protocolClass),
+  constant("Sequence", sequenceProtocol),
+  constant("Instance", instanceProtocol),
+  constant("Type", typeProtocol),
+  constant("Any", anyProtocol),
   platformFunction("classOf", { posParams: ["value"] }, function ([value]) {
     return classOf(value);
   }),
@@ -1330,8 +1330,8 @@ const rawBuiltins = [
   ),
 ];
 
-export function constant(name, value) {
-  return [name, value];
+export function constant(name, constantValue) {
+  return [name, value(constantValue)];
 }
 
 export function platformFunction(name, paramSpec, f) {
