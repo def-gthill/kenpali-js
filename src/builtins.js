@@ -590,8 +590,16 @@ const rawBuiltins = [
     },
     function ([sequence, n]) {
       if (isString(sequence)) {
+        if (n <= 0) {
+          return "";
+        }
         return sequence.slice(0, n);
       }
+
+      if (n <= 0) {
+        return emptyStream();
+      }
+
       const start = toStream(sequence);
 
       function streamFrom(current, i) {
@@ -613,11 +621,7 @@ const rawBuiltins = [
         }
       }
 
-      if (n < 1) {
-        return emptyStream();
-      } else {
-        return streamFrom(start, 1);
-      }
+      return streamFrom(start, 1);
     }
   ),
   platformFunction(
@@ -629,12 +633,11 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, n]) {
+      if (n <= 0) {
+        return sequence;
+      }
       if (isString(sequence)) {
-        if (n > 0) {
-          return sequence.slice(n);
-        } else {
-          return sequence;
-        }
+        return sequence.slice(n);
       }
       let start = toStream(sequence);
 
