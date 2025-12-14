@@ -782,14 +782,17 @@ const rawBuiltins = [
     constructors: {
       newSet: {
         posParams: [
-          { name: "elements", type: arrayClass, defaultValue: literal([]) },
+          {
+            name: "elements",
+            type: sequenceProtocol,
+            defaultValue: literal([]),
+          },
         ],
         body: ([elements], { getMethod }) => {
-          const keys = elements.map(toKey);
+          const array = toArray(elements);
+          const keys = array.map(toKey);
           const set = new Set(keys);
-          const originalKeys = new Map(
-            keys.map((key, i) => [key, elements[i]])
-          );
+          const originalKeys = new Map(keys.map((key, i) => [key, array[i]]));
           return {
             internals: {
               set,
@@ -830,18 +833,20 @@ const rawBuiltins = [
         posParams: [
           {
             name: "entries",
-            type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
+            type: sequenceProtocol,
             defaultValue: literal([]),
           },
         ],
         body: ([entries], { getMethod }) => {
-          const realEntries = entries.map(([key, value]) => [
-            toKey(key),
-            value,
-          ]);
+          const array = toArray(entries);
+          validateArgument(
+            array,
+            arrayOf(tupleLike([anyProtocol, anyProtocol]))
+          );
+          const realEntries = array.map(([key, value]) => [toKey(key), value]);
           const map = new Map(realEntries);
           const originalKeys = new Map(
-            realEntries.map(([key, _], i) => [key, entries[i][0]])
+            realEntries.map(([key, _], i) => [key, array[i][0]])
           );
           return {
             internals: { map, originalKeys },
@@ -940,10 +945,14 @@ const rawBuiltins = [
     constructors: {
       newMutableArray: {
         posParams: [
-          { name: "elements", type: arrayClass, defaultValue: literal([]) },
+          {
+            name: "elements",
+            type: sequenceProtocol,
+            defaultValue: literal([]),
+          },
         ],
         body: ([elements], { getMethod }) => {
-          const array = [...elements];
+          const array = isArray(elements) ? [...elements] : toArray(elements);
           return {
             internals: { array },
             properties: {
@@ -1021,14 +1030,17 @@ const rawBuiltins = [
     constructors: {
       newMutableSet: {
         posParams: [
-          { name: "elements", type: arrayClass, defaultValue: literal([]) },
+          {
+            name: "elements",
+            type: sequenceProtocol,
+            defaultValue: literal([]),
+          },
         ],
         body: ([elements], { getMethod }) => {
-          const keys = elements.map(toKey);
+          const array = toArray(elements);
+          const keys = array.map(toKey);
           const set = new Set(keys);
-          const originalKeys = new Map(
-            keys.map((key, i) => [key, elements[i]])
-          );
+          const originalKeys = new Map(keys.map((key, i) => [key, array[i]]));
           return {
             internals: { set, originalKeys },
             properties: {
@@ -1093,18 +1105,20 @@ const rawBuiltins = [
         posParams: [
           {
             name: "entries",
-            type: arrayOf(tupleLike([anyProtocol, anyProtocol])),
+            type: sequenceProtocol,
             defaultValue: literal([]),
           },
         ],
         body: ([entries], { getMethod }) => {
-          const realEntries = entries.map(([key, value]) => [
-            toKey(key),
-            value,
-          ]);
+          const array = toArray(entries);
+          validateArgument(
+            array,
+            arrayOf(tupleLike([anyProtocol, anyProtocol]))
+          );
+          const realEntries = array.map(([key, value]) => [toKey(key), value]);
           const map = new Map(realEntries);
           const originalKeys = new Map(
-            realEntries.map(([key, _], i) => [key, entries[i][0]])
+            realEntries.map(([key, _], i) => [key, array[i][0]])
           );
           return {
             internals: { map, originalKeys },
