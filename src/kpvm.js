@@ -565,9 +565,7 @@ export class Vm {
       this.logInstruction("OBJECT_COPY");
     }
     const object = this.stack.pop();
-    this.stack.push(
-      kpobject(...kpoEntries(toObject(object, this.kpcallback.bind(this))))
-    );
+    this.stack.push(kpobject(...kpoEntries(toObject(object))));
   }
 
   runObjectKeys() {

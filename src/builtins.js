@@ -721,43 +721,19 @@ const rawBuiltins = [
     },
     function ([collection, index, default_], { kpcallback }) {
       if (isString(collection) || isArray(collection)) {
-        if (!isNumber(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "Number"]
-          );
-        }
+        validateArgument(index, numberClass);
         return indexArray(collection, index, default_, kpcallback);
       } else if (isStream(collection)) {
-        if (!(isNumber(index) || isString(index))) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "either(Number, String)"]
-          );
-        }
+        validateArgument(index, either(numberClass, stringClass));
         return indexStream(collection, index, default_, kpcallback);
       } else if (isObject(collection)) {
-        if (!isString(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "String"]
-          );
-        }
+        validateArgument(index, stringClass);
         return indexMapping(collection, index, default_, kpcallback);
       } else {
         if (isSequence(collection) && isNumber(index)) {
           return indexSequenceInstance(collection, index, default_, kpcallback);
         } else {
-          if (!isString(index)) {
-            throw kperror(
-              "wrongType",
-              ["value", index],
-              ["expectedType", "String"]
-            );
-          }
+          validateArgument(index, stringClass);
           return indexInstance(collection, index, default_, kpcallback);
         }
       }
