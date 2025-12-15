@@ -1614,45 +1614,6 @@ function setArray(array, index, element, valueForError) {
   }
 }
 
-export function indexCollection(
-  collection,
-  index,
-  default_,
-  kpcallback,
-  valueForError = collection
-) {
-  if (isString(collection)) {
-    return indexString(collection, index, default_, kpcallback, valueForError);
-  } else if (isArray(collection)) {
-    return indexArray(collection, index, default_, kpcallback, valueForError);
-  } else if (isStream(collection)) {
-    return indexStream(collection, index, default_, kpcallback, valueForError);
-  } else if (isSequence(collection)) {
-    return indexStream(
-      toStream(collection, kpcallback),
-      index,
-      default_,
-      kpcallback,
-      valueForError
-    );
-  } else if (isObject(collection)) {
-    return indexMapping(
-      collection,
-      index,
-      default_,
-      kpcallback,
-      "missingProperty",
-      valueForError
-    );
-  } else {
-    throw kperror(
-      "wrongType",
-      ["value", collection],
-      ["expectedType", either("sequence", "object")]
-    );
-  }
-}
-
 export function indexString(
   string,
   index,
