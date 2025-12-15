@@ -339,6 +339,7 @@ const rawBuiltins = [
   constant("Class", classClass),
   constant("Protocol", protocolClass),
   constant("Sequence", sequenceProtocol),
+  constant("Display", displayProtocol),
   constant("Instance", instanceProtocol),
   constant("Type", typeProtocol),
   constant("Any", anyProtocol),
