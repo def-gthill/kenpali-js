@@ -522,14 +522,31 @@ const rawBuiltins = [
     },
     function ([sequence, by], { kpcallback }) {
       const array = toArray(sequence);
+      if (array.length === 0) {
+        return array;
+      }
+      const ordered = either(
+        numberClass,
+        stringClass,
+        booleanClass,
+        arrayClass
+      );
       if (by) {
         const withSortKey = array.map((element) => [
           element,
           kpcallback(by, [element], kpobject()),
         ]);
+        validateArgument(withSortKey[0][1], ordered);
+        const keyClass = classOf(withSortKey[0][1]);
+        for (const [_, key] of withSortKey) {
+          validateReturn(key, keyClass);
+        }
         withSortKey.sort(([_a, aKey], [_b, bKey]) => compare(aKey, bKey));
         return withSortKey.map(([element, _]) => element);
       } else {
+        validateArgument(array[0], ordered);
+        const elementClass = classOf(array[0]);
+        validateArgument(array, arrayOf(elementClass));
         const result = [...array];
         result.sort(compare);
         return result;
@@ -1472,6 +1489,19 @@ function toNamePattern(param) {
   }
 }
 
+function compareValidating(a, b) {
+  validateArgument(
+    a,
+    either(numberClass, stringClass, booleanClass, arrayClass)
+  );
+  validateArgument(
+    b,
+    either(numberClass, stringClass, booleanClass, arrayClass)
+  );
+  validateArgument(b, classOf(a));
+  return compare(a, b);
+}
+
 function compare(a, b) {
   if (isArray(a)) {
     for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -1481,16 +1511,7 @@ function compare(a, b) {
       if (i >= b.length) {
         return 1;
       }
-      validateArgument(
-        a[i],
-        either(numberClass, stringClass, booleanClass, arrayClass)
-      );
-      validateArgument(
-        b[i],
-        either(numberClass, stringClass, booleanClass, arrayClass)
-      );
-      validateArgument(b[i], classOf(a[i]));
-      const elementCompare = compare(a[i], b[i]);
+      const elementCompare = compareValidating(a[i], b[i]);
       if (elementCompare !== 0) {
         return elementCompare;
       }
