@@ -171,18 +171,15 @@ export const IS_ERROR = 0x8b;
 export const IS_CLASS = 0x8c;
 // Pop the value at the top of the stack and push a boolean indicating whether it is a protocol.
 export const IS_PROTOCOL = 0x8d;
-// Pop the value at the top of the stack and push a boolean indicating whether it is a sequence.
-export const IS_SEQUENCE = 0x8e;
-// Pop the value at the top of the stack and push a boolean indicating whether it is a type.
-export const IS_TYPE = 0x8f;
-// Pop the value at the top of the stack and push a boolean indicating whether it is an instance.
-export const IS_INSTANCE = 0x90;
+// Pop the top two values from the stack. The top value must be a type value.
+// Push a boolean indicating whether the second-from-top value belongs to the type.
+export const HAS_TYPE = 0x8e;
 // Pop the top two values from the stack. The top value is treated as a validation schema, and
 // the second-from-top value is a boolean indicating whether the value was found to match the
 // schema using fast comparison. The value now at the top of the stack is the value to validate.
 // If the value does not match the schema, push an error value onto the stack indicating why.
 // Otherwise, do nothing.
-export const ERROR_IF_INVALID = 0x91;
+export const ERROR_IF_INVALID = 0x9f;
 
 export function disassemble(program) {
   return new Disassembler(program).disassemble();

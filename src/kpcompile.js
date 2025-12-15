@@ -24,6 +24,7 @@ import {
   instanceProtocol,
   isObject,
   isPlatformFunction,
+  isType,
   nullClass,
   numberClass,
   objectClass,
@@ -31,7 +32,6 @@ import {
   protocolClass,
   sequenceProtocol,
   stringClass,
-  typeProtocol,
 } from "./values.js";
 
 export function kpcompileJson(
@@ -828,6 +828,9 @@ class Compiler {
     }
     this.addInstruction(op.ALIAS);
     const instruction = this.getTypeValidationInstruction(schema);
+    if (instruction === op.HAS_TYPE) {
+      this.addInstruction(op.VALUE, schema);
+    }
     this.addInstruction(instruction);
   }
 
@@ -854,12 +857,8 @@ class Compiler {
       return op.IS_CLASS;
     } else if (schema === protocolClass) {
       return op.IS_PROTOCOL;
-    } else if (schema === sequenceProtocol) {
-      return op.IS_SEQUENCE;
-    } else if (schema === typeProtocol) {
-      return op.IS_TYPE;
-    } else if (schema === instanceProtocol) {
-      return op.IS_INSTANCE;
+    } else if (isType(schema)) {
+      return op.HAS_TYPE;
     } else {
       this.invalidSchema(schema);
     }

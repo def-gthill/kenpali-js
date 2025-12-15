@@ -26,6 +26,7 @@ import {
   display,
   equals,
   functionName,
+  hasType,
   instanceProtocol,
   isArray,
   isBoolean,
@@ -39,7 +40,6 @@ import {
   isProtocol,
   isSequence,
   isString,
-  isType,
   numberClass,
   objectClass,
   sequenceProtocol,
@@ -174,9 +174,7 @@ export class Vm {
     this.instructionTable[op.IS_ERROR] = this.runIsError;
     this.instructionTable[op.IS_CLASS] = this.runIsClass;
     this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
-    this.instructionTable[op.IS_SEQUENCE] = this.runIsSequence;
-    this.instructionTable[op.IS_TYPE] = this.runIsType;
-    this.instructionTable[op.IS_INSTANCE] = this.runIsInstance;
+    this.instructionTable[op.HAS_TYPE] = this.runHasType;
     this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
@@ -1140,28 +1138,13 @@ export class Vm {
     this.stack.push(isProtocol(value));
   }
 
-  runIsSequence() {
+  runHasType() {
     if (this.trace) {
-      this.logInstruction("IS_SEQUENCE");
+      this.logInstruction("HAS_TYPE");
     }
+    const type = this.stack.pop();
     const value = this.stack.pop();
-    this.stack.push(isSequence(value));
-  }
-
-  runIsType() {
-    if (this.trace) {
-      this.logInstruction("IS_TYPE");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isType(value));
-  }
-
-  runIsInstance() {
-    if (this.trace) {
-      this.logInstruction("IS_INSTANCE");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isInstance(value));
+    this.stack.push(hasType(value, type));
   }
 
   runErrorIfInvalid() {

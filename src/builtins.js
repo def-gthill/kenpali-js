@@ -33,6 +33,7 @@ import {
   Class,
   classClass,
   classOf,
+  collectionProtocol,
   display,
   displayProtocol,
   displaySimple,
@@ -338,6 +339,7 @@ const rawBuiltins = [
   constant("Error", errorClass),
   constant("Class", classClass),
   constant("Protocol", protocolClass),
+  constant("Collection", collectionProtocol),
   constant("Sequence", sequenceProtocol),
   constant("Display", displayProtocol),
   constant("Instance", instanceProtocol),
@@ -383,7 +385,7 @@ const rawBuiltins = [
   }),
   platformFunction(
     "toArray",
-    { posParams: [{ name: "value", type: sequenceProtocol }] },
+    { posParams: [{ name: "value", type: collectionProtocol }] },
     function ([value], { kpcallback }) {
       return toArray(value, kpcallback);
     }
@@ -393,7 +395,7 @@ const rawBuiltins = [
   }),
   platformFunction(
     "toStream",
-    { posParams: [{ name: "value", type: sequenceProtocol }] },
+    { posParams: [{ name: "value", type: collectionProtocol }] },
     function ([value], { kpcallback }) {
       return toStream(value, kpcallback);
     }
@@ -776,7 +778,7 @@ const rawBuiltins = [
     }
   ),
   ...platformClass("Set", {
-    protocols: [displayProtocol],
+    protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newSet: {
         posParams: [
@@ -800,6 +802,7 @@ const rawBuiltins = [
               size: getMethod("size"),
               elements: getMethod("elements"),
               has: getMethod("has"),
+              toStream: getMethod("toStream"),
               display: getMethod("display"),
             },
           };
@@ -817,6 +820,13 @@ const rawBuiltins = [
       has: {
         posParams: ["element"],
         body: ([self, element]) => self.set.has(toKey(element)),
+      },
+      toStream: {
+        body: ([self]) => {
+          return iterToStream(self.set.keys(), (key) =>
+            self.originalKeys.get(key)
+          );
+        },
       },
       display: {
         body: ([self], { kpcallback }) =>
@@ -1032,7 +1042,7 @@ const rawBuiltins = [
     },
   }),
   ...platformClass("MutableSet", {
-    protocols: [displayProtocol],
+    protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMutableSet: {
         posParams: [
@@ -1056,6 +1066,7 @@ const rawBuiltins = [
               remove: getMethod("remove"),
               has: getMethod("has"),
               clear: getMethod("clear"),
+              toStream: getMethod("toStream"),
               display: getMethod("display"),
             },
           };
@@ -1096,6 +1107,13 @@ const rawBuiltins = [
         body: ([self]) => {
           self.set.clear();
           return self;
+        },
+      },
+      toStream: {
+        body: ([self]) => {
+          return iterToStream(self.set.keys(), (key) =>
+            self.originalKeys.get(key)
+          );
         },
       },
       display: {
@@ -1751,6 +1769,24 @@ export function indexInstance(
   } else {
     throw kperror("missingProperty", ["value", valueForError], ["key", index]);
   }
+}
+
+function iterToStream(iter, f) {
+  function streamFrom(current) {
+    if (current.done) {
+      return emptyStream();
+    } else {
+      return stream({
+        value() {
+          return f(current.value);
+        },
+        next() {
+          return streamFrom(iter.next());
+        },
+      });
+    }
+  }
+  return streamFrom(iter.next());
 }
 
 export function fromString(string) {

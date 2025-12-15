@@ -9,10 +9,9 @@ import kpobject, { deepToKpobject } from "./kpobject.js";
 import {
   arrayClass,
   Class,
-  classOf,
   displaySimple,
   equals,
-  hasProtocol,
+  hasType,
   isObject,
   objectClass,
   Protocol,
@@ -51,18 +50,8 @@ function validateRecursive(value, schema, kpcallback) {
 }
 
 function validateTypeSchema(value, schema) {
-  if (schema instanceof Class) {
-    if (classOf(value) === schema) {
-      return;
-    } else {
-      throw wrongType(value, schema);
-    }
-  } else {
-    if (hasProtocol(classOf(value), schema)) {
-      return;
-    } else {
-      throw wrongType(value, schema);
-    }
+  if (!hasType(value, schema)) {
+    throw wrongType(value, schema);
   }
 }
 

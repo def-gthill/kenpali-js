@@ -63,7 +63,7 @@ export const booleanClass = new Class("Boolean");
 export const numberClass = new Class("Number");
 export const stringClass = new Class("String", [sequenceProtocol]);
 export const arrayClass = new Class("Array", [sequenceProtocol]);
-export const objectClass = new Class("Object");
+export const objectClass = new Class("Object", [collectionProtocol]);
 export const functionClass = new Class("Function");
 export const classClass = new Class("Class", [typeProtocol, displayProtocol]);
 export const protocolClass = new Class("Protocol", [
@@ -154,6 +154,10 @@ export function isNaturalFunction(value) {
   return isJsObjectWithProperty(value, "target") && !value.isPlatform;
 }
 
+export function isCollection(value) {
+  return hasProtocol(classOf(value), collectionProtocol);
+}
+
 export function isSequence(value) {
   return hasProtocol(classOf(value), sequenceProtocol);
 }
@@ -168,6 +172,14 @@ export function isInstance(value) {
 
 function isJsObjectWithProperty(value, property) {
   return value !== null && typeof value === "object" && property in value;
+}
+
+export function hasType(value, type) {
+  if (type instanceof Class) {
+    return classOf(value) === type;
+  } else {
+    return hasProtocol(classOf(value), type);
+  }
 }
 
 export function hasProtocol(type, protocol) {
