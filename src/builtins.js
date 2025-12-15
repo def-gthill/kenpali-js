@@ -181,8 +181,8 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([strings, on]) {
-      const array = toArray(strings);
+    function ([strings, on], { kpcallback }) {
+      const array = toArray(strings, kpcallback);
       validateArgument(array, arrayOf(stringClass));
       return array.join(on);
     }
@@ -384,8 +384,8 @@ const rawBuiltins = [
   platformFunction(
     "toArray",
     { posParams: [{ name: "value", type: sequenceProtocol }] },
-    function ([value]) {
-      return toArray(value);
+    function ([value], { kpcallback }) {
+      return toArray(value, kpcallback);
     }
   ),
   platformFunction("isStream", { posParams: ["value"] }, function ([value]) {
@@ -394,8 +394,8 @@ const rawBuiltins = [
   platformFunction(
     "toStream",
     { posParams: [{ name: "value", type: sequenceProtocol }] },
-    function ([value]) {
-      return toStream(value);
+    function ([value], { kpcallback }) {
+      return toStream(value, kpcallback);
     }
   ),
   platformFunction("isObject", { posParams: ["value"] }, function ([value]) {
@@ -411,8 +411,8 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([value]) {
-      return toObject(value);
+    function ([value], { kpcallback }) {
+      return toObject(value, kpcallback);
     }
   ),
   platformFunction("isFunction", { posParams: ["value"] }, function ([value]) {
@@ -499,13 +499,13 @@ const rawBuiltins = [
   platformFunction(
     "length",
     { posParams: [{ name: "sequence", type: sequenceProtocol }] },
-    function ([sequence]) {
+    function ([sequence], { kpcallback }) {
       if (isString(sequence)) {
         return [...sequence].length;
-      } else if (isArray(sequence)) {
+      } else if (isArray(sequence, kpcallback)) {
         return sequence.length;
       } else {
-        return toArray(sequence).length;
+        return toArray(sequence, kpcallback).length;
       }
     }
   ),
@@ -522,7 +522,7 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, by], { kpcallback }) {
-      const array = toArray(sequence);
+      const array = toArray(sequence, kpcallback);
       if (array.length === 0) {
         return array;
       }
@@ -563,7 +563,7 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, action], { kpcallback }) {
-      const array = toArray(sequence);
+      const array = toArray(sequence, kpcallback);
       for (const element of array) {
         kpcallback(action, [element], kpobject());
       }
@@ -580,7 +580,7 @@ const rawBuiltins = [
       ],
     },
     function ([sequence, f], { kpcallback }) {
-      const start = toStream(sequence);
+      const start = toStream(sequence, kpcallback);
       function streamFrom(current) {
         if (current.properties.isEmpty()) {
           return emptyStream();
@@ -606,7 +606,7 @@ const rawBuiltins = [
         { name: "n", type: numberClass },
       ],
     },
-    function ([sequence, n]) {
+    function ([sequence, n], { kpcallback }) {
       if (isString(sequence)) {
         if (n <= 0) {
           return "";
@@ -618,7 +618,7 @@ const rawBuiltins = [
         return emptyStream();
       }
 
-      const start = toStream(sequence);
+      const start = toStream(sequence, kpcallback);
 
       function streamFrom(current, i) {
         if (current.properties.isEmpty()) {
@@ -650,14 +650,14 @@ const rawBuiltins = [
         { name: "n", type: numberClass, defaultValue: literal(1) },
       ],
     },
-    function ([sequence, n]) {
+    function ([sequence, n], { kpcallback }) {
       if (n <= 0) {
         return sequence;
       }
       if (isString(sequence)) {
         return sequence.slice(n);
       }
-      let start = toStream(sequence);
+      let start = toStream(sequence, kpcallback);
 
       for (let i = 1; i <= n; i++) {
         if (start.properties.isEmpty()) {
@@ -673,15 +673,15 @@ const rawBuiltins = [
   platformFunction(
     "flatten",
     { posParams: [{ name: "sequence", type: sequenceProtocol }] },
-    function ([sequence]) {
-      const outer = toStream(sequence);
+    function ([sequence], { kpcallback }) {
+      const outer = toStream(sequence, kpcallback);
       function streamFrom(startOuter, startInner) {
         let outer = startOuter;
         let inner = startInner;
         while (!outer.properties.isEmpty() && inner.properties.isEmpty()) {
           const rawInner = outer.properties.value();
           validateReturn(rawInner, sequenceProtocol);
-          inner = toStream(rawInner);
+          inner = toStream(rawInner, kpcallback);
           outer = outer.properties.next();
         }
         if (inner.properties.isEmpty()) {
@@ -748,14 +748,18 @@ const rawBuiltins = [
         }
         return indexMapping(collection, index, default_, kpcallback);
       } else {
-        if (!isString(index)) {
-          throw kperror(
-            "wrongType",
-            ["value", index],
-            ["expectedType", "String"]
-          );
+        if (isSequence(collection) && isNumber(index)) {
+          return indexSequenceInstance(collection, index, default_, kpcallback);
+        } else {
+          if (!isString(index)) {
+            throw kperror(
+              "wrongType",
+              ["value", index],
+              ["expectedType", "String"]
+            );
+          }
+          return indexInstance(collection, index, default_, kpcallback);
         }
-        return indexInstance(collection, index, default_, kpcallback);
       }
     }
   ),
@@ -806,8 +810,8 @@ const rawBuiltins = [
             defaultValue: literal([]),
           },
         ],
-        body: ([elements], { getMethod }) => {
-          const array = toArray(elements);
+        body: ([elements], { getMethod, kpcallback }) => {
+          const array = toArray(elements, kpcallback);
           const keys = array.map(toKey);
           const set = new Set(keys);
           const originalKeys = new Map(keys.map((key, i) => [key, array[i]]));
@@ -855,8 +859,8 @@ const rawBuiltins = [
             defaultValue: literal([]),
           },
         ],
-        body: ([entries], { getMethod }) => {
-          const array = toArray(entries);
+        body: ([entries], { getMethod, kpcallback }) => {
+          const array = toArray(entries, kpcallback);
           validateArgument(
             array,
             arrayOf(tupleLike([anyProtocol, anyProtocol]))
@@ -959,7 +963,7 @@ const rawBuiltins = [
     },
   }),
   ...platformClass("MutableArray", {
-    protocols: [displayProtocol],
+    protocols: [sequenceProtocol, displayProtocol],
     constructors: {
       newMutableArray: {
         posParams: [
@@ -969,8 +973,10 @@ const rawBuiltins = [
             defaultValue: literal([]),
           },
         ],
-        body: ([elements], { getMethod }) => {
-          const array = isArray(elements) ? [...elements] : toArray(elements);
+        body: ([elements], { getMethod, kpcallback }) => {
+          const array = isArray(elements)
+            ? [...elements]
+            : toArray(elements, kpcallback);
           return {
             internals: { array },
             properties: {
@@ -982,6 +988,7 @@ const rawBuiltins = [
               at: getMethod("at"),
               pop: getMethod("pop"),
               clear: getMethod("clear"),
+              toStream: getMethod("toStream"),
               display: getMethod("display"),
             },
           };
@@ -1037,6 +1044,11 @@ const rawBuiltins = [
           return self;
         },
       },
+      toStream: {
+        body: ([self], { kpcallback }) => {
+          return toStream([...self.array], kpcallback);
+        },
+      },
       display: {
         body: ([self], { kpcallback }) =>
           `MutableArray {elements: ${display(kpcallback(self.properties.elements, [], kpobject()), kpcallback)}}`,
@@ -1054,8 +1066,8 @@ const rawBuiltins = [
             defaultValue: literal([]),
           },
         ],
-        body: ([elements], { getMethod }) => {
-          const array = toArray(elements);
+        body: ([elements], { getMethod, kpcallback }) => {
+          const array = toArray(elements, kpcallback);
           const keys = array.map(toKey);
           const set = new Set(keys);
           const originalKeys = new Map(keys.map((key, i) => [key, array[i]]));
@@ -1127,8 +1139,8 @@ const rawBuiltins = [
             defaultValue: literal([]),
           },
         ],
-        body: ([entries], { getMethod }) => {
-          const array = toArray(entries);
+        body: ([entries], { getMethod, kpcallback }) => {
+          const array = toArray(entries, kpcallback);
           validateArgument(
             array,
             arrayOf(tupleLike([anyProtocol, anyProtocol]))
@@ -1398,7 +1410,7 @@ export function platformClass(
   name,
   { protocols = [], constructors, methods: methodSpecs }
 ) {
-  const class_ = new Class(name, [instanceProtocol, ...protocols]);
+  const class_ = new Class(name, protocols);
   const methods = Object.entries(methodSpecs).map(
     ([name, { posParams, namedParams, body }]) =>
       platformMethod(name, { posParams, namedParams }, body)
@@ -1529,12 +1541,12 @@ function compare(a, b) {
   }
 }
 
-export function toArray(value) {
+export function toArray(value, kpcallback) {
   if (isArray(value)) {
     return value;
   } else if (isString(value)) {
     return [...value];
-  } else {
+  } else if (isStream(value)) {
     let current = value;
     const result = [];
     while (!current.properties.isEmpty()) {
@@ -1542,10 +1554,12 @@ export function toArray(value) {
       current = current.properties.next();
     }
     return result;
+  } else {
+    return toArray(toStream(value, kpcallback));
   }
 }
 
-export function toStream(value) {
+export function toStream(value, kpcallback) {
   if (isArray(value)) {
     function streamFrom(i) {
       if (i >= value.length) {
@@ -1562,17 +1576,19 @@ export function toStream(value) {
     }
     return streamFrom(0);
   } else if (isString(value)) {
-    return toStream(toArray(value));
-  } else {
+    return toStream(toArray(value, kpcallback));
+  } else if (isStream(value)) {
     return value;
+  } else {
+    return kpcallback(value.properties.toStream, [], kpobject());
   }
 }
 
-export function toObject(value) {
+export function toObject(value, kpcallback) {
   if (isObject(value)) {
     return value;
   } else if (isSequence(value)) {
-    const array = toArray(value);
+    const array = toArray(value, kpcallback);
     validateArgument(array, arrayOf(tupleLike([stringClass, anyProtocol])));
     return kpobject(...array);
   } else {
@@ -1611,6 +1627,14 @@ export function indexCollection(
     return indexArray(collection, index, default_, kpcallback, valueForError);
   } else if (isStream(collection)) {
     return indexStream(collection, index, default_, kpcallback, valueForError);
+  } else if (isSequence(collection)) {
+    return indexStream(
+      toStream(collection, kpcallback),
+      index,
+      default_,
+      kpcallback,
+      valueForError
+    );
   } else if (isObject(collection)) {
     return indexMapping(
       collection,
@@ -1704,7 +1728,13 @@ export function indexStream(
 ) {
   if (isNumber(index)) {
     if (index < 0) {
-      return indexArray(toArray(stream), index, default_, kpcallback, stream);
+      return indexArray(
+        toArray(stream, kpcallback),
+        index,
+        default_,
+        kpcallback,
+        stream
+      );
     } else if (index > 0) {
       let last;
       let current = stream;
@@ -1735,6 +1765,22 @@ export function indexStream(
   } else {
     return indexInstance(stream, index, default_, kpcallback, valueForError);
   }
+}
+
+export function indexSequenceInstance(
+  sequence,
+  index,
+  default_,
+  kpcallback,
+  valueForError = sequence
+) {
+  return indexStream(
+    toStream(sequence, kpcallback),
+    index,
+    default_,
+    kpcallback,
+    valueForError
+  );
 }
 
 export function indexMapping(

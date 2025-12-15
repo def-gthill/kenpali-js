@@ -204,14 +204,32 @@ export class KpInstance<T extends KpValue, P extends object> {
   constructor(class_: KpClass<T>, properties: P);
 }
 
+/**
+ * A type that includes multiple classes with common behaviour.
+ *
+ * The Kenpali runtime allows a subtype relationship to be established
+ * in either direction. In other words:
+ *
+ * - A new class can declare that it is a subtype of an existing protocol
+ *   (using the `members.protocols` argument to `platformClass`).
+ * - A new protocol can declare that it is a subtype of an existing protocol
+ *   (using the `supers` argument to `KpProtocol`).
+ * - A new protocol can declare that it is a supertype of an existing class
+ *   or protocol (using the `accepts` argument to `KpProtocol`).
+ */
 export class KpProtocol<T extends KpValue> extends KpInstance<
   KpProtocol<T>,
   {
     name: string;
     supers: KpProtocol<KpValue>[];
+    accepts: (type: KpClass<KpValue> | KpProtocol<KpValue>) => boolean;
   }
 > {
-  constructor(name: string, supers: KpProtocol<KpValue>[]);
+  constructor(
+    name: string,
+    supers: KpProtocol<KpValue>[],
+    accepts: (type: KpClass<KpValue> | KpProtocol<KpValue>) => boolean
+  );
 }
 
 export class KpClass<T extends KpValue> extends KpInstance<

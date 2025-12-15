@@ -2,6 +2,7 @@ import {
   indexArray,
   indexInstance,
   indexMapping,
+  indexSequenceInstance,
   indexString,
   toArray,
   toObject,
@@ -380,7 +381,7 @@ export class Vm {
       array = sequence;
     } else {
       this.pushCallFrame("$extendStream");
-      array = toArray(sequence);
+      array = toArray(sequence, this.kpcallback.bind(this));
       this.popCallFrame();
     }
     this.stack.at(-1).push(...array);
@@ -462,7 +463,7 @@ export class Vm {
         array = sequence;
       } else {
         this.pushCallFrame("$cutStream");
-        array = toArray(sequence).reverse();
+        array = toArray(sequence, this.kpcallback.bind(this)).reverse();
         this.popCallFrame();
       }
       this.stack.push(array.slice(0, position));
@@ -564,7 +565,9 @@ export class Vm {
       this.logInstruction("OBJECT_COPY");
     }
     const object = this.stack.pop();
-    this.stack.push(kpobject(...kpoEntries(toObject(object))));
+    this.stack.push(
+      kpobject(...kpoEntries(toObject(object, this.kpcallback.bind(this))))
+    );
   }
 
   runObjectKeys() {
@@ -858,7 +861,11 @@ export class Vm {
     } else if (isObject(collection)) {
       this.indexObject(collection, index);
     } else if (isInstance(collection)) {
-      this.indexInstance(collection, index);
+      if (isSequence(collection) && isNumber(index)) {
+        this.indexSequenceInstance(collection, index);
+      } else {
+        this.indexInstance(collection, index);
+      }
     } else {
       this.throw_(
         wrongType(
@@ -909,7 +916,7 @@ export class Vm {
       this.pushCallFrame("$indexStream");
       if (index < 0) {
         kptry(
-          () => indexArray(toArray(stream), index),
+          () => indexArray(toArray(stream, this.kpcallback.bind(this)), index),
           (error) => {
             this.throw_(error);
           },
@@ -955,6 +962,32 @@ export class Vm {
       return this.indexInstance(stream, index);
     } else {
       this.throw_(wrongType(index, either(numberClass, stringClass)));
+    }
+  }
+
+  indexSequenceInstance(sequence, index) {
+    if (this.trace) {
+      console.log(`Indexing a sequence instance with ${index}`);
+    }
+    this.pushCallFrame("$indexSequenceInstance");
+    kptry(
+      () =>
+        indexSequenceInstance(
+          sequence,
+          index,
+          undefined,
+          this.kpcallback.bind(this)
+        ),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
+    this.popCallFrame();
+    if (this.trace) {
+      console.log(`Return to ${this.cursor} from sequence instance indexing`);
     }
   }
 

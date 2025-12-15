@@ -7,22 +7,16 @@ import kperror, {
 } from "./kperror.js";
 import kpobject, { deepToKpobject } from "./kpobject.js";
 import {
-  anyProtocol,
   arrayClass,
   Class,
   classOf,
   displaySimple,
   equals,
-  instanceProtocol,
-  isInstance,
+  hasProtocol,
   isObject,
-  isSequence,
-  isType,
   objectClass,
   Protocol,
-  sequenceProtocol,
   stringClass,
-  typeProtocol,
 } from "./values.js";
 
 export default function validate(value, schema, kpcallback) {
@@ -57,18 +51,18 @@ function validateRecursive(value, schema, kpcallback) {
 }
 
 function validateTypeSchema(value, schema) {
-  if (classOf(value) === schema) {
-    return;
-  } else if (schema === anyProtocol) {
-    return;
-  } else if (schema === sequenceProtocol && isSequence(value)) {
-    return;
-  } else if (schema === typeProtocol && isType(value)) {
-    return;
-  } else if (schema === instanceProtocol && isInstance(value)) {
-    return;
+  if (schema instanceof Class) {
+    if (classOf(value) === schema) {
+      return;
+    } else {
+      throw wrongType(value, schema);
+    }
   } else {
-    throw wrongType(value, schema);
+    if (hasProtocol(classOf(value), schema)) {
+      return;
+    } else {
+      throw wrongType(value, schema);
+    }
   }
 }
 

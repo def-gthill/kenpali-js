@@ -13,11 +13,11 @@ export class Instance {
 }
 
 export class Protocol extends Instance {
-  constructor(name, supers = []) {
+  constructor(name, supers = [], accepts = () => false) {
     const display = () => {
       return `Protocol {name: "${name}"}`;
     };
-    super(undefined, { name, supers, display });
+    super(undefined, { name, supers, accepts, display });
     Object.defineProperty(this, "class_", {
       get() {
         return protocolClass;
@@ -40,11 +40,23 @@ export class Class extends Instance {
   }
 }
 
-export const sequenceProtocol = new Protocol("Sequence");
+/**
+ * Protocol for collections of elements.
+ *
+ * External implementors must provide a `toStream` method that
+ * returns a stream of the collection's elements.
+ */
+export const collectionProtocol = new Protocol("Collection");
+/**
+ * Protocol for collections with a meaningful order.
+ */
+export const sequenceProtocol = new Protocol("Sequence", [collectionProtocol]);
 export const typeProtocol = new Protocol("Type");
-export const instanceProtocol = new Protocol("Instance");
+export const instanceProtocol = new Protocol("Instance", [], (type) => {
+  return type instanceof Class && !nonInstanceClasses.includes(type);
+});
 export const displayProtocol = new Protocol("Display");
-export const anyProtocol = new Protocol("Any");
+export const anyProtocol = new Protocol("Any", [], () => true);
 
 export const nullClass = new Class("Null");
 export const booleanClass = new Class("Boolean");
@@ -53,16 +65,21 @@ export const stringClass = new Class("String", [sequenceProtocol]);
 export const arrayClass = new Class("Array", [sequenceProtocol]);
 export const objectClass = new Class("Object");
 export const functionClass = new Class("Function");
-export const classClass = new Class("Class", [
-  typeProtocol,
-  instanceProtocol,
-  displayProtocol,
-]);
+export const classClass = new Class("Class", [typeProtocol, displayProtocol]);
 export const protocolClass = new Class("Protocol", [
   typeProtocol,
-  instanceProtocol,
   displayProtocol,
 ]);
+
+const nonInstanceClasses = [
+  nullClass,
+  booleanClass,
+  numberClass,
+  stringClass,
+  arrayClass,
+  objectClass,
+  functionClass,
+];
 
 //#endregion
 
@@ -153,12 +170,12 @@ function isJsObjectWithProperty(value, property) {
   return value !== null && typeof value === "object" && property in value;
 }
 
-function hasProtocol(type, protocol) {
-  if (protocol === anyProtocol) {
+export function hasProtocol(type, protocol) {
+  if (protocol.properties.accepts(type)) {
     return true;
   }
   return (type.properties.protocols ?? type.properties.supers).some(
-    (protocol_) => protocol_ === protocol || hasProtocol(protocol_, protocol)
+    (super_) => super_ === protocol || hasProtocol(super_, protocol)
   );
 }
 
