@@ -7,18 +7,18 @@ splitLines = (string) => (string | split(on: "\n"));
 isBetween = (n, lower, upper) => (
     n | ge(lower) | and($ n | le(upper))
 );
-least = (sequence, by: = null, default: = null) => (
+least = (collection, by: = null, default: = null) => (
     byFunction = if(
         by | isNull,
         then: $ itself,
         else: $ by,
     );
-    sequence
+    collection
     | running(
         start: if(
             default | isNull,
             then: $ (
-                sequence | first
+                collection | toStream | first
                 | ((element) => [byFunction(element), element])
             ),
             else: $ [null, default()],
@@ -35,18 +35,18 @@ least = (sequence, by: = null, default: = null) => (
     | last
     @ 2
 );
-greatest = (sequence, by: = null, default: = null) => (
+greatest = (collection, by: = null, default: = null) => (
     byFunction = if(
         by | isNull,
         then: $ itself,
         else: $ by,
     );
-    sequence
+    collection
     | running(
         start: if(
             default | isNull,
             then: $ (
-                sequence | first
+                collection | toStream | first
                 | ((element) => [byFunction(element), element])
             ),
             else: $ [null, default()],
@@ -108,14 +108,14 @@ dropLast = (sequence, n = 1) => (
     result = sequence | keepFirst(length(sequence) | sub(n));
     result | butIf(| isString | not, | toArray)
 );
-count = (sequence, condition) => sequence | where(condition) | toArray | length;
-forAll = (sequence, condition) => (
-    sequence
+count = (collection, condition) => collection | where(condition) | toArray | length;
+forAll = (collection, condition) => (
+    collection
     | count((element) => (element | condition | not))
     | eq(0)
 );
-forSome = (sequence, condition) => (
-    sequence
+forSome = (collection, condition) => (
+    collection
     | count(condition)
     | gt(0)
 );
@@ -141,19 +141,15 @@ group = (pairs, onGroup: = (x) => x) => (
     ))
     | toArray
 );
-groupBy = (sequence, by, onGroup: = (x) => x) => (
-    sequence
+groupBy = (collection, by, onGroup: = (x) => x) => (
+    collection
     | transform((element) => [by(element), element])
     | group(onGroup: onGroup)
 );
-isEmpty = (sequence) => if(
-    sequence | isStream,
-    then: $ sequence.isEmpty(),
-    else: $ sequence | keepFirst(1) | length | eq(0),
-);
+isEmpty = (collection) => collection | toStream |.isEmpty();
 first = (sequence) => sequence @ 1;
-transform = (sequence, f) => (
-    start = sequence | toStream;
+transform = (collection, f) => (
+    start = collection | toStream;
     streamFrom = (current) => if(
         current.isEmpty(),
         then: emptyStream,
@@ -252,8 +248,8 @@ sliding = (sequence, size) => (
     )
     | dropFirst(size)
 );
-where = (sequence, condition) => (
-    sequence
+where = (collection, condition) => (
+    collection
     | transform((value) => if(
         condition(value),
         then: $ [value],

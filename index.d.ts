@@ -272,8 +272,15 @@ export type KpValue =
   | KpClass<KpValue>
   | KpProtocol<KpValue>;
 
+export const collectionProtocol: KpProtocol<
+  | string
+  | KpArray<KpValue>
+  | Stream<KpValue>
+  | KpObject<string, KpValue>
+  | KpInstance<KpValue, object>
+>;
 export const sequenceProtocol: KpProtocol<
-  string | KpArray<KpValue> | Stream<KpValue>
+  string | KpArray<KpValue> | Stream<KpValue> | KpInstance<KpValue, object>
 >;
 export const typeProtocol: KpProtocol<KpClass<KpValue> | KpProtocol<KpValue>>;
 export const instanceProtocol: KpProtocol<KpInstance<KpValue, object>>;
@@ -760,7 +767,7 @@ interface ConstructorSpec {
   namedParams?: SingleParamSpec<KpValue, string>[];
   body: (
     args: KpValue[],
-    context: { getMethod: (methodName: string) => KpFunction }
+    context: VmContext
   ) => {
     internals: Record<string, KpValue>;
     properties: Record<string, KpValue>;

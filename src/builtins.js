@@ -514,7 +514,7 @@ const rawBuiltins = [
   platformFunction(
     "sort",
     {
-      posParams: [{ name: "sequence", type: sequenceProtocol }],
+      posParams: [{ name: "collection", type: collectionProtocol }],
       namedParams: [
         {
           name: "by",
@@ -523,8 +523,8 @@ const rawBuiltins = [
         },
       ],
     },
-    function ([sequence, by], { kpcallback }) {
-      const array = toArray(sequence, kpcallback);
+    function ([collection, by], { kpcallback }) {
+      const array = toArray(collection, kpcallback);
       if (array.length === 0) {
         return array;
       }
@@ -560,12 +560,12 @@ const rawBuiltins = [
     "forEach",
     {
       posParams: [
-        { name: "sequence", type: sequenceProtocol },
+        { name: "collection", type: collectionProtocol },
         { name: "action", type: functionClass },
       ],
     },
-    function ([sequence, action], { kpcallback }) {
-      const array = toArray(sequence, kpcallback);
+    function ([collection, action], { kpcallback }) {
+      const array = toArray(collection, kpcallback);
       for (const element of array) {
         kpcallback(action, [element], kpobject());
       }
@@ -577,12 +577,12 @@ const rawBuiltins = [
     "transform",
     {
       posParams: [
-        { name: "sequence", type: sequenceProtocol },
+        { name: "collection", type: collectionProtocol },
         { name: "f", type: functionClass },
       ],
     },
-    function ([sequence, f], { kpcallback }) {
-      const start = toStream(sequence, kpcallback);
+    function ([collection, f], { kpcallback }) {
+      const start = toStream(collection, kpcallback);
       function streamFrom(current) {
         if (current.properties.isEmpty()) {
           return emptyStream();
@@ -784,7 +784,7 @@ const rawBuiltins = [
         posParams: [
           {
             name: "elements",
-            type: sequenceProtocol,
+            type: collectionProtocol,
             defaultValue: literal([]),
           },
         ],
@@ -835,13 +835,13 @@ const rawBuiltins = [
     },
   }),
   ...platformClass("Map", {
-    protocols: [displayProtocol],
+    protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMap: {
         posParams: [
           {
             name: "entries",
-            type: sequenceProtocol,
+            type: collectionProtocol,
             defaultValue: literal([]),
           },
         ],
@@ -865,6 +865,7 @@ const rawBuiltins = [
               entries: getMethod("entries"),
               has: getMethod("has"),
               at: getMethod("at"),
+              toStream: getMethod("toStream"),
               display: getMethod("display"),
             },
           };
@@ -906,6 +907,14 @@ const rawBuiltins = [
             "missingKey",
             self
           );
+        },
+      },
+      toStream: {
+        body: ([self]) => {
+          return iterToStream(self.map.entries(), ([key, value]) => [
+            self.originalKeys.get(key),
+            value,
+          ]);
         },
       },
       display: {
@@ -1048,7 +1057,7 @@ const rawBuiltins = [
         posParams: [
           {
             name: "elements",
-            type: sequenceProtocol,
+            type: collectionProtocol,
             defaultValue: literal([]),
           },
         ],
@@ -1111,8 +1120,8 @@ const rawBuiltins = [
       },
       toStream: {
         body: ([self]) => {
-          return iterToStream(self.set.keys(), (key) =>
-            self.originalKeys.get(key)
+          return toStream(
+            [...self.set].map((key) => self.originalKeys.get(key))
           );
         },
       },
@@ -1123,7 +1132,7 @@ const rawBuiltins = [
     },
   }),
   ...platformClass("MutableMap", {
-    protocols: [displayProtocol],
+    protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMutableMap: {
         posParams: [
@@ -1157,6 +1166,7 @@ const rawBuiltins = [
               has: getMethod("has"),
               at: getMethod("at"),
               clear: getMethod("clear"),
+              toStream: getMethod("toStream"),
               display: getMethod("display"),
             },
           };
@@ -1232,6 +1242,16 @@ const rawBuiltins = [
           self.map.clear();
           self.originalKeys.clear();
           return self;
+        },
+      },
+      toStream: {
+        body: ([self]) => {
+          return toStream(
+            [...self.map.entries()].map(([key, value]) => [
+              self.originalKeys.get(key),
+              value,
+            ])
+          );
         },
       },
       display: {
@@ -1416,8 +1436,8 @@ export function platformClass(
         platformConstructor(
           name,
           { posParams, namedParams },
-          (args, { getMethod }) => {
-            const { internals, properties } = body(args, { getMethod });
+          (args, context) => {
+            const { internals, properties } = body(args, context);
             const instance = new Instance(class_, properties, internals);
             for (const name in properties) {
               if ("target" in properties[name]) {
@@ -1549,7 +1569,7 @@ export function toArray(value, kpcallback) {
     }
     return result;
   } else {
-    return toArray(toStream(value, kpcallback));
+    return toArray(toStream(value, kpcallback), kpcallback);
   }
 }
 
