@@ -272,6 +272,20 @@ export type KpValue =
   | KpClass<KpValue>
   | KpProtocol<KpValue>;
 
+/**
+ * Protocol for collections of elements.
+ *
+ * External implementors must provide a `toStream` method that
+ * returns a stream of the collection's elements.
+ *
+ * Implementations may also provide some other methods if they
+ * can be implemented more efficiently than by calling `toStream` first.
+ * Core functions will use the following optional methods if they are
+ * available:
+ *
+ * - `isEmpty` - Returns whether the collection is empty.
+ * - `toArray` - Returns an array of the collection's elements.
+ */
 export const collectionProtocol: KpProtocol<
   | string
   | KpArray<KpValue>
@@ -279,6 +293,9 @@ export const collectionProtocol: KpProtocol<
   | KpObject<string, KpValue>
   | KpInstance<KpValue, object>
 >;
+/**
+ * Protocol for collections with a meaningful order.
+ */
 export const sequenceProtocol: KpProtocol<
   string | KpArray<KpValue> | Stream<KpValue> | KpInstance<KpValue, object>
 >;

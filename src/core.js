@@ -146,7 +146,6 @@ groupBy = (collection, by, onGroup: = (x) => x) => (
     | transform((element) => [by(element), element])
     | group(onGroup: onGroup)
 );
-isEmpty = (collection) => collection | toStream |.isEmpty();
 first = (sequence) => sequence @ 1;
 transform = (collection, f) => (
     start = collection | toStream;

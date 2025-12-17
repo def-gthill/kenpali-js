@@ -40,16 +40,7 @@ export class Class extends Instance {
   }
 }
 
-/**
- * Protocol for collections of elements.
- *
- * External implementors must provide a `toStream` method that
- * returns a stream of the collection's elements.
- */
 export const collectionProtocol = new Protocol("Collection");
-/**
- * Protocol for collections with a meaningful order.
- */
 export const sequenceProtocol = new Protocol("Sequence", [collectionProtocol]);
 export const typeProtocol = new Protocol("Type");
 export const instanceProtocol = new Protocol("Instance", [], (type) => {
