@@ -295,6 +295,11 @@ export const collectionProtocol: KpProtocol<
 >;
 /**
  * Protocol for collections with a meaningful order.
+ *
+ * In addition to the collection methods, sequence implementations
+ * may provide an `at` method with a more efficient implementation
+ * of numerical indexing. By default, indexing an unknown sequence
+ * instance simply calls `toStream` on it and indexes the result.
  */
 export const sequenceProtocol: KpProtocol<
   string | KpArray<KpValue> | Stream<KpValue> | KpInstance<KpValue, object>

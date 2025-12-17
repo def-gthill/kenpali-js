@@ -1808,13 +1808,21 @@ export function indexSequenceInstance(
   kpcallback,
   valueForError = sequence
 ) {
-  return indexStream(
-    toStream(sequence, kpcallback),
-    index,
-    default_,
-    kpcallback,
-    valueForError
-  );
+  if ("at" in sequence.properties) {
+    const namedArgs = [];
+    if (default_) {
+      namedArgs.push(["default", default_]);
+    }
+    return kpcallback(sequence.properties.at, [index], kpobject(...namedArgs));
+  } else {
+    return indexStream(
+      toStream(sequence, kpcallback),
+      index,
+      default_,
+      kpcallback,
+      valueForError
+    );
+  }
 }
 
 export function indexMapping(
