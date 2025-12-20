@@ -327,7 +327,7 @@ flatten = (sequence) => (
     );
     streamFrom(outer, emptyStream())
 );
-flatTransform = (sequence, f) => (
+transformFlat = (sequence, f) => (
     sequence
     | transform(f)
     | flatten
