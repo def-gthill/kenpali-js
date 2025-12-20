@@ -190,6 +190,10 @@ running = (in, start:, next:) => (
     );
     streamFrom(inStream, $ start)
 );
+with = (sequence, f) => (
+    sequence
+    | transform((element) => [f(element), element])
+);
 withIndex = (sequence) => (
     1 | build(up) | zip(sequence)
 );
