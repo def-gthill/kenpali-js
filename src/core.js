@@ -238,6 +238,15 @@ continueIf = (sequence, condition) => (
     );
     streamFrom(start)
 );
+dropWhile = (sequence, condition) => (
+    sequence
+    | toStream
+    | build((stream) => stream.next())
+    | continueIf((stream) => stream.isEmpty() | not | and(
+        $ stream.value() | condition
+    ))
+    | last
+);
 thenRepeat = (sequence, values) => [sequence, repeat(values)] | flatten;
 sliding = (sequence, size) => (
     sequence
