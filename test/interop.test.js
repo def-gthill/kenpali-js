@@ -1,8 +1,4 @@
 import test from "ava";
-// import { display, kpcall, toKpFunction } from "../src/interop.js";
-// import kperror from "../src/kperror.js";
-// import kpeval from "../src/kpeval.js";
-// import kpparse from "../src/kpparse.js";
 import {
   display,
   kpcall,
