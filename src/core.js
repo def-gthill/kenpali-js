@@ -327,6 +327,11 @@ flatten = (sequence) => (
     );
     streamFrom(outer, emptyStream())
 );
+flatTransform = (sequence, f) => (
+    sequence
+    | transform(f)
+    | flatten
+);
 dissect = (sequence, condition) => (
     start = sequence | toStream;
     streamFrom = (start) => if(
