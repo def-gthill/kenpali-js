@@ -1,8 +1,7 @@
 import test from "ava";
 import fs from "fs";
 
-import { display } from "../src/interop.js";
-import { kpcatch } from "../src/kperror.js";
+import { display, kpcatch, kptry } from "../index.js";
 
 const r = String.raw;
 
@@ -34,23 +33,35 @@ export function runSpecFile(
     }
     test(description, (t) => {
       const actualOutputValue = kpcatch(() => functionToTest(input));
-      if (errorName) {
-        if (actualOutputValue.status === "error") {
-          checkErrorOutput(t, actualOutputValue.error, errorName, errorDetails);
-        } else {
-          t.fail(
-            `Expected error, but got success: ${display(actualOutputValue.value)}`
-          );
+      kptry(
+        () => {
+          if (errorName) {
+            if (actualOutputValue.status === "error") {
+              checkErrorOutput(
+                t,
+                actualOutputValue.error,
+                errorName,
+                errorDetails
+              );
+            } else {
+              t.fail(
+                `Expected error, but got success: ${display(actualOutputValue.value)}`
+              );
+            }
+          } else {
+            if (actualOutputValue.status === "success") {
+              checkNormalOutput(t, actualOutputValue.value, output);
+            } else {
+              t.fail(
+                `Expected success, but got error: ${display(actualOutputValue.error)}`
+              );
+            }
+          }
+        },
+        (error) => {
+          t.fail(`Error while checking output: ${display(error)}`);
         }
-      } else {
-        if (actualOutputValue.status === "success") {
-          checkNormalOutput(t, actualOutputValue.value, output);
-        } else {
-          t.fail(
-            `Expected success, but got error: ${display(actualOutputValue.error)}`
-          );
-        }
-      }
+      );
     });
   }
 }

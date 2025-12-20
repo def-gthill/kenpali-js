@@ -173,7 +173,7 @@ const rawBuiltins = [
   platformFunction(
     "join",
     {
-      posParams: [{ name: "strings", type: either(arrayClass, streamClass) }],
+      posParams: [{ name: "strings", type: sequenceProtocol }],
       namedParams: [
         {
           name: "on",
@@ -583,7 +583,7 @@ const rawBuiltins = [
       } else if (isInstance(collection) && "isEmpty" in collection.properties) {
         return kpcallback(collection.properties.isEmpty, [], kpobject());
       } else {
-        return toStream(collection, kpcallback).isEmpty();
+        return toStream(collection, kpcallback).properties.isEmpty();
       }
     }
   ),
@@ -722,6 +722,20 @@ const rawBuiltins = [
     { posParams: [{ name: "object", type: objectClass }] },
     function ([object]) {
       return [...object.keys()];
+    }
+  ),
+  platformFunction(
+    "properties",
+    {
+      posParams: [
+        { name: "object", type: either(objectClass, instanceProtocol) },
+      ],
+    },
+    function ([object]) {
+      if (isInstance(object)) {
+        return Object.entries(object.properties);
+      }
+      return [...object.entries()];
     }
   ),
   platformFunction(
