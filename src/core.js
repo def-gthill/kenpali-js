@@ -74,6 +74,11 @@ butIf = (value, condition, ifTrue) => if(
     else: $ value,
 );
 ifs = (*conditions, else:) => null | switch(*conditions, else:);
+swapIf = ([a, b], condition, f) => if(
+    toFunction(condition)(a, b),
+    then: $ f(b, a),
+    else: $ f(a, b),
+);
 build = (start, next) => (
     streamFrom = (getState) => (
         getStateOnce = callOnce(getState);
