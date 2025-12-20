@@ -1,8 +1,16 @@
 import test from "ava";
-import { display, kpcall, toKpFunction } from "../src/interop.js";
-import kperror from "../src/kperror.js";
-import kpeval from "../src/kpeval.js";
-import kpparse from "../src/kpparse.js";
+// import { display, kpcall, toKpFunction } from "../src/interop.js";
+// import kperror from "../src/kperror.js";
+// import kpeval from "../src/kpeval.js";
+// import kpparse from "../src/kpparse.js";
+import {
+  display,
+  kpcall,
+  kperror,
+  kpeval,
+  kpparse,
+  toKpFunction,
+} from "../index.js";
 import { assertThrows } from "./assertions.js";
 
 test("We can call a Kenpali function from JavaScript using kpcall", (t) => {

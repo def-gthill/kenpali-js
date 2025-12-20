@@ -615,6 +615,14 @@ export function toKpFunction<R extends KpValue>(
 ): Callback<KpValue[], KpObject<string, KpValue>>;
 
 /**
+ * Creates a Kenpali error object.
+ * @param type - The type of the error.
+ * @param details - The details of the error.
+ * @returns The Kenpali error object.
+ */
+export function kperror(type: string, ...details: KpValue[]): KpError;
+
+/**
  * Calls the specified function, then invokes one of the specified handlers
  * depending on whether the function threw an error.
  *

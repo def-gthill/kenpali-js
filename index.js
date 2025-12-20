@@ -1,7 +1,12 @@
 import { platformClass, platformFunction } from "./src/builtins.js";
-import { kpcall, kpcallbackInNewSession, toKpFunction } from "./src/interop.js";
-import kpcompile from "./src/kpcompile.js";
 import {
+  display,
+  kpcall,
+  kpcallbackInNewSession,
+  toKpFunction,
+} from "./src/interop.js";
+import kpcompile from "./src/kpcompile.js";
+import kperror, {
   errorClass,
   isError,
   KenpaliError,
@@ -37,7 +42,6 @@ import {
   booleanClass,
   classClass,
   collectionProtocol,
-  display,
   displayProtocol,
   functionClass,
   instanceProtocol,
@@ -120,6 +124,7 @@ export {
   kpcatch,
   KpClass,
   kpcompile,
+  kperror,
   kpeval,
   kpobject,
   kpparse,
