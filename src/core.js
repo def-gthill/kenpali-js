@@ -256,6 +256,15 @@ where = (collection, condition) => (
     ))
     | flatten
 );
+distinct = (collection) => (
+    seen = newMutableSet();
+    collection
+    | where((value) => (
+        seen.has(value) | not | and(
+            $ (seen.add(value); true)
+        )
+    ))
+);
 zip = (*sequences) => (
     streams = sequences | transform(toStream);
     streamFrom = (currents) => if(
