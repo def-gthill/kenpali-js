@@ -151,6 +151,11 @@ groupBy = (collection, by, onGroup: = (x) => x) => (
     | transform((element) => [by(element), element])
     | group(onGroup: onGroup)
 );
+transformArray = (collection, f) => (
+    collection
+    | transform(f)
+    | toArray
+);
 first = (sequence) => sequence @ 1;
 transform = (collection, f) => (
     start = collection | toStream;
