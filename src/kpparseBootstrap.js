@@ -8,14 +8,18 @@ import { kpparseModule } from "./kpparse.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
+let parse = null;
+
 export default function kpparseBootstrap(code, options = {}) {
-  const lexerModule = loadLexerModule();
-  const desugarerModule = loadDesugarerModule();
-  const parserModule = loadParserModule();
-  const parser = parserModule.find(([name]) => name === "parse")[1];
-  const parse = kpeval(parser, {
-    modules: kpobject(["lexer", lexerModule], ["desugarer", desugarerModule]),
-  });
+  if (!parse) {
+    const lexerModule = loadLexerModule();
+    const desugarerModule = loadDesugarerModule();
+    const parserModule = loadParserModule();
+    const parser = parserModule.find(([name]) => name === "parse")[1];
+    parse = kpeval(parser, {
+      modules: kpobject(["lexer", lexerModule], ["desugarer", desugarerModule]),
+    });
+  }
   return kpcall(parse, [code], options);
 }
 
