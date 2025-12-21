@@ -1,4 +1,5 @@
 import test from "ava";
+import { display } from "../index.js";
 import {
   args,
   array,
@@ -18,6 +19,16 @@ import {
 } from "../src/kpast.js";
 import { kpparseSugared } from "../src/kpparse.js";
 import { assertThrows } from "./assertions.js";
+
+test("Escaped backslashes don't cause a string literal to gobble up following code", (t) => {
+  const code = `["\\\\", "foo"]`;
+  try {
+    const result = kpparseSugared(code);
+    t.deepEqual(result, array(literal("\\"), literal("foo")));
+  } catch (error) {
+    t.fail(display(error));
+  }
+});
 
 test("Variables can have names starting with literal keywords", (t) => {
   const code = `trueValue`;

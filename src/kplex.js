@@ -5,7 +5,7 @@ const r = String.raw;
 const tokenSpec = [
   // Literals
   ["NUMBER", r`-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?`],
-  ["STRING", r`"(\\"|[^"])*"`],
+  ["STRING", r`"(\\\\|\\"|[^"])*"`],
   ["RAW_STRING", "`[^`]*`"],
   // Groupers
   ["OPEN_PAREN", r`\(`],
