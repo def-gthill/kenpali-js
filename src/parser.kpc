@@ -1,5 +1,8 @@
 parse = (code, trace: = "false") => (
-  ["Parsing expression: ", code, ", trace = ", trace] | join
+  {
+    type: "literal",
+    value: null,
+  }
 );
 parseModule = (code, trace: = "false") => (
   ["Parsing module: ", code, ", trace = ", trace] | join
