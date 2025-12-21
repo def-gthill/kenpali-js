@@ -563,6 +563,24 @@ export function kpcompile(
 export function kpvm(program: KpProgram, options: VmOptions): KpValue;
 
 /**
+ * Creates a Kenpali module from the given definitions.
+ *
+ * The definitions can be provided directly as name-value pairs,
+ * but they can also include the return values from `platformFunction`
+ * and `platformClass` calls.
+ *
+ * @param definitions - The definitions to include in the module.
+ * @returns A Kenpali module suitable for use in the `modules` parameter of `kpeval`.
+ */
+export function kpmodule(
+  definitions: (
+    | [string, KpValue | FunctionSpec<any>]
+    | FunctionSpec<any>
+    | PlatformClassDef
+  )[]
+): KpModule;
+
+/**
  * Calls a Kenpali function.
  *
  * This spins up a new Kenpali VM to execute the bytecode program referenced
@@ -810,6 +828,8 @@ interface MethodSpec {
   body: (args: KpValue[], context: VmContext) => KpValue;
 }
 
+type PlatformClassDef = [KpClass<KpValue>, ...FunctionSpec<any>[]];
+
 export function platformClass(
   name: string,
   members: {
@@ -817,6 +837,6 @@ export function platformClass(
     constructors: Record<string, ConstructorSpec>;
     methods: Record<string, MethodSpec>;
   }
-): KpClass<KpValue> | FunctionSpec<{}>;
+): PlatformClassDef;
 
 //#endregion

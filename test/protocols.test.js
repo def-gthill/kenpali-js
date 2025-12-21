@@ -3,6 +3,7 @@ import {
   collectionProtocol,
   emptyStream,
   kpeval,
+  kpmodule,
   kpobject,
   kpparse,
   platformClass,
@@ -41,11 +42,7 @@ test("If a collection provides an isEmpty method, isEmpty doesn't call toStream"
     },
   });
 
-  const fooModule = kpobject(
-    ...myCollection.map((builtin) =>
-      typeof builtin === "function" ? [builtin.functionName, builtin] : builtin
-    )
-  );
+  const fooModule = kpmodule([myCollection]);
 
   const code = `foo/newMyCollection() | isEmpty`;
   const result = kpeval(kpparse(code), {
@@ -88,11 +85,7 @@ test("If a collection provides an toArray method, toArray doesn't call toStream"
     },
   });
 
-  const fooModule = kpobject(
-    ...myCollection.map((builtin) =>
-      typeof builtin === "function" ? [builtin.functionName, builtin] : builtin
-    )
-  );
+  const fooModule = kpmodule([myCollection]);
 
   const code = `foo/newMyCollection() | toArray`;
   const result = kpeval(kpparse(code), {
@@ -135,11 +128,7 @@ test("If a sequence provides an at method, indexing doesn't call toStream", (t) 
     },
   });
 
-  const fooModule = kpobject(
-    ...mySequence.map((builtin) =>
-      typeof builtin === "function" ? [builtin.functionName, builtin] : builtin
-    )
-  );
+  const fooModule = kpmodule([mySequence]);
 
   const code = `foo/newMySequence() @ 1`;
   const result = kpeval(kpparse(code), {

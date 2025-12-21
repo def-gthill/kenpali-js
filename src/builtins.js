@@ -10,6 +10,7 @@ import {
   value,
 } from "./kpast.js";
 import kperror, { errorClass, isError, transformError } from "./kperror.js";
+import kpmodule from "./kpmodule.js";
 import kpobject, { kpoEntries, kpoKeys, toKpobject } from "./kpobject.js";
 import kpparse from "./kpparse.js";
 import { emptyStream, isStream, stream, streamClass } from "./stream.js";
@@ -806,7 +807,7 @@ const rawBuiltins = [
       };
     }
   ),
-  ...platformClass("Set", {
+  platformClass("Set", {
     protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newSet: {
@@ -868,7 +869,7 @@ const rawBuiltins = [
       },
     },
   }),
-  ...platformClass("Map", {
+  platformClass("Map", {
     protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMap: {
@@ -965,7 +966,7 @@ const rawBuiltins = [
       },
     },
   }),
-  ...platformClass("Var", {
+  platformClass("Var", {
     protocols: [displayProtocol],
     constructors: {
       newVar: {
@@ -999,7 +1000,7 @@ const rawBuiltins = [
       },
     },
   }),
-  ...platformClass("MutableArray", {
+  platformClass("MutableArray", {
     protocols: [sequenceProtocol, displayProtocol],
     constructors: {
       newMutableArray: {
@@ -1100,7 +1101,7 @@ const rawBuiltins = [
       },
     },
   }),
-  ...platformClass("MutableSet", {
+  platformClass("MutableSet", {
     protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMutableSet: {
@@ -1190,7 +1191,7 @@ const rawBuiltins = [
       },
     },
   }),
-  ...platformClass("MutableMap", {
+  platformClass("MutableMap", {
     protocols: [collectionProtocol, displayProtocol],
     constructors: {
       newMutableMap: {
@@ -1933,9 +1934,5 @@ function validateReturn(value, schema) {
 }
 
 export function loadBuiltins() {
-  return kpobject(
-    ...rawBuiltins.map((builtin) =>
-      typeof builtin === "function" ? [builtin.functionName, builtin] : builtin
-    )
-  );
+  return kpmodule(rawBuiltins);
 }

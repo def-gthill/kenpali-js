@@ -6,6 +6,7 @@ import {
   ExpressionNode,
   kpcatch,
   kpeval,
+  kpmodule,
   KpObject,
   kpobject,
   kpparse,
@@ -14,6 +15,7 @@ import {
   numberClass,
   objectOf,
   oneOfValues,
+  platformClass,
   platformFunction,
   recordLike,
   satisfying,
@@ -44,15 +46,12 @@ test("Can construct a Kenpali object", (t) => {
 test("Can define a module containing a platform function", (t) => {
   const code = 'foo/bar("world")';
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: [string] }>(
       "bar",
-      platformFunction<{ pos: [string] }>(
-        "bar",
-        { posParams: [{ name: "name", type: stringClass }] },
-        ([name]) => `Hello, ${name}!`
-      ),
-    ],
+      { posParams: [{ name: "name", type: stringClass }] },
+      ([name]) => `Hello, ${name}!`
+    ),
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, "Hello, world!");
@@ -61,15 +60,12 @@ test("Can define a module containing a platform function", (t) => {
 test("Can statically check the types of a platform function's parameters", (t) => {
   const code = "foo/bar(42)";
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: [number] }>(
       "bar",
-      platformFunction<{ pos: [number] }>(
-        "bar",
-        { posParams: [{ name: "n", type: numberClass }] },
-        ([n]) => n + 1
-      ),
-    ],
+      { posParams: [{ name: "n", type: numberClass }] },
+      ([n]) => n + 1
+    ),
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, 43);
@@ -78,15 +74,12 @@ test("Can statically check the types of a platform function's parameters", (t) =
 test("Can check types of positional rest parameters", (t) => {
   const code = "foo/bar(42, 73)";
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ posRest: number }>(
       "bar",
-      platformFunction<{ posRest: number }>(
-        "bar",
-        { posParams: [{ rest: { name: "n", type: arrayOf(numberClass) } }] },
-        ([args]) => args.length
-      ),
-    ],
+      { posParams: [{ rest: { name: "n", type: arrayOf(numberClass) } }] },
+      ([args]) => args.length
+    ),
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, 2);
@@ -95,19 +88,16 @@ test("Can check types of positional rest parameters", (t) => {
 test("Can define a platform function that takes an enum parameter", (t) => {
   const code = 'foo/bar("red")';
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: ["red" | "green" | "blue"] }>(
       "bar",
-      platformFunction<{ pos: ["red" | "green" | "blue"] }>(
-        "bar",
-        {
-          posParams: [
-            { name: "color", type: oneOfValues(["red", "green", "blue"]) },
-          ],
-        },
-        ([color]) => `Hello, ${color}!`
-      ),
-    ],
+      {
+        posParams: [
+          { name: "color", type: oneOfValues(["red", "green", "blue"]) },
+        ],
+      },
+      ([color]) => `Hello, ${color}!`
+    ),
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, "Hello, red!");
@@ -116,28 +106,20 @@ test("Can define a platform function that takes an enum parameter", (t) => {
 test("Can define a platform function that checks for uniform objects", (t) => {
   const code = "foo/bar({ red: 42, green: 97 })";
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: [KpObject<"red" | "green" | "blue", number>] }>(
       "bar",
-      platformFunction<{ pos: [KpObject<"red" | "green" | "blue", number>] }>(
-        "bar",
-        {
-          posParams: [
-            {
-              name: "obj",
-              type: objectOf(
-                oneOfValues(["red", "green", "blue"]),
-                numberClass
-              ),
-            },
-          ],
-        },
-        ([obj]) =>
-          (obj.get("red") ?? 0) +
-          (obj.get("green") ?? 0) +
-          (obj.get("blue") ?? 0)
-      ),
-    ],
+      {
+        posParams: [
+          {
+            name: "obj",
+            type: objectOf(oneOfValues(["red", "green", "blue"]), numberClass),
+          },
+        ],
+      },
+      ([obj]) =>
+        (obj.get("red") ?? 0) + (obj.get("green") ?? 0) + (obj.get("blue") ?? 0)
+    ),
   ]);
   const result = kpeval(ast, {
     modules: new Map([["foo", fooModule]]),
@@ -148,46 +130,38 @@ test("Can define a platform function that checks for uniform objects", (t) => {
 test("Can define a platform function that checks for record shapes", (t) => {
   const code = 'foo/bar({ name: "John", age: 30 })';
   const ast = kpparse(code);
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: [KpObject<"name" | "age", string | number>] }>(
       "bar",
-      platformFunction<{ pos: [KpObject<"name" | "age", string | number>] }>(
-        "bar",
-        {
-          posParams: [
-            {
-              name: "obj",
-              type: recordLike(
-                new Map<"name" | "age", Schema<string | number>>([
-                  ["name", stringClass],
-                  ["age", numberClass],
-                ])
-              ),
-            },
-          ],
-        },
-        ([obj]) => `${obj.get("name")} is ${obj.get("age")} years old`
-      ),
-    ],
+      {
+        posParams: [
+          {
+            name: "obj",
+            type: recordLike(
+              new Map<"name" | "age", Schema<string | number>>([
+                ["name", stringClass],
+                ["age", numberClass],
+              ])
+            ),
+          },
+        ],
+      },
+      ([obj]) => `${obj.get("name")} is ${obj.get("age")} years old`
+    ),
   ]);
   const result = kpeval(ast, { modules: new Map([["foo", fooModule]]) });
   t.is(result, "John is 30 years old");
 });
 
 test("Can define a platform function that checks an arbitrary condition", (t) => {
-  const fooModule = new Map([
-    [
+  const fooModule = kpmodule([
+    platformFunction<{ pos: [number] }>(
       "bar",
-      platformFunction<{ pos: [number] }>(
-        "bar",
-        {
-          posParams: [
-            { name: "n", type: satisfying(numberClass, (n) => n > 0) },
-          ],
-        },
-        ([n]) => n + 1
-      ),
-    ],
+      {
+        posParams: [{ name: "n", type: satisfying(numberClass, (n) => n > 0) }],
+      },
+      ([n]) => n + 1
+    ),
   ]);
 
   function evalWithFoo(ast: ExpressionNode): KpValue {
@@ -199,6 +173,32 @@ test("Can define a platform function that checks an arbitrary condition", (t) =>
     () => evalWithFoo(kpparse("foo/bar(-42)")),
     "badArgumentValue"
   );
+});
+
+test("Can define a module containing a platform class", (t) => {
+  const code = "foo/newFoo().bar()";
+  const fooModule = kpmodule([
+    platformClass("Foo", {
+      constructors: {
+        newFoo: {
+          body: ([], { getMethod }) => ({
+            internals: {},
+            properties: { bar: getMethod("bar") },
+          }),
+        },
+      },
+      methods: {
+        bar: {
+          body: () => "Hello, bar!",
+        },
+      },
+    }),
+  ]);
+
+  const result = kpeval(kpparse(code), {
+    modules: new Map([["foo", fooModule]]),
+  });
+  t.is(result, "Hello, bar!");
 });
 
 test("Can try a Kenpali function", (t) => {

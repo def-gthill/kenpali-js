@@ -14,6 +14,7 @@ import kperror, {
   kptry,
 } from "./src/kperror.js";
 import kpeval from "./src/kpeval.js";
+import kpmodule from "./src/kpmodule.js";
 import kpobject, { deepToKpobject, toJsObject } from "./src/kpobject.js";
 import kpparse from "./src/kpparse.js";
 import kpvm from "./src/kpvm.js";
@@ -126,6 +127,7 @@ export {
   kpcompile,
   kperror,
   kpeval,
+  kpmodule,
   kpobject,
   kpparse,
   KpProtocol,
