@@ -1,0 +1,12 @@
+lex = (code) => (
+  [
+    {
+      type: "EOF",
+      value: null,
+      text: "",
+      line: 1,
+      column: 1,
+    }
+  ]
+  | toStream
+);
