@@ -7,7 +7,7 @@ const specPath = "../kenpali/kenpali-code.md";
 
 runSpecFile(
   specPath,
-  (code) => kpparseBootstrap(code),
+  (code) => kpparseBootstrap(code, { timeLimitSeconds: 1 }),
   (t, actualCode, expectedOutput) => {
     const expectedCode = JSON.parse(expectedOutput);
     t.deepEqual(deepToJsObject(actualCode), expectedCode);
