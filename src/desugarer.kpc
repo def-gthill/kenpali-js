@@ -1,3 +1,494 @@
 desugar = (ast) => (
-  ast
+  result = ast;
+  result = splitMixedLists(result);
+  result = normalizeExpressionStatements(result);
+  result = removeSpecializedSpreads(result);
+  result = removeSpecializedRests(result);
+  result = convertFunctionSyntax(result);
+  result = makePipeArgs(result);
+  result = convertPipelines(result);
+  result = normalizeObjectSyntax(result);
+  result = removeGroups(result);
+  result
+);
+
+splitMixedLists = (ast) => (
+  transformTree(ast, splitMixedListsTransform)
+);
+
+splitMixedListsTransform = (node) => (
+  if(
+    node.type | eq("arrow"),
+    then: $ (
+      params = node.params;
+      if(
+        params.type | eq("mixedParamList"),
+        then: $ (
+          [posParams, namedParams] = splitParamList(params.params);
+          {type: node.type, params: {type: "paramList", posParams: posParams, namedParams: namedParams}, body: node.body}
+        ),
+        else: $ node,
+      )
+    ),
+    else: $ if(
+      node.type | eq("args"),
+      then: $ (
+        args = node.args;
+        if(
+          args.type | eq("mixedArgList"),
+          then: $ (
+            [posArgs, namedArgs] = splitArgList(args.args);
+            {type: node.type, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
+          ),
+          else: $ node,
+        )
+      ),
+      else: $ if(
+        node.type | eq("pipeArgs"),
+        then: $ (
+          args = node.args;
+          if(
+            args.type | eq("mixedArgList"),
+            then: $ (
+              [posArgs, namedArgs] = splitArgList(args.args);
+              {type: node.type, callee: node.callee, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
+            ),
+            else: $ node,
+          )
+        ),
+        else: $ node,
+      ),
+    ),
+  )
+);
+
+splitParamList = (params) => (
+  posParams = [];
+  namedParams = [];
+  [posParams, namedParams] = splitParamListLoop(params, 0, posParams, namedParams);
+  [posParams, namedParams]
+);
+
+splitParamListLoop = (params, index, posParams, namedParams) => (
+  if(
+    index | ge(params | length),
+    then: $ [posParams, namedParams],
+    else: $ (
+      param = params @ index;
+      if(
+        param.type | eq("optional") | and($ (param.name.type | eq("keyName") | or($ param.name.type | eq("entry")))),
+        then: $ splitParamListLoop(params, index | add(1), posParams, namedParams | add(param)),
+        else: $ if(
+          param.type | eq("objectRest") | or($ param.type | eq("keyName") | or($ param.type | eq("entry"))),
+          then: $ splitParamListLoop(params, index | add(1), posParams, namedParams | add(param)),
+          else: $ splitParamListLoop(params, index | add(1), posParams | add(param), namedParams),
+        ),
+      )
+    ),
+  )
+);
+
+splitArgList = (args) => (
+  posArgs = [];
+  namedArgs = [];
+  [posArgs, namedArgs] = splitArgListLoop(args, 0, posArgs, namedArgs);
+  [posArgs, namedArgs]
+);
+
+splitArgListLoop = (args, index, posArgs, namedArgs) => (
+  if(
+    index | ge(args | length),
+    then: $ [posArgs, namedArgs],
+    else: $ (
+      arg = args @ index;
+      if(
+        arg.type | eq("objectSpread") | or($ arg.type | eq("keyName") | or($ arg.type | eq("entry"))),
+        then: $ splitArgListLoop(args, index | add(1), posArgs, namedArgs | add(arg)),
+        else: $ splitArgListLoop(args, index | add(1), posArgs | add(arg), namedArgs),
+      )
+    ),
+  )
+);
+
+normalizeExpressionStatements = (ast) => (
+  transformTree(ast, normalizeExpressionStatementsTransform)
+);
+
+normalizeExpressionStatementsTransform = (node) => (
+  if(
+    node.type | eq("block"),
+    then: $ (
+      defs = node.defs | transform((def) => (
+        [name, value] = def;
+        if(
+          name | isNull,
+          then: $ [{type: "ignore"}, value],
+          else: $ def,
+        )
+      ));
+      {type: node.type, defs: defs, result: node.result}
+    ),
+    else: $ node,
+  )
+);
+
+removeSpecializedSpreads = (ast) => (
+  transformTree(ast, removeSpecializedSpreadsTransform)
+);
+
+removeSpecializedSpreadsTransform = (node) => (
+  if(
+    node.type | eq("arraySpread"),
+    then: $ {type: "spread", value: node.value},
+    else: $ if(
+      node.type | eq("objectSpread"),
+      then: $ {type: "spread", value: node.value},
+      else: $ node,
+    ),
+  )
+);
+
+removeSpecializedRests = (ast) => (
+  transformTree(ast, removeSpecializedRestsTransform)
+);
+
+removeSpecializedRestsTransform = (node) => (
+  if(
+    node.type | eq("arrayRest"),
+    then: $ {type: "rest", name: node.name},
+    else: $ if(
+      node.type | eq("objectRest"),
+      then: $ {type: "rest", name: node.name},
+      else: $ node,
+    ),
+  )
+);
+
+convertFunctionSyntax = (ast) => (
+  transformTree(ast, convertFunctionSyntaxTransform)
+);
+
+convertFunctionSyntaxTransform = (node) => (
+  if(
+    node.type | eq("arrow"),
+    then: $ (
+      params = node.params;
+      posParams = if(
+        params.type | eq("paramList"),
+        then: $ params.posParams,
+        else: $ [],
+      );
+      namedParams = if(
+        params.type | eq("paramList"),
+        then: $ params.namedParams,
+        else: $ [],
+      );
+      {type: "function", body: node.body, posParams: posParams, namedParams: namedParams}
+    ),
+    else: $ if(
+      node.type | eq("constantFunction"),
+      then: $ {type: "function", body: node.body},
+      else: $ node,
+    ),
+  )
+);
+
+makePipeArgs = (ast) => (
+  transformTree(ast, makePipeArgsTransform)
+);
+
+makePipeArgsTransform = (node) => (
+  if(
+    node.type | eq("pipe"),
+    then: $ (
+      callee = node.callee;
+      if(
+        callee.type | eq("pipelineCall") | and($ callee.pipeline.type | eq("tightPipeline")),
+        then: $ (
+          steps = callee.pipeline.steps;
+          if(
+            steps | length | gt(0) | and($ steps @ (steps | length | sub(1)) | type | eq("args")),
+            then: $ (
+              lastStep = steps @ (steps | length | sub(1));
+              otherSteps = steps | slice(0, steps | length | sub(1));
+              if(
+                otherSteps | length | eq(0),
+                then: $ {type: "pipeArgs", callee: callee.start, args: lastStep.args},
+                else: $ (
+                  otherPipeline = {type: "tightPipeline", steps: otherSteps};
+                  {type: "pipeArgs", callee: {type: "pipelineCall", start: callee.start, pipeline: otherPipeline}, args: lastStep.args}
+                ),
+              )
+            ),
+            else: $ node,
+          )
+        ),
+        else: $ node,
+      )
+    ),
+    else: $ node,
+  )
+);
+
+convertPipelines = (ast) => (
+  transformTree(ast, convertPipelinesTransform)
+);
+
+convertPipelinesTransform = (node) => (
+  if(
+    node.type | eq("pipelineCall"),
+    then: $ (
+      start = node.start;
+      pipeline = node.pipeline;
+      if(
+        pipeline.type | eq("loosePipeline"),
+        then: $ convertLoosePipeline(start, pipeline.steps),
+        else: $ if(
+          pipeline.type | eq("tightPipeline"),
+          then: $ convertTightPipeline(start, pipeline.steps),
+          else: $ node,
+        ),
+      )
+    ),
+    else: $ node,
+  )
+);
+
+convertLoosePipeline = (start, steps) => (
+  axis = start;
+  axis = convertLoosePipelineSteps(axis, steps, 0);
+  axis
+);
+
+convertLoosePipelineSteps = (axis, steps, index) => (
+  if(
+    index | ge(steps | length),
+    then: $ axis,
+    else: $ (
+      step = steps @ index;
+      newAxis = if(
+        step.type | eq("pipeArgs"),
+        then: $ (
+          posArgs = if(
+            step.args.type | eq("argList"),
+            then: $ step.args.posArgs,
+            else: $ [],
+          );
+          namedArgs = if(
+            step.args.type | eq("argList"),
+            then: $ step.args.namedArgs,
+            else: $ [],
+          );
+          {type: "call", callee: step.callee, posArgs: [axis] | add(*posArgs), namedArgs: namedArgs}
+        ),
+        else: $ if(
+          step.type | eq("pipeDot"),
+          then: $ (
+            tightSteps = [step.index] | add(*step.steps);
+            convertTightPipeline(axis, tightSteps)
+          ),
+          else: $ if(
+            step.type | eq("pipe"),
+            then: $ {type: "call", callee: step.callee, posArgs: [axis]},
+            else: $ if(
+              step.type | eq("at"),
+              then: $ {type: "index", collection: axis, index: step.index},
+              else: $ axis,
+            ),
+          ),
+        ),
+      );
+      convertLoosePipelineSteps(newAxis, steps, index | add(1))
+    ),
+  )
+);
+
+convertTightPipeline = (start, steps) => (
+  axis = start;
+  axis = convertTightPipelineSteps(axis, steps, 0);
+  axis
+);
+
+convertTightPipelineSteps = (axis, steps, index) => (
+  if(
+    index | ge(steps | length),
+    then: $ axis,
+    else: $ (
+      step = steps @ index;
+      newAxis = if(
+        step.type | eq("args"),
+        then: $ (
+          posArgs = if(
+            step.args.type | eq("argList"),
+            then: $ step.args.posArgs,
+            else: $ [],
+          );
+          namedArgs = if(
+            step.args.type | eq("argList"),
+            then: $ step.args.namedArgs,
+            else: $ [],
+          );
+          {type: "call", callee: axis, posArgs: posArgs, namedArgs: namedArgs}
+        ),
+        else: $ if(
+          step.type | eq("dot"),
+          then: $ (
+            indexValue = if(
+              step.index.type | eq("literal"),
+              then: $ step.index.value,
+              else: $ step.index,
+            );
+            {type: "index", collection: axis, index: {type: "literal", value: indexValue}}
+          ),
+          else: $ axis,
+        ),
+      );
+      convertTightPipelineSteps(newAxis, steps, index | add(1))
+    ),
+  )
+);
+
+normalizeObjectSyntax = (ast) => (
+  transformTree(ast, normalizeObjectSyntaxTransform)
+);
+
+normalizeObjectSyntaxTransform = (node) => (
+  if(
+    node.type | eq("object"),
+    then: $ (
+      entries = node.entries | transform((entry) => (
+        if(
+          entry.type | eq("keyName"),
+          then: $ [
+            if(
+              entry.key.type | eq("name"),
+              then: $ {type: "literal", value: entry.key.name},
+              else: $ entry.key,
+            ),
+            entry.key,
+          ],
+          else: $ if(
+            entry.type | eq("entry"),
+            then: $ [
+              if(
+                entry.key.type | eq("name"),
+                then: $ {type: "literal", value: entry.key.name},
+                else: $ entry.key,
+              ),
+              entry.value,
+            ],
+            else: $ if(
+              entry.type | eq("spread"),
+              then: $ [{type: "spread"}, entry.value],
+              else: $ entry,
+            ),
+          ),
+        )
+      ));
+      {type: node.type, entries: entries}
+    ),
+    else: $ node,
+  )
+);
+
+removeGroups = (ast) => (
+  transformTree(ast, removeGroupsTransform)
+);
+
+removeGroupsTransform = (node) => (
+  if(
+    node.type | eq("group"),
+    then: $ node.expression,
+    else: $ node,
+  )
+);
+
+transformTree = (node, transform) => (
+  transformed = transform(node);
+  if(
+    transformed.type | eq("array"),
+    then: $ (
+      elements = transformed.elements | transform((element) => transformTree(element, transform));
+      {type: transformed.type, elements: elements}
+    ),
+    else: $ if(
+      transformed.type | eq("object"),
+      then: $ (
+        entries = transformed.entries | transform((entry) => (
+          if(
+            entry | isArray,
+            then: $ [
+              transformTree(entry @ 0, transform),
+              transformTree(entry @ 1, transform),
+            ],
+            else: $ transformTree(entry, transform),
+          )
+        ));
+        {type: transformed.type, entries: entries}
+      ),
+      else: $ if(
+        transformed.type | eq("block"),
+        then: $ (
+          defs = transformed.defs | transform((def) => (
+            [name, value] = def;
+            [
+              if(
+                name | isNull,
+                then: $ null,
+                else: $ transformTree(name, transform),
+              ),
+              transformTree(value, transform),
+            ]
+          ));
+          result = transformTree(transformed.result, transform);
+          {type: transformed.type, defs: defs, result: result}
+        ),
+        else: $ if(
+          transformed.type | eq("function"),
+          then: $ (
+            posParams = transformed.posParams | transform((param) => transformTree(param, transform));
+            namedParams = transformed.namedParams | transform((param) => (
+              if(
+                param | isArray,
+                then: $ [
+                  transformTree(param @ 0, transform),
+                  transformTree(param @ 1, transform),
+                ],
+                else: $ transformTree(param, transform),
+              )
+            ));
+            body = transformTree(transformed.body, transform);
+            {type: transformed.type, posParams: posParams, namedParams: namedParams, body: body}
+          ),
+          else: $ if(
+            transformed.type | eq("call"),
+            then: $ (
+              callee = transformTree(transformed.callee, transform);
+              posArgs = transformed.posArgs | transform((arg) => transformTree(arg, transform));
+              namedArgs = transformed.namedArgs | transform((arg) => (
+                if(
+                  arg | isArray,
+                  then: $ [
+                    transformTree(arg @ 0, transform),
+                    transformTree(arg @ 1, transform),
+                  ],
+                  else: $ transformTree(arg, transform),
+                )
+              ));
+              {type: transformed.type, callee: callee, posArgs: posArgs, namedArgs: namedArgs}
+            ),
+            else: $ if(
+              transformed.type | eq("index"),
+              then: $ (
+                collection = transformTree(transformed.collection, transform);
+                index = transformTree(transformed.index, transform);
+                {type: transformed.type, collection: collection, index: index}
+              ),
+              else: $ transformed,
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
 );
