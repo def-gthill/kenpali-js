@@ -68,25 +68,22 @@ lexToken = (code, index, line, lineStart) => (
 
 lexString = (code, index, line, lineStart) => (
   startIndex = index;
-  index = index | add(1);
-  text = "\"";
-  value = "";
-  escaped = false;
-  [text, value, index] = lexStringContent(code, index, text, value, escaped);
+  quoteStart = index | add(1);
+  [text, value, contentEnd] = lexStringContent(code, quoteStart, "\"", "", false);
   if(
-    index | ge(code | length),
-    then: $ throwError("unclosedString", line, index | sub(lineStart) | add(1)),
+    contentEnd | ge(code | length),
+    then: $ throwError("unclosedString", line, contentEnd | sub(lineStart) | add(1)),
     else: $ (
-      text = text | add(code @ index);
-      index = index | add(1);
+      finalText = text | add(code @ contentEnd);
+      finalIndex = contentEnd | add(1);
       token = {
         type: "LITERAL",
         value: value,
-        text: text,
+        text: finalText,
         line: line,
         column: startIndex | sub(lineStart) | add(1),
       };
-      [token, index, line, lineStart]
+      [token, finalIndex, line, lineStart]
     ),
   )
 );
@@ -125,9 +122,9 @@ lexStringContent = (code, index, text, value, escaped) => (
                   ),
                 ),
               );
-              text = text | add("\\") | add(char);
-              value = value | add(escapedChar);
-              lexStringContent(code, index | add(1), text, value, false)
+              newText = text | add("\\") | add(char);
+              newValue = value | add(escapedChar);
+              lexStringContent(code, index | add(1), newText, newValue, false)
             ),
           )
         ),
@@ -138,9 +135,9 @@ lexStringContent = (code, index, text, value, escaped) => (
             char | eq("\""),
             then: $ [text, value, index],
             else: $ (
-              text = text | add(char);
-              value = value | add(char);
-              lexStringContent(code, index | add(1), text, value, false)
+              newText = text | add(char);
+              newValue = value | add(char);
+              lexStringContent(code, index | add(1), newText, newValue, false)
             ),
           ),
         ),
@@ -150,19 +147,18 @@ lexStringContent = (code, index, text, value, escaped) => (
 );
 
 lexUnicodeEscape = (code, index, text, value) => (
-  text = text | add("\\u{");
-  index = index | add(2);
-  hex = "";
-  [hex, index] = lexHexDigits(code, index, hex);
+  textWithPrefix = text | add("\\u{");
+  braceStart = index | add(2);
+  [hex, hexEnd] = lexHexDigits(code, braceStart, "");
   if(
-    code @ index | eq("}"),
+    code @ hexEnd | eq("}"),
     then: $ (
-      text = text | add(hex) | add("}");
-      index = index | add(1);
+      finalText = textWithPrefix | add(hex) | add("}");
+      braceEnd = hexEnd | add(1);
       codePoint = parseHex(hex);
       char = codePointToString(codePoint);
-      value = value | add(char);
-      [text, value, index]
+      finalValue = value | add(char);
+      [finalText, finalValue, braceEnd]
     ),
     else: $ throwError("invalidUnicodeEscape", 0, 0),
   )
@@ -215,24 +211,23 @@ codePointToString = (codePoint) => (
 
 lexRawString = (code, index, line, lineStart) => (
   startIndex = index;
-  text = "`";
-  index = index | add(1);
-  [text, index] = lexRawStringContent(code, index, text);
+  backtickStart = index | add(1);
+  [text, contentEnd] = lexRawStringContent(code, backtickStart, "`");
   if(
-    index | ge(code | length),
-    then: $ throwError("unclosedRawString", line, index | sub(lineStart) | add(1)),
+    contentEnd | ge(code | length),
+    then: $ throwError("unclosedRawString", line, contentEnd | sub(lineStart) | add(1)),
     else: $ (
-      text = text | add("`");
-      index = index | add(1);
-      value = text | slice(1, text | length | sub(1));
+      finalText = text | add("`");
+      finalIndex = contentEnd | add(1);
+      value = finalText | slice(1, finalText | length | sub(1));
       token = {
         type: "LITERAL",
         value: value,
-        text: text,
+        text: finalText,
         line: line,
         column: startIndex | sub(lineStart) | add(1),
       };
-      [token, index, line, lineStart]
+      [token, finalIndex, line, lineStart]
     ),
   )
 );
@@ -294,28 +289,24 @@ lexWhitespaceContent = (code, index) => (
 
 lexNumber = (code, index, line, lineStart) => (
   startIndex = index;
-  text = "";
   negative = code @ index | eq("-");
-  if(
+  [numberStart, initialText] = if(
     negative,
-    then: $ (
-      text = "-";
-      index = index | add(1);
-      null
-    ),
+    then: $ [index | add(1), "-"],
+    else: $ [index, ""],
   );
-  [text, index] = lexInteger(code, index, text);
-  [text, index] = lexDecimalPart(code, index, text);
-  [text, index] = lexExponentPart(code, index, text);
-  value = parseNumber(text);
+  [textAfterInt, intEnd] = lexInteger(code, numberStart, initialText);
+  [textAfterDecimal, decimalEnd] = lexDecimalPart(code, intEnd, textAfterInt);
+  [finalText, exponentEnd] = lexExponentPart(code, decimalEnd, textAfterDecimal);
+  value = parseNumber(finalText);
   token = {
     type: "LITERAL",
     value: value,
-    text: text,
+    text: finalText,
     line: line,
     column: startIndex | sub(lineStart) | add(1),
   };
-  [token, index, line, lineStart]
+  [token, exponentEnd, line, lineStart]
 );
 
 lexInteger = (code, index, text) => (
@@ -359,10 +350,9 @@ lexDecimalPart = (code, index, text) => (
     else: $ if(
       code @ index | eq("."),
       then: $ (
-        text = text | add(".");
-        index = index | add(1);
-        [text, index] = lexDecimalDigits(code, index, text);
-        null
+        textWithDot = text | add(".");
+        dotEnd = index | add(1);
+        lexDecimalDigits(code, dotEnd, textWithDot)
       ),
       else: $ [text, index],
     ),
@@ -393,11 +383,10 @@ lexExponentPart = (code, index, text) => (
       if(
         char | eq("e") | or($ char | eq("E")),
         then: $ (
-          text = text | add(char);
-          index = index | add(1);
-          [text, index] = lexExponentSign(code, index, text);
-          [text, index] = lexExponentDigits(code, index, text);
-          null
+          textWithE = text | add(char);
+          eEnd = index | add(1);
+          [textAfterSign, signEnd] = lexExponentSign(code, eEnd, textWithE);
+          lexExponentDigits(code, signEnd, textAfterSign)
         ),
         else: $ [text, index],
       )

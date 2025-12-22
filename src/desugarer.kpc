@@ -1,15 +1,14 @@
 desugar = (ast) => (
-  result = ast;
-  result = splitMixedLists(result);
-  result = normalizeExpressionStatements(result);
-  result = removeSpecializedSpreads(result);
-  result = removeSpecializedRests(result);
-  result = convertFunctionSyntax(result);
-  result = makePipeArgs(result);
-  result = convertPipelines(result);
-  result = normalizeObjectSyntax(result);
-  result = removeGroups(result);
-  result
+  ast
+  | splitMixedLists
+  | normalizeExpressionStatements
+  | removeSpecializedSpreads
+  | removeSpecializedRests
+  | convertFunctionSyntax
+  | makePipeArgs
+  | convertPipelines
+  | normalizeObjectSyntax
+  | removeGroups
 );
 
 splitMixedLists = (ast) => (
