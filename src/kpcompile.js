@@ -1270,7 +1270,9 @@ class LibraryFilter extends TreeTransformer {
     while (grey.size > 0) {
       for (const expression of grey) {
         for (const usage of this.usage[expression]) {
-          grey.add(usage);
+          if (!black.has(usage)) {
+            grey.add(usage);
+          }
         }
         grey.delete(expression);
         black.add(expression);
