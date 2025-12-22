@@ -464,7 +464,7 @@ const rawBuiltins = [
         {
           rest: {
             name: "conditions",
-            type: arrayOf(tupleLike([functionClass, functionClass])),
+            type: arrayOf(tupleLike([anyProtocol, functionClass])),
           },
         },
       ],
@@ -472,7 +472,9 @@ const rawBuiltins = [
     },
     function ([value, conditions, else_], { kpcallback }) {
       for (const [condition, result] of conditions) {
-        const conditionResult = kpcallback(condition, [value], kpobject());
+        const conditionResult = isFunction(condition)
+          ? kpcallback(condition, [value], kpobject())
+          : equals(condition, value);
         validateReturn(conditionResult, booleanClass);
         if (conditionResult) {
           return kpcallback(result, [value], kpobject());
