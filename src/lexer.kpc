@@ -1,5 +1,5 @@
 lex = (code) => (
-  lexTokens(code, 0, 1, 0)
+  lexTokens(code, 1, 1, 0)
 );
 
 lexTokens = (code, index, line, lineStart) => (
@@ -13,10 +13,11 @@ lexTokens = (code, index, line, lineStart) => (
         line: line,
         column: code | length | sub(lineStart) | add(1),
       },
-      next: $ emptyStream,
+      next: emptyStream,
     ),
     else: $ (
-      [token, newIndex, newLine, newLineStart] = lexToken(code, index, line, lineStart);
+      [token, endIndex, newLine, newLineStart] = lexToken(code, index, line, lineStart);
+      newIndex = endIndex | up;
       if(
         token | isNull,
         then: $ lexTokens(code, newIndex, newLine, newLineStart),
@@ -74,7 +75,7 @@ lexString = (code, index, line, lineStart) => (
     contentEnd | ge(code | length),
     then: $ throwError("unclosedString", line, contentEnd | sub(lineStart) | add(1)),
     else: $ (
-      finalText = text | add(code @ contentEnd);
+      finalText = [text, code @ contentEnd] | join;
       finalIndex = contentEnd | add(1);
       token = {
         type: "LITERAL",
@@ -122,8 +123,8 @@ lexStringContent = (code, index, text, value, escaped) => (
                   ),
                 ),
               );
-              newText = text | add("\\") | add(char);
-              newValue = value | add(escapedChar);
+              newText = [text, "\\", char] | join;
+              newValue = [value, escapedChar] | join;
               lexStringContent(code, index | add(1), newText, newValue, false)
             ),
           )
@@ -135,8 +136,8 @@ lexStringContent = (code, index, text, value, escaped) => (
             char | eq("\""),
             then: $ [text, value, index],
             else: $ (
-              newText = text | add(char);
-              newValue = value | add(char);
+              newText = [text, char] | join;
+              newValue = [value, char] | join;
               lexStringContent(code, index | add(1), newText, newValue, false)
             ),
           ),
@@ -147,17 +148,17 @@ lexStringContent = (code, index, text, value, escaped) => (
 );
 
 lexUnicodeEscape = (code, index, text, value) => (
-  textWithPrefix = text | add("\\u{");
+  textWithPrefix = [text, "\\u{"] | join;
   braceStart = index | add(2);
   [hex, hexEnd] = lexHexDigits(code, braceStart, "");
   if(
     code @ hexEnd | eq("}"),
     then: $ (
-      finalText = textWithPrefix | add(hex) | add("}");
+      finalText = [textWithPrefix, hex, "}"] | join;
       braceEnd = hexEnd | add(1);
       codePoint = parseHex(hex);
       char = codePointToString(codePoint);
-      finalValue = value | add(char);
+      finalValue = [value, char] | join;
       [finalText, finalValue, braceEnd]
     ),
     else: $ throwError("invalidUnicodeEscape", 0, 0),
@@ -172,7 +173,7 @@ lexHexDigits = (code, index, hex) => (
       char = code @ index;
       if(
         char | ge("0") | and($ char | le("9")) | or($ char | ge("a") | and($ char | le("f")) | or($ char | ge("A") | and($ char | le("F")))),
-        then: $ lexHexDigits(code, index | add(1), hex | add(char)),
+        then: $ lexHexDigits(code, index | add(1), [hex, char] | join),
         else: $ [hex, index],
       )
     ),
@@ -217,7 +218,7 @@ lexRawString = (code, index, line, lineStart) => (
     contentEnd | ge(code | length),
     then: $ throwError("unclosedRawString", line, contentEnd | sub(lineStart) | add(1)),
     else: $ (
-      finalText = text | add("`");
+      finalText = [text, "`"] | join;
       finalIndex = contentEnd | add(1);
       value = finalText | slice(1, finalText | length | sub(1));
       token = {
@@ -239,7 +240,7 @@ lexRawStringContent = (code, index, text) => (
     else: $ if(
       code @ index | eq("`"),
       then: $ [text, index],
-      else: $ lexRawStringContent(code, index | add(1), text | add(code @ index)),
+      else: $ lexRawStringContent(code, index | add(1), [text, code @ index] | join),
     ),
   )
 );
@@ -317,10 +318,10 @@ lexInteger = (code, index, text) => (
       char = code @ index;
       if(
         char | eq("0"),
-        then: $ [text | add("0"), index | add(1)],
+        then: $ [[text, "0"] | join, index | add(1)],
         else: $ if(
           char | ge("1") | and($ char | le("9")),
-          then: $ lexIntegerDigits(code, index | add(1), text | add(char)),
+          then: $ lexIntegerDigits(code, index | add(1), [text, char] | join),
           else: $ [text, index],
         ),
       )
@@ -336,7 +337,7 @@ lexIntegerDigits = (code, index, text) => (
       char = code @ index;
       if(
         char | ge("0") | and($ char | le("9")),
-        then: $ lexIntegerDigits(code, index | add(1), text | add(char)),
+        then: $ lexIntegerDigits(code, index | add(1), [text, char] | join),
         else: $ [text, index],
       )
     ),
@@ -350,7 +351,7 @@ lexDecimalPart = (code, index, text) => (
     else: $ if(
       code @ index | eq("."),
       then: $ (
-        textWithDot = text | add(".");
+        textWithDot = [text, "."] | join;
         dotEnd = index | add(1);
         lexDecimalDigits(code, dotEnd, textWithDot)
       ),
@@ -367,7 +368,7 @@ lexDecimalDigits = (code, index, text) => (
       char = code @ index;
       if(
         char | ge("0") | and($ char | le("9")),
-        then: $ lexDecimalDigits(code, index | add(1), text | add(char)),
+        then: $ lexDecimalDigits(code, index | add(1), [text, char] | join),
         else: $ [text, index],
       )
     ),
@@ -383,7 +384,7 @@ lexExponentPart = (code, index, text) => (
       if(
         char | eq("e") | or($ char | eq("E")),
         then: $ (
-          textWithE = text | add(char);
+          textWithE = [text, char] | join;
           eEnd = index | add(1);
           [textAfterSign, signEnd] = lexExponentSign(code, eEnd, textWithE);
           lexExponentDigits(code, signEnd, textAfterSign)
@@ -402,7 +403,7 @@ lexExponentSign = (code, index, text) => (
       char = code @ index;
       if(
         char | eq("+") | or($ char | eq("-")),
-        then: $ [text | add(char), index | add(1)],
+        then: $ [[text, char] | join, index | add(1)],
         else: $ [text, index],
       )
     ),
@@ -417,7 +418,7 @@ lexExponentDigits = (code, index, text) => (
       char = code @ index;
       if(
         char | ge("0") | and($ char | le("9")),
-        then: $ lexExponentDigits(code, index | add(1), text | add(char)),
+        then: $ lexExponentDigits(code, index | add(1), [text, char] | join),
         else: $ [text, index],
       )
     ),
@@ -454,6 +455,7 @@ lexName = (code, index, line, lineStart) => (
           value = true;
           null
         ),
+        else: $ null,
       ),
     ),
   );
@@ -464,18 +466,18 @@ lexName = (code, index, line, lineStart) => (
     line: line,
     column: startIndex | sub(lineStart) | add(1),
   };
-  [token, index, line, lineStart]
+  [token, nameEnd, line, lineStart]
 );
 
 lexNameContent = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
       if(
         char | ge("A") | and($ char | le("Z")) | or($ char | ge("a") | and($ char | le("z")) | or($ char | ge("0") | and($ char | le("9")))),
-        then: $ lexNameContent(code, index | add(1), text | add(char)),
+        then: $ lexNameContent(code, index | add(1), [text, char] | join),
         else: $ [text, index],
       )
     ),

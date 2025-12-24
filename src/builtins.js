@@ -494,7 +494,11 @@ const rawBuiltins = [
     function ([value, next], { kpcallback }) {
       return stream({
         value: () => kpcallback(value, [], kpobject()),
-        next: () => kpcallback(next, [], kpobject()),
+        next: () => {
+          const result = kpcallback(next, [], kpobject());
+          validateReturn(result, streamClass);
+          return result;
+        },
       });
     }
   ),
