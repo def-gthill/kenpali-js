@@ -81,12 +81,12 @@ class Compiler {
     const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
     if (trace && filteredLibrary.size > 0) {
       this.log(
-        `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
+        `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
       );
     }
     this.expression = expression;
     this.library = filteredLibrary;
-    this.modules = modules;
+    this.currentModuleName = "<main>";
     this.trace = trace;
     this.traceLevel = 0;
 
@@ -124,18 +124,22 @@ class Compiler {
   }
 
   compileLibrary() {
-    for (const [name, value] of this.library) {
-      if (isPlatformFunction(value)) {
-        this.compileBuiltin(name, value);
-        if (value.methods) {
-          for (const method of value.methods) {
-            this.compileMethod(name, method);
+    for (const [moduleName, module] of this.library) {
+      this.currentModuleName = moduleName;
+      for (const [name, value] of module) {
+        const fullName = makeFullName(moduleName, name);
+        if (isPlatformFunction(value)) {
+          this.compileBuiltin(fullName, value);
+          if (value.methods) {
+            for (const method of value.methods) {
+              this.compileMethod(fullName, method);
+            }
           }
+        } else if (value.type === "function") {
+          this.compileExpression(value, fullName);
+        } else {
+          // Not a function, nothing to compile.
         }
-      } else if (value.type === "function") {
-        this.compileExpression(value, name);
-      } else {
-        // Not a function, nothing to compile.
       }
     }
   }
@@ -399,8 +403,8 @@ class Compiler {
 
   resolveInModule(expression) {
     if (expression.from) {
-      const fullName = `${expression.from}/${expression.name}`;
-      if (this.library.has(fullName)) {
+      if (libraryHas(this.library, expression.from, expression.name)) {
+        const fullName = makeFullName(expression.from, expression.name);
         this.addInstruction(op.FUNCTION, 0);
         this.addMark({ functionName: fullName });
         this.addDiagnostic({
@@ -469,17 +473,28 @@ class Compiler {
   }
 
   resolveInLibrary(expression) {
-    const value = this.library.get(expression.name);
-    if (value === undefined) {
+    let value;
+    let fullName;
+    if (
+      this.currentModuleName !== "<main>" &&
+      libraryHas(this.library, this.currentModuleName, expression.name)
+    ) {
+      value = libraryGet(this.library, this.currentModuleName, expression.name);
+      fullName = makeFullName(this.currentModuleName, expression.name);
+    } else if (libraryHas(this.library, "<main>", expression.name)) {
+      value = libraryGet(this.library, "<main>", expression.name);
+      fullName = expression.name;
+    } else {
       return false;
     }
+
     if (value.type === "value") {
       this.addInstruction(op.VALUE, value.value);
     } else {
       this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionName: expression.name });
+      this.addMark({ functionName: fullName });
       this.addDiagnostic({
-        name: expression.name,
+        name: fullName,
         isPlatform: true,
       });
     }
@@ -1239,31 +1254,91 @@ class CompiledScope {
 }
 
 function addModulesToLibrary(library, modules) {
-  const result = new Map(library);
-  for (const [moduleName, module] of modules) {
+  const result = new Map(modules);
+  result.set("<main>", library);
+  return result;
+}
+
+function flattenLibrary(library) {
+  const result = [];
+  for (const [moduleName, module] of library) {
     for (const [name, value] of module) {
-      result.set(`${moduleName}/${name}`, value);
+      result.push([moduleName, name, value]);
     }
   }
   return result;
 }
 
+function flattenedLibraryToIndexMap(flattened) {
+  const result = new Map();
+  flattened.forEach(([moduleName, name], i) => {
+    if (!result.has(moduleName)) {
+      result.set(moduleName, new Map());
+    }
+    result.get(moduleName).set(name, i);
+  });
+  return result;
+}
+
+function unflattenLibrary(flattened) {
+  const result = new Map();
+  for (const [moduleName, name, value] of flattened) {
+    if (!result.has(moduleName)) {
+      result.set(moduleName, new Map());
+    }
+    result.get(moduleName).set(name, value);
+  }
+  return result;
+}
+
+function getFullNamesFromLibrary(library) {
+  const result = [];
+  for (const [moduleName, module] of library) {
+    for (const [name] of module) {
+      if (moduleName === "<main>") {
+        result.push(name);
+      } else {
+        result.push(makeFullName(moduleName, name));
+      }
+    }
+  }
+  return result;
+}
+
+function makeFullName(moduleName, name) {
+  if (moduleName === "<main>") {
+    return name;
+  }
+  return `${moduleName}/${name}`;
+}
+
+function libraryHas(library, moduleName, name) {
+  return library.has(moduleName) && library.get(moduleName).has(name);
+}
+
+function libraryGet(library, moduleName, name) {
+  return library.get(moduleName).get(name);
+}
+
 class LibraryFilter extends TreeTransformer {
   constructor(library, expression) {
     super();
-    this.libraryExpressions = [...library];
-    this.allExpressions = [...library, ["<main>", expression]];
-    this.libraryByName = new Map(
-      this.libraryExpressions.map(([name, _], i) => [name, i])
-    );
+    this.libraryExpressions = flattenLibrary(library);
+    this.allExpressions = [
+      ...this.libraryExpressions,
+      ["<main>", "<main>", expression],
+    ];
+    this.libraryIndexMap = flattenedLibraryToIndexMap(this.libraryExpressions);
     this.activeScopes = [];
     this.usage = this.allExpressions.map(() => new Set());
   }
 
   filter() {
     for (let i = 0; i < this.allExpressions.length; i++) {
+      const [moduleName, _name, expression] = this.allExpressions[i];
       this.currentUsage = this.usage[i];
-      this.transformExpression(this.allExpressions[i][1]);
+      this.currentModuleName = moduleName;
+      this.transformExpression(expression);
     }
     const grey = new Set([this.allExpressions.length - 1]);
     const black = new Set();
@@ -1279,7 +1354,9 @@ class LibraryFilter extends TreeTransformer {
         break;
       }
     }
-    return new Map(this.libraryExpressions.filter((_, i) => black.has(i)));
+    return unflattenLibrary(
+      this.libraryExpressions.filter((_, i) => black.has(i))
+    );
   }
 
   transformName(expression) {
@@ -1287,11 +1364,20 @@ class LibraryFilter extends TreeTransformer {
     return super.transformName(expression);
   }
 
+  hasInLibrary(moduleName, name) {
+    return libraryHas(this.libraryIndexMap, moduleName, name);
+  }
+
+  getLibraryIndex(moduleName, name) {
+    return libraryGet(this.libraryIndexMap, moduleName, name);
+  }
+
   resolveName(expression) {
     if (expression.from) {
-      const fullName = `${expression.from}/${expression.name}`;
-      if (this.libraryByName.has(fullName)) {
-        this.currentUsage.add(this.libraryByName.get(fullName));
+      if (this.hasInLibrary(expression.from, expression.name)) {
+        this.currentUsage.add(
+          this.getLibraryIndex(expression.from, expression.name)
+        );
       }
       return;
     }
@@ -1302,8 +1388,17 @@ class LibraryFilter extends TreeTransformer {
       }
     }
 
-    if (this.libraryByName.has(expression.name)) {
-      this.currentUsage.add(this.libraryByName.get(expression.name));
+    if (this.currentModuleName !== "<main>") {
+      if (this.hasInLibrary(this.currentModuleName, expression.name)) {
+        this.currentUsage.add(
+          this.getLibraryIndex(this.currentModuleName, expression.name)
+        );
+        return;
+      }
+    }
+
+    if (this.hasInLibrary("<main>", expression.name)) {
+      this.currentUsage.add(this.getLibraryIndex("<main>", expression.name));
     }
   }
 

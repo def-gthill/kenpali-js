@@ -19,9 +19,9 @@ export default function kpparseBootstrap(code, options = {}) {
         const lexerModule = loadLexerModule();
         const desugarerModule = loadDesugarerModule();
         const parserModule = loadParserModule();
-        parse = kpeval(name("parse"), {
-          names: parserModule,
+        parse = kpeval(name("parse", "parser"), {
           modules: new Map([
+            ["parser", parserModule],
             ["lexer", lexerModule],
             ["desugarer", desugarerModule],
           ]),

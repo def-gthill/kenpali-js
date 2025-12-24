@@ -251,9 +251,6 @@ class Disassembler {
     this.instructionTable[IS_ERROR] = this.disassembleIsError;
     this.instructionTable[IS_CLASS] = this.disassembleIsClass;
     this.instructionTable[IS_PROTOCOL] = this.disassembleIsProtocol;
-    this.instructionTable[IS_SEQUENCE] = this.disassembleIsSequence;
-    this.instructionTable[IS_TYPE] = this.disassembleIsType;
-    this.instructionTable[IS_INSTANCE] = this.disassembleIsInstance;
     this.instructionTable[ERROR_IF_INVALID] = this.disassembleErrorIfInvalid;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
