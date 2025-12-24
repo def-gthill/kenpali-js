@@ -197,7 +197,7 @@ makePipeArgsTransform = (node) => (
         then: $ (
           steps = callee.pipeline.steps;
           if(
-            steps | length | gt(0) | and($ steps @ (steps | length | sub(1)) | type | eq("args")),
+            steps | length | gt(0) | and($ steps @ (steps | length | sub(1)) |.type | eq("args")),
             then: $ (
               lastStep = steps @ (steps | length | sub(1));
               otherSteps = steps | slice(0, steps | length | sub(1));
