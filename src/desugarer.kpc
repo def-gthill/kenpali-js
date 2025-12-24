@@ -62,9 +62,7 @@ splitMixedListsTransform = (node) => (
 );
 
 splitParamList = (params) => (
-  posParams = [];
-  namedParams = [];
-  [posParams, namedParams] = splitParamListLoop(params, 0, posParams, namedParams);
+  [posParams, namedParams] = splitParamListLoop(params, 0, [], []);
   [posParams, namedParams]
 );
 
@@ -88,9 +86,7 @@ splitParamListLoop = (params, index, posParams, namedParams) => (
 );
 
 splitArgList = (args) => (
-  posArgs = [];
-  namedArgs = [];
-  [posArgs, namedArgs] = splitArgListLoop(args, 0, posArgs, namedArgs);
+  [posArgs, namedArgs] = splitArgListLoop(args, 0, [], []);
   [posArgs, namedArgs]
 );
 
@@ -172,15 +168,10 @@ convertFunctionSyntaxTransform = (node) => (
     node.type | eq("arrow"),
     then: $ (
       params = node.params;
-      posParams = if(
+      [posParams, namedParams] = if(
         params.type | eq("paramList"),
-        then: $ params.posParams,
-        else: $ [],
-      );
-      namedParams = if(
-        params.type | eq("paramList"),
-        then: $ params.namedParams,
-        else: $ [],
+        then: $ [params.posParams, params.namedParams],
+        else: $ [[], []],
       );
       {type: "function", body: node.body, posParams: posParams, namedParams: namedParams}
     ),
@@ -254,9 +245,7 @@ convertPipelinesTransform = (node) => (
 );
 
 convertLoosePipeline = (start, steps) => (
-  axis = start;
-  axis = convertLoosePipelineSteps(axis, steps, 0);
-  axis
+  convertLoosePipelineSteps(start, steps, 0)
 );
 
 convertLoosePipelineSteps = (axis, steps, index) => (
@@ -303,9 +292,7 @@ convertLoosePipelineSteps = (axis, steps, index) => (
 );
 
 convertTightPipeline = (start, steps) => (
-  axis = start;
-  axis = convertTightPipelineSteps(axis, steps, 0);
-  axis
+  convertTightPipelineSteps(start, steps, 0)
 );
 
 convertTightPipelineSteps = (axis, steps, index) => (

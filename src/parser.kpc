@@ -19,9 +19,8 @@ parseModule = (code, trace: = "false") => (
 );
 
 parseModuleDefinitions = (tokens, index) => (
-  definitions = [];
-  [definitions, index] = parseModuleDefinitionsLoop(tokens, index, definitions);
-  {definitions: definitions, end: index}
+  [definitions, definitionsEnd] = parseModuleDefinitionsLoop(tokens, index, []);
+  {definitions: definitions, end: definitionsEnd}
 );
 
 parseModuleDefinitionsLoop = (tokens, index, definitions) => (
@@ -112,8 +111,8 @@ parseNamePattern = (tokens, index) => (
   if(
     token.type | eq("UNDERSCORE"),
     then: $ (
-      index = index | add(1);
-      [{type: "ignore"}, index]
+      underscoreEnd = index | add(1);
+      [{type: "ignore"}, underscoreEnd]
     ),
     else: $ if(
       token.type | eq("OPEN_BRACKET"),

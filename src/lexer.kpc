@@ -246,9 +246,9 @@ lexRawStringContent = (code, index, text) => (
 
 lexComment = (code, index, line, lineStart) => (
   startIndex = index;
-  index = index | add(2);
-  [index, newLine, newLineStart] = lexCommentContent(code, index, line, lineStart);
-  [null, index, newLine, newLineStart]
+  commentStart = index | add(2);
+  [commentEnd, newLine, newLineStart] = lexCommentContent(code, commentStart, line, lineStart);
+  [null, commentEnd, newLine, newLineStart]
 );
 
 lexCommentContent = (code, index, line, lineStart) => (
@@ -430,8 +430,7 @@ parseNumber = (text) => (
 
 lexName = (code, index, line, lineStart) => (
   startIndex = index;
-  text = "";
-  [text, index] = lexNameContent(code, index, text);
+  [text, nameEnd] = lexNameContent(code, index, "");
   kind = "NAME";
   value = null;
   if(
