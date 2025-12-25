@@ -445,14 +445,20 @@ const rawBuiltins = [
       posParams: [{ name: "condition", type: booleanClass }],
       namedParams: [
         { name: "then", type: functionClass },
-        { name: "else", type: functionClass },
+        {
+          name: "else",
+          type: either(functionClass, nullClass),
+          defaultValue: literal(null),
+        },
       ],
     },
     function ([condition, then, else_], { kpcallback }) {
       if (condition) {
         return kpcallback(then, [], kpobject());
-      } else {
+      } else if (else_) {
         return kpcallback(else_, [], kpobject());
+      } else {
+        return null;
       }
     }
   ),
