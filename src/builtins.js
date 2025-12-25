@@ -778,6 +778,16 @@ const rawBuiltins = [
     }
   ),
   platformFunction(
+    "write",
+    {
+      posParams: [{ name: "message", type: stringClass }],
+    },
+    function ([message], { debugLog }) {
+      debugLog(message);
+      return null;
+    }
+  ),
+  platformFunction(
     "debug",
     {
       posParams: [
