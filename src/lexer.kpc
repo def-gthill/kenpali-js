@@ -69,13 +69,14 @@ lexToken = (code, index, line, lineStart) => (
 lexString = (code, index, line, lineStart) => (
   startIndex = index;
   quoteStart = index | add(1);
-  [text, value, contentEnd] = lexStringContent(code, quoteStart, "\"", "", false);
+  [text, contentEnd] = gatherStringContent(code, quoteStart, line, lineStart);
+  value = getStringValue(text, 1, line, lineStart, "", false);
   if(
     contentEnd | ge(code | length),
-    then: $ error("unclosedString", line:, column: contentEnd | sub(lineStart)),
+    then: $ error("unclosedStringLiteral", line:, column: contentEnd | sub(lineStart), value: ["\"", value] | join),
     else: $ (
-      finalText = [text, code @ contentEnd] | join;
-      finalIndex = contentEnd | add(1);
+      finalText = ["\"", text, "\""] | join;
+      finalIndex = contentEnd | add(2);
       token = {
         type: "LITERAL",
         value: value,
@@ -88,9 +89,75 @@ lexString = (code, index, line, lineStart) => (
   )
 );
 
-lexStringContent = (code, index, text, value, escaped) => (
+gatherStringContent = (code, index, line, lineStart) => (
+  endIndex = index
+  | build(up)
+  | withPreviousRunning(
+    start: false,
+    next: (index, state: isEscaped) => (
+      isEscaped | not | and($ code @ index | eq("\\"))
+    )
+  )
+  | while(([isEscaped, index]) => (
+    index | le(code | length) | and(
+      $ isEscaped | or(
+        $ code @ index | eq("\"") | not
+      )
+    )
+  ))
+  | last @ 2;
+  [code | slice(from: index, to: endIndex), endIndex]
+);
+
+getStringValue = (code, index, line, lineStart, value, escaped) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
+    then: $ value,
+    else: $ (
+      char = code @ index;
+      if(
+        escaped,
+        then: $ (
+          if(
+            char | eq("u") | and($ code @ (index | add(1)) | eq("{")),
+            then: $ lexUnicodeEscape(code, index, value),
+            else: $ (
+              escapedChar = char | switch(
+                ["\"", $ "\""],
+                ["\\", $ "\\"],
+                ["\/", $ "\/"],
+                ["b", $ "\b"],
+                ["f", $ "\f"],
+                ["n", $ "\n"],
+                ["r", $ "\r"],
+                ["t", $ "\t"],
+                else: $ error("invalidStringLiteral", line:, column: index | sub(lineStart), value: ["\"", code, "\""] | join),
+              );
+              newValue = [value, escapedChar] | join;
+              getStringValue(code, index | add(1), line, lineStart, newValue, false)
+            ),
+          )
+        ),
+        else: $ if(
+          char | eq("\\"),
+          then: $ getStringValue(code, index | add(1), line, lineStart, value, true),
+          else: $ if(
+            char | eq("\""),
+            then: $ value,
+            else: $ (
+              newValue = [value, char] | join;
+              getStringValue(code, index | add(1), line, lineStart, newValue, false)
+            ),
+          ),
+        ),
+      )
+    ),
+  )
+);
+
+lexStringContent = (code, index, line, lineStart, text, value, escaped) => (
+  if(
+    index | gt(code | length),
     then: $ [text, value, index],
     else: $ (
       char = code @ index;
@@ -101,43 +168,33 @@ lexStringContent = (code, index, text, value, escaped) => (
             char | eq("u") | and($ code @ (index | add(1)) | eq("{")),
             then: $ lexUnicodeEscape(code, index, text, value),
             else: $ (
-              escapedChar = if(
-                char | eq("n"),
-                then: $ "\n",
-                else: $ if(
-                  char | eq("t"),
-                  then: $ "\t",
-                  else: $ if(
-                    char | eq("r"),
-                    then: $ "\r",
-                    else: $ if(
-                      char | eq("\\"),
-                      then: $ "\\",
-                      else: $ if(
-                        char | eq("\""),
-                        then: $ "\"",
-                        else: $ char,
-                      ),
-                    ),
-                  ),
-                ),
+              escapedChar = char | switch(
+                ["\"", $ "\""],
+                ["\\", $ "\\"],
+                ["\/", $ "\/"],
+                ["b", $ "\b"],
+                ["f", $ "\f"],
+                ["n", $ "\n"],
+                ["r", $ "\r"],
+                ["t", $ "\t"],
+                else: $ error("invalidStringLiteral", line:, column: index | sub(lineStart), value: text),
               );
               newText = [text, "\\", char] | join;
               newValue = [value, escapedChar] | join;
-              lexStringContent(code, index | add(1), newText, newValue, false)
+              lexStringContent(code, index | add(1), line, lineStart, newText, newValue, false)
             ),
           )
         ),
         else: $ if(
           char | eq("\\"),
-          then: $ lexStringContent(code, index | add(1), text, value, true),
+          then: $ lexStringContent(code, index | add(1), line, lineStart, text, value, true),
           else: $ if(
             char | eq("\""),
             then: $ [text, value, index],
             else: $ (
               newText = [text, char] | join;
               newValue = [value, char] | join;
-              lexStringContent(code, index | add(1), newText, newValue, false)
+              lexStringContent(code, index | add(1), line, lineStart, newText, newValue, false)
             ),
           ),
         ),
@@ -146,19 +203,17 @@ lexStringContent = (code, index, text, value, escaped) => (
   )
 );
 
-lexUnicodeEscape = (code, index, text, value) => (
-  textWithPrefix = [text, "\\u{"] | join;
+lexUnicodeEscape = (code, index, value) => (
   braceStart = index | add(2);
   [hex, hexEnd] = lexHexDigits(code, braceStart, "");
   if(
     code @ hexEnd | eq("}"),
     then: $ (
-      finalText = [textWithPrefix, hex, "}"] | join;
       braceEnd = hexEnd | add(1);
       codePoint = parseHex(hex);
       char = codePointToString(codePoint);
       finalValue = [value, char] | join;
-      [finalText, finalValue, braceEnd]
+      finalValue
     ),
     else: $ error("invalidUnicodeEscape", line: 0, column: 0),
   )
@@ -166,7 +221,7 @@ lexUnicodeEscape = (code, index, text, value) => (
 
 lexHexDigits = (code, index, hex) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [hex, index],
     else: $ (
       char = code @ index;
@@ -180,24 +235,23 @@ lexHexDigits = (code, index, hex) => (
 );
 
 parseHex = (hex) => (
-  parseHexDigits(hex, 0, 0)
+  parseHexDigits(hex, 1, 0)
 );
 
 parseHexDigits = (hex, index, value) => (
   if(
-    index | ge(hex | length),
+    index | gt(hex | length),
     then: $ value,
     else: $ (
       char = hex @ index;
-      codePoints = char | toCodePoints;
-      charCode = codePoints @ 0;
+      charCode = char | toCodePoints | first;
       digit = if(
         char | ge("0") | and($ char | le("9")),
-        then: $ charCode | sub("0" | toCodePoints @ 0),
+        then: $ charCode | sub("0" | toCodePoints | first),
         else: $ if(
           char | ge("a") | and($ char | le("f")),
-          then: $ charCode | sub("a" | toCodePoints @ 0) | add(10),
-          else: $ charCode | sub("A" | toCodePoints @ 0) | add(10),
+          then: $ charCode | sub("a" | toCodePoints | first) | add(10),
+          else: $ charCode | sub("A" | toCodePoints | first) | add(10),
         ),
       );
       parseHexDigits(hex, index | add(1), value | mul(16) | add(digit))
@@ -214,12 +268,12 @@ lexRawString = (code, index, line, lineStart) => (
   backtickStart = index | add(1);
   [text, contentEnd] = lexRawStringContent(code, backtickStart, "`");
   if(
-    contentEnd | ge(code | length),
-    then: $ error("unclosedRawString", line:, column: contentEnd | sub(lineStart)),
+    contentEnd | gt(code | length),
+    then: $ error("unclosedStringLiteral", line:, column: contentEnd | sub(lineStart), value: text),
     else: $ (
       finalText = [text, "`"] | join;
       finalIndex = contentEnd | add(1);
-      value = finalText | slice(1, finalText | length | sub(1));
+      value = finalText | slice(from: 2, to: -2);
       token = {
         type: "LITERAL",
         value: value,
@@ -234,7 +288,7 @@ lexRawString = (code, index, line, lineStart) => (
 
 lexRawStringContent = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ if(
       code @ index | eq("`"),
@@ -253,7 +307,7 @@ lexComment = (code, index, line, lineStart) => (
 
 lexCommentContent = (code, index, line, lineStart) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [index, line, lineStart],
     else: $ (
       char = code @ index;
@@ -277,7 +331,7 @@ lexWhitespace = (code, index, line, lineStart) => (
 
 lexWhitespaceContent = (code, index) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [index],
     else: $ if(
       code @ index | eq(" ") | or($ code @ index | eq("\t")),
@@ -311,7 +365,7 @@ lexNumber = (code, index, line, lineStart) => (
 
 lexInteger = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
@@ -330,7 +384,7 @@ lexInteger = (code, index, text) => (
 
 lexIntegerDigits = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
@@ -345,7 +399,7 @@ lexIntegerDigits = (code, index, text) => (
 
 lexDecimalPart = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ if(
       code @ index | eq("."),
@@ -361,7 +415,7 @@ lexDecimalPart = (code, index, text) => (
 
 lexDecimalDigits = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
@@ -376,7 +430,7 @@ lexDecimalDigits = (code, index, text) => (
 
 lexExponentPart = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
@@ -396,7 +450,7 @@ lexExponentPart = (code, index, text) => (
 
 lexExponentSign = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;
@@ -411,7 +465,7 @@ lexExponentSign = (code, index, text) => (
 
 lexExponentDigits = (code, index, text) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ [text, index],
     else: $ (
       char = code @ index;

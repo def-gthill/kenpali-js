@@ -20,6 +20,20 @@ runSpecFile(
       JSON.parse(expectedErrorDetails)
     );
   },
-  // ["Literal null"]
-  ["Invalid character", "Literal null"]
+  [
+    "Invalid character",
+    "Literal null",
+    "Literal false",
+    "Literal true",
+    "Literal integer",
+    "Literal decimal",
+    "Literal decimal in scientific notation",
+    "Literal string",
+    "Literal string with escapes",
+    "Long Unicode escape sequence",
+    "Invalid escape sequence",
+    "Unclosed string literal",
+    "Raw literal string",
+    "Unclosed raw string literal",
+  ]
 );
