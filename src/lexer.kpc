@@ -207,7 +207,7 @@ lexUnicodeEscape = (code, index, value) => (
   braceStart = index | add(2);
   [hex, hexEnd] = lexHexDigits(code, braceStart, "");
   if(
-    code @ hexEnd | eq("}"),
+    code | at(hexEnd, default: $ null) | eq("}"),
     then: $ (
       braceEnd = hexEnd | add(1);
       codePoint = parseHex(hex);
@@ -215,7 +215,7 @@ lexUnicodeEscape = (code, index, value) => (
       finalValue = [value, char] | join;
       finalValue
     ),
-    else: $ error("invalidUnicodeEscape", line: 0, column: 0),
+    else: $ error("invalidStringLiteral", line: 0, column: 0, value: ["\"", code, "\""] | join),
   )
 );
 
@@ -325,8 +325,8 @@ lexCommentContent = (code, index, line, lineStart) => (
 );
 
 lexWhitespace = (code, index, line, lineStart) => (
-  [index] = lexWhitespaceContent(code, index);
-  [null, index, line, lineStart]
+  [endIndex] = lexWhitespaceContent(code, index);
+  [null, endIndex, line, lineStart]
 );
 
 lexWhitespaceContent = (code, index) => (

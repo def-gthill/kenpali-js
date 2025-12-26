@@ -25,12 +25,6 @@ test("Escaped backslashes don't cause a string literal to gobble up following co
   t.deepEqual(result, array(literal("\\"), literal("foo")));
 });
 
-test("Variables can have names starting with literal keywords", (t) => {
-  const code = `trueValue`;
-  const result = kpparseSugared(code);
-  t.deepEqual(result, name("trueValue"));
-});
-
 test("Object key syntactic sugar parses to reflect the sugar", (t) => {
   const code = `{foo: 1, "bar": 2, (baz): 3}`;
   const result = kpparseSugared(code);

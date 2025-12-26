@@ -32,8 +32,18 @@ runSpecFile(
     "Literal string with escapes",
     "Long Unicode escape sequence",
     "Invalid escape sequence",
+    "Invalid Unicode escape sequence",
     "Unclosed string literal",
     "Raw literal string",
     "Unclosed raw string literal",
+    "A comment on its own line",
+    "A comment at the end of a line",
+    "Name with only letters",
+    "Name with uppercase letters",
+    "Name with numbers",
+    "Name starting with a keyword",
+    "Name in a module",
+    "Empty array",
+    // "Single-element array",
   ]
 );

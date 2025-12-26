@@ -389,12 +389,12 @@ removeGroupsTransform = (node) => (
   )
 );
 
-transformTree = (node, transform) => (
-  transformed = transform(node);
+transformTree = (node, f) => (
+  transformed = f(node);
   if(
     transformed.type | eq("array"),
     then: $ (
-      elements = transformed.elements | transform((element) => transformTree(element, transform));
+      elements = transformed.elements | transformArray(| transformTree(f));
       {type: transformed.type, elements: elements}
     ),
     else: $ if(
@@ -404,10 +404,10 @@ transformTree = (node, transform) => (
           if(
             entry | isArray,
             then: $ [
-              transformTree(entry @ 0, transform),
-              transformTree(entry @ 1, transform),
+              transformTree(entry @ 0, f),
+              transformTree(entry @ 1, f),
             ],
-            else: $ transformTree(entry, transform),
+            else: $ transformTree(entry, f),
           )
         ));
         {type: transformed.type, entries: entries}
@@ -421,44 +421,44 @@ transformTree = (node, transform) => (
               if(
                 name | isNull,
                 then: $ null,
-                else: $ transformTree(name, transform),
+                else: $ transformTree(name, f),
               ),
-              transformTree(value, transform),
+              transformTree(value, f),
             ]
           ));
-          result = transformTree(transformed.result, transform);
+          result = transformTree(transformed.result, f);
           {type: transformed.type, defs: defs, result: result}
         ),
         else: $ if(
           transformed.type | eq("function"),
           then: $ (
-            posParams = transformed.posParams | transform((param) => transformTree(param, transform));
+            posParams = transformed.posParams | transform((param) => transformTree(param, f));
             namedParams = transformed.namedParams | transform((param) => (
               if(
                 param | isArray,
                 then: $ [
-                  transformTree(param @ 0, transform),
-                  transformTree(param @ 1, transform),
+                  transformTree(param @ 0, f),
+                  transformTree(param @ 1, f),
                 ],
-                else: $ transformTree(param, transform),
+                else: $ transformTree(param, f),
               )
             ));
-            body = transformTree(transformed.body, transform);
+            body = transformTree(transformed.body, f);
             {type: transformed.type, posParams: posParams, namedParams: namedParams, body: body}
           ),
           else: $ if(
             transformed.type | eq("call"),
             then: $ (
-              callee = transformTree(transformed.callee, transform);
-              posArgs = transformed.posArgs | transform((arg) => transformTree(arg, transform));
+              callee = transformTree(transformed.callee, f);
+              posArgs = transformed.posArgs | transform((arg) => transformTree(arg, f));
               namedArgs = transformed.namedArgs | transform((arg) => (
                 if(
                   arg | isArray,
                   then: $ [
-                    transformTree(arg @ 0, transform),
-                    transformTree(arg @ 1, transform),
+                    transformTree(arg @ 0, f),
+                    transformTree(arg @ 1, f),
                   ],
-                  else: $ transformTree(arg, transform),
+                  else: $ transformTree(arg, f),
                 )
               ));
               {type: transformed.type, callee: callee, posArgs: posArgs, namedArgs: namedArgs}
@@ -466,8 +466,8 @@ transformTree = (node, transform) => (
             else: $ if(
               transformed.type | eq("index"),
               then: $ (
-                collection = transformTree(transformed.collection, transform);
-                index = transformTree(transformed.index, transform);
+                collection = transformTree(transformed.collection, f);
+                index = transformTree(transformed.index, f);
                 {type: transformed.type, collection: collection, index: index}
               ),
               else: $ transformed,
