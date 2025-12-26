@@ -20,7 +20,7 @@ parseModule = (code, trace: = false) => (
   )
 );
 
-getTracer = (trace) => if(trace, then: newTracer, else: $ dummyTracer);
+getTracer = (trace) => if(trace, then: newTracer, else: dummyTracer);
 
 newTracer = $ (
   indent = newVar(0);
@@ -45,7 +45,7 @@ newTracer = $ (
   self
 );
 
-dummyTracer = {
+dummyTracer = $ {
   inBlock: (_, f) => f(),
   log: $ null,
 };

@@ -59,3 +59,13 @@ test("Natural functions in a module can call other natural functions in the same
   const result = kpeval(kpparse(code), { modules: kpobject(["foo", module]) });
   t.is(result, "Hello, world!");
 });
+
+test.skip("Natural functions in a module can reference constants in the same module", (t) => {
+  const code = `foo/bar()`;
+  const module = kpmodule(
+    kpparseModule(`baz = "Hello, world"; bar = () => [baz, "!"] | join;`)
+  );
+
+  const result = kpeval(kpparse(code), { modules: kpobject(["foo", module]) });
+  t.is(result, "Hello, world!");
+});
