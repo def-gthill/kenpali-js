@@ -4,26 +4,25 @@ lex = (code) => (
 
 lexTokens = (code, index, line, lineStart) => (
   if(
-    index | ge(code | length),
+    index | gt(code | length),
     then: $ newStream(
       value: $ {
         type: "EOF",
         value: null,
         text: "",
         line: line,
-        column: code | length | sub(lineStart) | add(1),
+        column: code | length | sub(lineStart) | up,
       },
       next: emptyStream,
     ),
     else: $ (
       [token, endIndex, newLine, newLineStart] = lexToken(code, index, line, lineStart);
-      newIndex = endIndex | up;
       if(
         token | isNull,
-        then: $ lexTokens(code, newIndex, newLine, newLineStart),
+        then: $ lexTokens(code, endIndex, newLine, newLineStart),
         else: $ newStream(
           value: $ token,
-          next: $ lexTokens(code, newIndex, newLine, newLineStart),
+          next: $ lexTokens(code, endIndex, newLine, newLineStart),
         ),
       )
     ),
@@ -73,7 +72,7 @@ lexString = (code, index, line, lineStart) => (
   [text, value, contentEnd] = lexStringContent(code, quoteStart, "\"", "", false);
   if(
     contentEnd | ge(code | length),
-    then: $ throwError("unclosedString", line, contentEnd | sub(lineStart) | add(1)),
+    then: $ error("unclosedString", line:, column: contentEnd | sub(lineStart)),
     else: $ (
       finalText = [text, code @ contentEnd] | join;
       finalIndex = contentEnd | add(1);
@@ -82,7 +81,7 @@ lexString = (code, index, line, lineStart) => (
         value: value,
         text: finalText,
         line: line,
-        column: startIndex | sub(lineStart) | add(1),
+        column: startIndex | sub(lineStart),
       };
       [token, finalIndex, line, lineStart]
     ),
@@ -161,7 +160,7 @@ lexUnicodeEscape = (code, index, text, value) => (
       finalValue = [value, char] | join;
       [finalText, finalValue, braceEnd]
     ),
-    else: $ throwError("invalidUnicodeEscape", 0, 0),
+    else: $ error("invalidUnicodeEscape", line: 0, column: 0),
   )
 );
 
@@ -216,7 +215,7 @@ lexRawString = (code, index, line, lineStart) => (
   [text, contentEnd] = lexRawStringContent(code, backtickStart, "`");
   if(
     contentEnd | ge(code | length),
-    then: $ throwError("unclosedRawString", line, contentEnd | sub(lineStart) | add(1)),
+    then: $ error("unclosedRawString", line:, column: contentEnd | sub(lineStart)),
     else: $ (
       finalText = [text, "`"] | join;
       finalIndex = contentEnd | add(1);
@@ -226,7 +225,7 @@ lexRawString = (code, index, line, lineStart) => (
         value: value,
         text: finalText,
         line: line,
-        column: startIndex | sub(lineStart) | add(1),
+        column: startIndex | sub(lineStart),
       };
       [token, finalIndex, line, lineStart]
     ),
@@ -305,7 +304,7 @@ lexNumber = (code, index, line, lineStart) => (
     value: value,
     text: finalText,
     line: line,
-    column: startIndex | sub(lineStart) | add(1),
+    column: startIndex | sub(lineStart),
   };
   [token, exponentEnd, line, lineStart]
 );
@@ -533,7 +532,7 @@ lexOperator = (code, index, line, lineStart) => (
                                         else: $ if(
                                           char | eq("/"),
                                           then: $ makeToken("SLASH", "/", index | add(1), line, lineStart),
-                                          else: $ throwError("invalidCharacter", line, startIndex | sub(lineStart) | add(1), char),
+                                          else: $ error("invalidCharacter", line:, column: startIndex | sub(lineStart), character: char),
                                         ),
                                       ),
                                     ),
@@ -563,18 +562,11 @@ makeToken = (type, text, newIndex, line, lineStart) => (
     value: null,
     text: text,
     line: line,
-    column: startIndex | sub(lineStart) | add(1),
+    column: startIndex | sub(lineStart),
   };
   [token, newIndex, line, lineStart]
 );
 
-throwError = (errorName, line, column, char: = null) => (
-  // Error throwing will be handled by the parser
-  null
-);
-
-parseStringValue = (text) => (
-  // We build the value during lexing, so just return the accumulated value
-  // This function is not actually used - value is built in lexStringContent
-  ""
+error = (type, line:, column:, **properties) => (
+  throw(newError(type, line:, column:, **properties))
 );
