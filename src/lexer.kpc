@@ -432,30 +432,16 @@ parseNumber = (text) => (
 lexName = (code, index, line, lineStart) => (
   startIndex = index;
   [text, nameEnd] = lexNameContent(code, index, "");
-  kind = "NAME";
-  value = null;
-  if(
+  [kind, value] = if(
     text | eq("null"),
-    then: $ (
-      kind = "LITERAL";
-      value = null;
-      null
-    ),
+    then: $ ["LITERAL", null],
     else: $ if(
       text | eq("false"),
-      then: $ (
-        kind = "LITERAL";
-        value = false;
-        null
-      ),
+      then: $ ["LITERAL", false],
       else: $ if(
         text | eq("true"),
-        then: $ (
-          kind = "LITERAL";
-          value = true;
-          null
-        ),
-        else: $ null,
+        then: $ ["LITERAL", true],
+        else: $ ["NAME", null],
       ),
     ),
   );
@@ -464,7 +450,7 @@ lexName = (code, index, line, lineStart) => (
     value: value,
     text: text,
     line: line,
-    column: startIndex | sub(lineStart) | add(1),
+    column: startIndex | sub(lineStart),
   };
   [token, nameEnd, line, lineStart]
 );
