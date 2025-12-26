@@ -80,12 +80,15 @@ parseExpression = (tokens, index, tracer: = dummyTracer) => (
 parseScope = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
   "scope",
     $ (
-    [statements, statementEnd] = parseStatements(tokens, index, [], tracer:);
-    [result, assignableEnd] = parseAssignable(tokens, statementEnd, tracer:);
+    [[*statements, [target, result]], statementEnd] = parseStatements(tokens, index, [], tracer:);
     if(
-      statements | length | eq(0),
-      then: $ {ast: result, end: assignableEnd},
-      else: $ {ast: {type: "block", defs: statements, result: result}, end: assignableEnd},
+      target | isNull | not, // Result is an assignment
+      then: $ error("expectedStatementSeparator", line: tokens @ statementEnd |.line, column: tokens @ statementEnd |.column)
+    );
+    if(
+      statements | isEmpty,
+      then: $ {ast: result, end: statementEnd},
+      else: $ {ast: {type: "block", defs: statements, result: result}, end: statementEnd},
     )
   )
 );

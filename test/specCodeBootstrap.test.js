@@ -19,5 +19,6 @@ runSpecFile(
       expectedErrorName,
       JSON.parse(expectedErrorDetails)
     );
-  }
+  },
+  ["Literal null"]
 );
