@@ -1,6 +1,7 @@
-parse = (code, trace: = "false") => (
+parse = (code, trace: = false) => (
+  tracer = getTracer(trace);
   tokens = lexer/lex(code) | toArray;
-  ast = parseExpression(tokens, 0);
+  ast = tracer.inBlock("parse", $ parseExpression(tokens, 1, tracer:));
   if(
     tokens @ ast.end |.type | eq("EOF"),
     then: $ desugarer/desugar(ast.ast),
@@ -8,15 +9,46 @@ parse = (code, trace: = "false") => (
   )
 );
 
-parseModule = (code, trace: = "false") => (
+parseModule = (code, trace: = false) => (
+  tracer = getTracer(trace);
   tokens = lexer/lex(code) | toArray;
-  definitions = parseModuleDefinitions(tokens, 0);
+  definitions = parseModuleDefinitions(tokens, 1);
   if(
     tokens @ definitions.end |.type | eq("EOF"),
     then: $ definitions.definitions | transform(([name, value]) => [name.name, desugarer/desugar(value)]),
     else: $ error("unparsedInput", line: tokens @ definitions.end |.line, column: tokens @ definitions.end |.column),
   )
 );
+
+getTracer = (trace) => if(trace, then: newTracer, else: $ dummyTracer);
+
+newTracer = $ (
+  indent = newVar(0);
+  self = {
+    inBlock: (name, f) => (
+      self.log(["Begin ", name] | join);
+      indent.get() | up | indent.set;
+      result = f();
+      indent.get() | down | indent.set;
+      self.log(["End ", name] | join);
+      result
+    ),
+    log: (value) => (
+      [
+        *("| " | repeat | keepFirst(indent.get())),
+        value,
+      ]
+      | join
+      | write
+    )
+  };
+  self
+);
+
+dummyTracer = {
+  inBlock: (_, f) => f(),
+  log: $ null,
+};
 
 parseModuleDefinitions = (tokens, index) => (
   [definitions, definitionsEnd] = parseModuleDefinitionsLoop(tokens, index, []);
@@ -41,21 +73,24 @@ parseModuleDefinitionsLoop = (tokens, index, definitions) => (
   )
 );
 
-parseExpression = (tokens, index) => (
-  parseScope(tokens, index)
+parseExpression = (tokens, index, tracer: = dummyTracer) => (
+  parseScope(tokens, index, tracer:)
 );
 
-parseScope = (tokens, index) => (
-  [statements, statementEnd] = parseStatements(tokens, index, []);
-  [result, assignableEnd] = parseAssignable(tokens, statementEnd);
-  if(
-    statements | length | eq(0),
-    then: $ {ast: result, end: assignableEnd},
-    else: $ {ast: {type: "block", defs: statements, result: result}, end: assignableEnd},
+parseScope = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "scope",
+    $ (
+    [statements, statementEnd] = parseStatements(tokens, index, [], tracer:);
+    [result, assignableEnd] = parseAssignable(tokens, statementEnd, tracer:);
+    if(
+      statements | length | eq(0),
+      then: $ {ast: result, end: assignableEnd},
+      else: $ {ast: {type: "block", defs: statements, result: result}, end: assignableEnd},
+    )
   )
 );
 
-parseStatements = (tokens, index, statements) => (
+parseStatements = (tokens, index, statements, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("EOF"),
     then: $ [statements, index],
@@ -65,14 +100,14 @@ parseStatements = (tokens, index, statements) => (
         token.type | eq("SEMICOLON"),
         then: $ [statements, index],
         else: $ (
-          [def, statementEnd] = parseStatement(tokens, index);
+          [def, statementEnd] = parseStatement(tokens, index, tracer:);
           if(
             tokens @ statementEnd |.type | eq("SEMICOLON"),
             then: $ (
               semicolonEnd = statementEnd | add(1);
-              parseStatements(tokens, semicolonEnd, statements | add(def))
+              parseStatements(tokens, semicolonEnd, statements | add(def), tracer:)
             ),
-            else: $ [statements | add(def), statementEnd],
+            else: $ [[*statements, def], statementEnd],
           )
         ),
       )
@@ -80,33 +115,36 @@ parseStatements = (tokens, index, statements) => (
   )
 );
 
-parseStatement = (tokens, index) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("NAME") | or($ token.type | eq("UNDERSCORE") | or($ token.type | eq("OPEN_BRACKET") | or($ token.type | eq("OPEN_BRACE")))),
-    then: $ (
-      [target, patternEnd] = parseNamePattern(tokens, index);
-      if(
-        tokens @ patternEnd |.type | eq("EQUALS"),
-        then: $ (
-          equalsEnd = patternEnd | add(1);
-          [value, assignableEnd] = parseAssignable(tokens, equalsEnd);
+parseStatement = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "statement",
+  $ (
+    token = tokens @ index;
+    if(
+      token.type | eq("NAME") | or($ token.type | eq("UNDERSCORE") | or($ token.type | eq("OPEN_BRACKET") | or($ token.type | eq("OPEN_BRACE")))),
+      then: $ (
+        [target, patternEnd] = parseNamePattern(tokens, index, tracer:);
+        if(
+          tokens @ patternEnd |.type | eq("EQUALS"),
+          then: $ (
+            equalsEnd = patternEnd | add(1);
+            [value, assignableEnd] = parseAssignable(tokens, equalsEnd, tracer:);
           [[target, value], assignableEnd]
         ),
         else: $ (
-          [value, assignableEnd] = parseAssignable(tokens, patternEnd);
+          [value, assignableEnd] = parseAssignable(tokens, patternEnd, tracer:);
           [[null, value], assignableEnd]
         ),
       )
     ),
     else: $ (
-      [value, assignableEnd] = parseAssignable(tokens, index);
-      [[null, value], assignableEnd]
-    ),
+      [value, assignableEnd] = parseAssignable(tokens, index, tracer:);
+        [[null, value], assignableEnd]
+      ),
+    )
   )
 );
 
-parseNamePattern = (tokens, index) => (
+parseNamePattern = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("UNDERSCORE"),
@@ -120,15 +158,15 @@ parseNamePattern = (tokens, index) => (
       else: $ if(
         token.type | eq("OPEN_BRACE"),
         then: $ parseObjectPattern(tokens, index),
-        else: $ parseName(tokens, index),
+        else: $ parseName(tokens, index, tracer:),
       ),
     ),
   )
 );
 
-parseArrayPattern = (tokens, index) => (
+parseArrayPattern = (tokens, index, tracer: = dummyTracer) => (
   bracketStart = index | add(1);
-  [elements, elementsEnd] = parseArrayPatternElements(tokens, bracketStart, []);
+  [elements, elementsEnd] = parseArrayPatternElements(tokens, bracketStart, [], tracer:);
   if(
     tokens @ elementsEnd |.type | eq("CLOSE_BRACKET"),
     then: $ (
@@ -139,17 +177,17 @@ parseArrayPattern = (tokens, index) => (
   )
 );
 
-parseArrayPatternElements = (tokens, index, elements) => (
+parseArrayPatternElements = (tokens, index, elements, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_BRACKET"),
     then: $ [elements, index],
     else: $ (
-      [element, elementEnd] = parseArrayPatternElement(tokens, index);
+      [element, elementEnd] = parseArrayPatternElement(tokens, index, tracer:);
       if(
         tokens @ elementEnd |.type | eq("COMMA"),
         then: $ (
           commaEnd = elementEnd | add(1);
-          parseArrayPatternElements(tokens, commaEnd, elements | add(element))
+          parseArrayPatternElements(tokens, commaEnd, elements | add(element), tracer:)
         ),
         else: $ [elements | add(element), elementEnd],
       )
@@ -157,31 +195,31 @@ parseArrayPatternElements = (tokens, index, elements) => (
   )
 );
 
-parseArrayPatternElement = (tokens, index) => (
+parseArrayPatternElement = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("STAR"),
     then: $ (
       starEnd = index | add(1);
-      [pattern, patternEnd] = parseNamePattern(tokens, starEnd);
+      [pattern, patternEnd] = parseNamePattern(tokens, starEnd, tracer:);
       [{type: "arrayRest", name: pattern}, patternEnd]
     ),
     else: $ if(
       tokens @ (index | add(1)) |.type | eq("EQUALS"),
       then: $ (
-        [pattern, patternEnd] = parseNamePattern(tokens, index);
+        [pattern, patternEnd] = parseNamePattern(tokens, index, tracer:);
         equalsEnd = patternEnd | add(1);
-        [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd);
+        [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd, tracer:);
         [{type: "optional", name: pattern, defaultValue: defaultValue}, defaultValueEnd]
       ),
-      else: $ parseNamePattern(tokens, index),
+      else: $ parseNamePattern(tokens, index, tracer:),
     ),
   )
 );
 
-parseObjectPattern = (tokens, index) => (
+parseObjectPattern = (tokens, index, tracer: = dummyTracer) => (
   braceStart = index | add(1);
-  [elements, elementsEnd] = parseObjectPatternElements(tokens, braceStart, []);
+  [elements, elementsEnd] = parseObjectPatternElements(tokens, braceStart, [], tracer:);
   if(
     tokens @ elementsEnd |.type | eq("CLOSE_BRACE"),
     then: $ (
@@ -192,17 +230,17 @@ parseObjectPattern = (tokens, index) => (
   )
 );
 
-parseObjectPatternElements = (tokens, index, elements) => (
+parseObjectPatternElements = (tokens, index, elements, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_BRACE"),
     then: $ [elements, index],
     else: $ (
-      [element, elementEnd] = parseObjectPatternElement(tokens, index);
+      [element, elementEnd] = parseObjectPatternElement(tokens, index, tracer:);
       if(
         tokens @ elementEnd |.type | eq("COMMA"),
         then: $ (
           commaEnd = elementEnd | add(1);
-          parseObjectPatternElements(tokens, commaEnd, elements | add(element))
+          parseObjectPatternElements(tokens, commaEnd, elements | add(element), tracer:)
         ),
         else: $ [elements | add(element), elementEnd],
       )
@@ -210,40 +248,40 @@ parseObjectPatternElements = (tokens, index, elements) => (
   )
 );
 
-parseObjectPatternElement = (tokens, index) => (
+parseObjectPatternElement = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("DOUBLE_STAR"),
     then: $ (
       starEnd = index | add(1);
-      [pattern, patternEnd] = parseNamePattern(tokens, starEnd);
+      [pattern, patternEnd] = parseNamePattern(tokens, starEnd, tracer:);
       [{type: "objectRest", name: pattern}, patternEnd]
     ),
     else: $ if(
       tokens @ (index | add(1)) |.type | eq("COLON"),
       then: $ (
-        [key, keyEnd] = parseAssignable(tokens, index);
+        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
         colonEnd = keyEnd | add(1);
-        [pattern, patternEnd] = parseNamePattern(tokens, colonEnd);
+        [pattern, patternEnd] = parseNamePattern(tokens, colonEnd, tracer:);
         [{type: "entry", key: key, value: pattern}, patternEnd]
       ),
       else: $ if(
         tokens @ (index | add(1)) |.type | eq("EQUALS"),
         then: $ (
-          [simple, simpleEnd] = parseObjectPatternSimple(tokens, index);
+          [simple, simpleEnd] = parseObjectPatternSimple(tokens, index, tracer:);
           equalsEnd = simpleEnd | add(1);
-          [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd);
+          [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd, tracer:);
           [{type: "optional", name: simple, defaultValue: defaultValue}, defaultValueEnd]
         ),
         else: $ (
-          parseObjectPatternSimple(tokens, index)
+          parseObjectPatternSimple(tokens, index, tracer:)
         ),
       ),
     ),
   )
 );
 
-parseObjectPatternSimple = (tokens, index) => (
+parseObjectPatternSimple = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("NAME"),
@@ -254,7 +292,7 @@ parseObjectPatternSimple = (tokens, index) => (
         then: $ (
           name = token.text;
           colonEnd = nameStart | add(1);
-          [pattern, patternEnd] = parseNamePattern(tokens, colonEnd);
+          [pattern, patternEnd] = parseNamePattern(tokens, colonEnd, tracer:);
           [{type: "keyName", key: {type: "name", name: name}}, patternEnd]
         ),
         else: $ [{type: "name", name: token.text}, nameStart],
@@ -264,39 +302,42 @@ parseObjectPatternSimple = (tokens, index) => (
   )
 );
 
-parseAssignable = (tokens, index) => (
-  parseArrowFunction(tokens, index)
+parseAssignable = (tokens, index, tracer: = dummyTracer) => (
+  parseArrowFunction(tokens, index, tracer:)
 );
 
-parseArrowFunction = (tokens, index) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("OPEN_PAREN"),
-    then: $ (
-      [params, paramsEnd] = parseParameterList(tokens, index);
-      if(
-        tokens @ paramsEnd |.type | eq("ARROW"),
-        then: $ (
-          arrowEnd = paramsEnd | add(1);
-          [body, bodyEnd] = parseAssignable(tokens, arrowEnd);
-          [{type: "arrow", params: params, body: body}, bodyEnd]
-        ),
-        else: $ error("expectedArrowFunction", line: tokens @ paramsEnd |.line, column: tokens @ paramsEnd |.column),
-      )
-    ),
-    else: $ (
-      [result, resultEnd] = parseLoosePipelineCall(tokens, index);
-      if(
-        tokens @ resultEnd |.type | eq("ARROW"),
-        then: $ (
-          arrowEnd = resultEnd | add(1);
-          [body, bodyEnd] = parseAssignable(tokens, arrowEnd);
-          params = {type: "mixedParamList", params: []};
-          [{type: "arrow", params: params, body: body}, bodyEnd]
-        ),
-        else: $ [result, resultEnd],
-      )
-    ),
+parseArrowFunction = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "arrowFunction",
+  $ (
+    token = tokens @ index;
+    if(
+      token.type | eq("OPEN_PAREN"),
+      then: $ (
+        [params, paramsEnd] = parseParameterList(tokens, index, tracer:);
+        if(
+          tokens @ paramsEnd |.type | eq("ARROW"),
+          then: $ (
+            arrowEnd = paramsEnd | add(1);
+            [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
+            [{type: "arrow", params: params, body: body}, bodyEnd]
+          ),
+          else: $ error("expectedArrowFunction", line: tokens @ paramsEnd |.line, column: tokens @ paramsEnd |.column),
+        )
+      ),
+      else: $ (
+        [result, resultEnd] = parseLoosePipelineCall(tokens, index, tracer:);
+        if(
+          tokens @ resultEnd |.type | eq("ARROW"),
+          then: $ (
+            arrowEnd = resultEnd | add(1);
+            [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
+            params = {type: "mixedParamList", params: []};
+            [{type: "arrow", params: params, body: body}, bodyEnd]
+          ),
+          else: $ [result, resultEnd],
+        )
+      ),
+    )
   )
 );
 
@@ -320,12 +361,12 @@ parseParameterList = (tokens, index) => (
   )
 );
 
-parseParameters = (tokens, index, params) => (
+parseParameters = (tokens, index, params, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_PAREN"),
     then: $ [params, index],
     else: $ (
-      [param, paramEnd] = parseParameter(tokens, index);
+      [param, paramEnd] = parseParameter(tokens, index, tracer:);
       if(
         tokens @ paramEnd |.type | eq("COMMA"),
         then: $ (
@@ -338,167 +379,182 @@ parseParameters = (tokens, index, params) => (
   )
 );
 
-parseParameter = (tokens, index) => (
-  parseObjectPatternElement(tokens, index)
+parseParameter = (tokens, index, tracer: = dummyTracer) => (
+  parseObjectPatternElement(tokens, index, tracer:)
 );
 
-parseLoosePipelineCall = (tokens, index) => (
-  [start, startEnd] = parseTightPipelineCall(tokens, index);
-  if(
-    tokens @ startEnd |.type | eq("PIPE") | or($ tokens @ startEnd |.type | eq("PIPE_DOT") | or($ tokens @ startEnd |.type | eq("AT"))),
-    then: $ (
-      [pipeline, pipelineEnd] = parseLoosePipeline(tokens, startEnd);
-      [{type: "pipelineCall", start: start, pipeline: pipeline}, pipelineEnd]
-    ),
-    else: $ [start, startEnd],
+parseLoosePipelineCall = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "loosePipelineCall",
+  $ (
+    [start, startEnd] = parseTightPipelineCall(tokens, index, tracer:);
+    if(
+      tokens @ startEnd |.type | eq("PIPE") | or($ tokens @ startEnd |.type | eq("PIPE_DOT") | or($ tokens @ startEnd |.type | eq("AT"))),
+      then: $ (
+        [pipeline, pipelineEnd] = parseLoosePipeline(tokens, startEnd, tracer:);
+        [{type: "pipelineCall", start: start, pipeline: pipeline}, pipelineEnd]
+      ),
+      else: $ [start, startEnd],
+    )
   )
 );
 
-parseLoosePipeline = (tokens, index) => (
-  [steps, stepsEnd] = parseLoosePipelineSteps(tokens, index, []);
+parseLoosePipeline = (tokens, index, tracer: = dummyTracer) => (
+  [steps, stepsEnd] = parseLoosePipelineSteps(tokens, index, [], tracer:);
   [{type: "loosePipeline", steps: steps}, stepsEnd]
 );
 
-parseLoosePipelineSteps = (tokens, index, steps) => (
+parseLoosePipelineSteps = (tokens, index, steps, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("PIPE") | or($ token.type | eq("PIPE_DOT") | or($ token.type | eq("AT"))),
     then: $ (
-      [step, stepEnd] = parseLoosePipelineStep(tokens, index);
-      parseLoosePipelineSteps(tokens, stepEnd, steps | add(step))
+      [step, stepEnd] = parseLoosePipelineStep(tokens, index, tracer:);
+      parseLoosePipelineSteps(tokens, stepEnd, steps | add(step), tracer:)
     ),
     else: $ [steps, index],
   )
 );
 
-parseLoosePipelineStep = (tokens, index) => (
+parseLoosePipelineStep = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("PIPE_DOT"),
     then: $ (
       dotStart = index | add(1);
-      [name, nameEnd] = parseName(tokens, dotStart);
-      [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, nameEnd, []);
+      [name, nameEnd] = parseName(tokens, dotStart, tracer:);
+      [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, nameEnd, [], tracer:);
       [{type: "pipeDot", index: {type: "literal", value: name.name}, steps: tightSteps}, stepsEnd]
     ),
     else: $ if(
       token.type | eq("PIPE"),
       then: $ (
         pipeStart = index | add(1);
-        [callee, calleeEnd] = parseTightPipelineCall(tokens, pipeStart);
+        [callee, calleeEnd] = parseTightPipelineCall(tokens, pipeStart, tracer:);
         [{type: "pipe", callee: callee}, calleeEnd]
       ),
       else: $ (
         atStart = index | add(1);
-        [idx, idxEnd] = parseTightPipelineCall(tokens, atStart);
+        [idx, idxEnd] = parseTightPipelineCall(tokens, atStart, tracer:);
         [{type: "at", index: idx}, idxEnd]
       ),
     ),
   )
 );
 
-parseTightPipelineCall = (tokens, index) => (
-  [start, startEnd] = parseAtomic(tokens, index);
-  [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, startEnd, []);
-  if(
-    tightSteps | length | gt(0),
-    then: $ (
-      pipeline = {type: "tightPipeline", steps: tightSteps};
-      [{type: "pipelineCall", start: start, pipeline: pipeline}, stepsEnd]
-    ),
-    else: $ [start, stepsEnd],
+parseTightPipelineCall = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "tightPipelineCall",
+  $ (
+    [start, startEnd] = parseAtomic(tokens, index, tracer:);
+    [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, startEnd, [], tracer:);
+    if(
+      tightSteps | length | gt(0),
+      then: $ (
+        pipeline = {type: "tightPipeline", steps: tightSteps};
+        [{type: "pipelineCall", start: start, pipeline: pipeline}, stepsEnd]
+      ),
+      else: $ [start, stepsEnd],
+    )
   )
 );
 
-parseTightPipelineSteps = (tokens, index, steps) => (
+parseTightPipelineSteps = (tokens, index, steps, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("DOT") | or($ token.type | eq("OPEN_PAREN")),
     then: $ (
-      [step, stepEnd] = parseTightPipelineStep(tokens, index);
-      parseTightPipelineSteps(tokens, stepEnd, steps | add(step))
+      [step, stepEnd] = parseTightPipelineStep(tokens, index, tracer:);
+      parseTightPipelineSteps(tokens, stepEnd, steps | add(step), tracer:)
     ),
     else: $ [steps, index],
   )
 );
 
-parseTightPipelineStep = (tokens, index) => (
+parseTightPipelineStep = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("DOT"),
     then: $ (
       dotStart = index | add(1);
-      [name, nameEnd] = parseName(tokens, dotStart);
+      [name, nameEnd] = parseName(tokens, dotStart, tracer:);
       [{type: "dot", index: {type: "literal", value: name.name}}, nameEnd]
     ),
     else: $ (
-      parseArgumentList(tokens, index)
+      parseArgumentList(tokens, index, tracer:)
     ),
   )
 );
 
-parseAtomic = (tokens, index) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("OPEN_PAREN"),
-    then: $ parseGroup(tokens, index),
-    else: $ if(
-      token.type | eq("OPEN_BRACKET"),
-      then: $ parseArray(tokens, index),
+parseAtomic = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "atomic",
+  $ (
+    token = tokens @ index;
+    if(
+      token.type | eq("OPEN_PAREN"),
+      then: $ parseGroup(tokens, index, tracer:),
       else: $ if(
-        token.type | eq("OPEN_BRACE"),
-        then: $ parseObject(tokens, index),
+        token.type | eq("OPEN_BRACKET"),
+        then: $ parseArray(tokens, index, tracer:),
         else: $ if(
-          token.type | eq("LITERAL"),
-          then: $ parseLiteral(tokens, index),
+          token.type | eq("OPEN_BRACE"),
+          then: $ parseObject(tokens, index, tracer:),
           else: $ if(
-            token.type | eq("DOLLAR"),
-            then: $ parseConstantFunction(tokens, index),
-            else: $ parseName(tokens, index),
+            token.type | eq("LITERAL"),
+            then: $ parseLiteral(tokens, index, tracer:),
+            else: $ if(
+              token.type | eq("DOLLAR"),
+              then: $ parseConstantFunction(tokens, index, tracer:),
+              else: $ parseName(tokens, index, tracer:),
+            ),
           ),
         ),
       ),
-    ),
+    )
   )
 );
 
-parseGroup = (tokens, index) => (
-  parenStart = index | add(1);
-  [expr, exprEnd] = parseExpression(tokens, parenStart);
-  if(
-    tokens @ exprEnd |.type | eq("CLOSE_PAREN"),
-    then: $ (
-      parenEnd = exprEnd | add(1);
-      [{type: "group", expression: expr}, parenEnd]
-    ),
-    else: $ error("unclosedGroup", line: tokens @ exprEnd |.line, column: tokens @ exprEnd |.column),
+parseGroup = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "group",
+  $ (
+    parenStart = index | add(1);
+    [expr, exprEnd] = parseExpression(tokens, parenStart, tracer:);
+    if(
+      tokens @ exprEnd |.type | eq("CLOSE_PAREN"),
+      then: $ (
+        parenEnd = exprEnd | add(1);
+        [{type: "group", expression: expr}, parenEnd]
+      ),
+      else: $ error("unclosedGroup", line: tokens @ exprEnd |.line, column: tokens @ exprEnd |.column),
+    )
   )
 );
 
-parseArray = (tokens, index) => (
-  bracketStart = index | add(1);
-  [elements, elementsEnd] = parseArrayElements(tokens, bracketStart, []);
-  if(
-    tokens @ elementsEnd |.type | eq("CLOSE_BRACKET"),
-    then: $ (
-      bracketEnd = elementsEnd | add(1);
-      [{type: "array", elements: elements}, bracketEnd]
-    ),
-    else: $ error("unclosedArray", line: tokens @ elementsEnd |.line, column: tokens @ elementsEnd |.column),
+parseArray = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "array",
+  $ (
+    bracketStart = index | add(1);
+    [elements, elementsEnd] = parseArrayElements(tokens, bracketStart, [], tracer:);
+    if(
+      tokens @ elementsEnd |.type | eq("CLOSE_BRACKET"),
+      then: $ (
+        bracketEnd = elementsEnd | add(1);
+        [{type: "array", elements: elements}, bracketEnd]
+      ),
+      else: $ error("unclosedArray", line: tokens @ elementsEnd |.line, column: tokens @ elementsEnd |.column),
+    )
   )
 );
 
-parseArrayElements = (tokens, index, elements) => (
+parseArrayElements = (tokens, index, elements, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_BRACKET"),
     then: $ [elements, index],
     else: $ (
-      [element, elementEnd] = parseArrayElement(tokens, index);
+      [element, elementEnd] = parseArrayElement(tokens, index, tracer:);
       if(
         tokens @ elementEnd |.type | eq("COMMA"),
         then: $ (
           commaEnd = elementEnd | add(1);
-          parseArrayElements(tokens, commaEnd, elements | add(element))
+          parseArrayElements(tokens, commaEnd, elements | add(element), tracer:)
         ),
         else: $ [elements | add(element), elementEnd],
       )
@@ -506,43 +562,46 @@ parseArrayElements = (tokens, index, elements) => (
   )
 );
 
-parseArrayElement = (tokens, index) => (
+parseArrayElement = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("STAR"),
     then: $ (
       starEnd = index | add(1);
-      [value, valueEnd] = parseAssignable(tokens, starEnd);
+      [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
       [{type: "arraySpread", value: value}, valueEnd]
     ),
-    else: $ parseAssignable(tokens, index),
+    else: $ parseAssignable(tokens, index, tracer:),
   )
 );
 
-parseObject = (tokens, index) => (
-  braceStart = index | add(1);
-  [entries, entriesEnd] = parseObjectElements(tokens, braceStart, []);
-  if(
-    tokens @ entriesEnd |.type | eq("CLOSE_BRACE"),
-    then: $ (
-      braceEnd = entriesEnd | add(1);
-      [{type: "object", entries: entries}, braceEnd]
-    ),
-    else: $ error("unclosedObject", line: tokens @ entriesEnd |.line, column: tokens @ entriesEnd |.column),
+parseObject = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "object",
+  $ (
+    braceStart = index | add(1);
+    [entries, entriesEnd] = parseObjectElements(tokens, braceStart, [], tracer:);
+    if(
+      tokens @ entriesEnd |.type | eq("CLOSE_BRACE"),
+      then: $ (
+        braceEnd = entriesEnd | add(1);
+        [{type: "object", entries: entries}, braceEnd]
+      ),
+      else: $ error("unclosedObject", line: tokens @ entriesEnd |.line, column: tokens @ entriesEnd |.column),
+    )
   )
 );
 
-parseObjectElements = (tokens, index, entries) => (
+parseObjectElements = (tokens, index, entries, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_BRACE"),
     then: $ [entries, index],
     else: $ (
-      [entry, entryEnd] = parseObjectElement(tokens, index);
+      [entry, entryEnd] = parseObjectElement(tokens, index, tracer:);
       if(
         tokens @ entryEnd |.type | eq("COMMA"),
         then: $ (
           commaEnd = entryEnd | add(1);
-          parseObjectElements(tokens, commaEnd, entries | add(entry))
+          parseObjectElements(tokens, commaEnd, entries | add(entry), tracer:)
         ),
         else: $ [entries | add(entry), entryEnd],
       )
@@ -550,30 +609,30 @@ parseObjectElements = (tokens, index, entries) => (
   )
 );
 
-parseObjectElement = (tokens, index) => (
+parseObjectElement = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("DOUBLE_STAR"),
     then: $ (
       starEnd = index | add(1);
-      [value, valueEnd] = parseAssignable(tokens, starEnd);
+      [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
       [{type: "objectSpread", value: value}, valueEnd]
     ),
     else: $ if(
       tokens @ (index | add(1)) |.type | eq("COLON"),
       then: $ (
-        [key, keyEnd] = parseAssignable(tokens, index);
+        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
         colonEnd = keyEnd | add(1);
-        [value, valueEnd] = parseAssignable(tokens, colonEnd);
+        [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
         [{type: "entry", key: key, value: value}, valueEnd]
       ),
       else: $ (
-        [name, nameEnd] = parseName(tokens, index);
+        [name, nameEnd] = parseName(tokens, index, tracer:);
         if(
           tokens @ nameEnd |.type | eq("COLON"),
           then: $ (
             colonEnd = nameEnd | add(1);
-            [value, valueEnd] = parseAssignable(tokens, colonEnd);
+            [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
             [{type: "entry", key: {type: "keyName", key: name}, value: value}, valueEnd]
           ),
           else: $ (
@@ -585,53 +644,66 @@ parseObjectElement = (tokens, index) => (
   )
 );
 
-parseLiteral = (tokens, index) => (
-  token = tokens @ index;
-  literalEnd = index | add(1);
-  [{type: "literal", value: token.value}, literalEnd]
-);
-
-parseConstantFunction = (tokens, index) => (
-  dollarEnd = index | add(1);
-  [body, bodyEnd] = parseAssignable(tokens, dollarEnd);
-  [{type: "constantFunction", body: body}, bodyEnd]
-);
-
-parseName = (tokens, index) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("NAME"),
-    then: $ (
-      nameStart = index | add(1);
-      if(
-        tokens @ nameStart |.type | eq("SLASH"),
-        then: $ (
-          moduleName = token.text;
-          slashEnd = nameStart | add(1);
-          nameToken = tokens @ slashEnd;
-          if(
-            nameToken.type | eq("NAME"),
-            then: $ (
-              nameEnd = slashEnd | add(1);
-              [{type: "name", name: nameToken.text, from: moduleName}, nameEnd]
-            ),
-            else: $ error("expectedNameInModule", line: nameToken.line, column: nameToken.column),
-          )
-        ),
-        else: $ [{type: "name", name: token.text}, nameStart],
-      )
-    ),
-    else: $ error("expectedName", line: token.line, column: token.column),
+parseLiteral = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "literal",
+  $ (
+    token = tokens @ index;
+    literalEnd = index | add(1);
+    tracer.log(
+      ["Matched literal ", token.value | display, " at ", index | display]
+      | join
+    );
+    [{type: "literal", value: token.value}, literalEnd]
   )
 );
 
-parseArgumentList = (tokens, index) => (
+parseConstantFunction = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "constantFunction",
+  $ (
+    dollarEnd = index | add(1);
+    [body, bodyEnd] = parseAssignable(tokens, dollarEnd, tracer:);
+    [{type: "constantFunction", body: body}, bodyEnd]
+  )
+);
+
+parseName = (tokens, index, tracer: = dummyTracer) => tracer.inBlock(
+  "name",
+  $ (
+    token = tokens @ index;
+    if(
+      token.type | eq("NAME"),
+      then: $ (
+        nameStart = index | add(1);
+        if(
+          tokens @ nameStart |.type | eq("SLASH"),
+          then: $ (
+            moduleName = token.text;
+            slashEnd = nameStart | add(1);
+            nameToken = tokens @ slashEnd;
+            if(
+              nameToken.type | eq("NAME"),
+              then: $ (
+                nameEnd = slashEnd | add(1);
+                [{type: "name", name: nameToken.text, from: moduleName}, nameEnd]
+              ),
+              else: $ error("expectedNameInModule", line: nameToken.line, column: nameToken.column),
+            )
+          ),
+          else: $ [{type: "name", name: token.text}, nameStart],
+        )
+      ),
+      else: $ error("expectedName", line: token.line, column: token.column),
+    )
+  )
+);
+
+parseArgumentList = (tokens, index, tracer: = dummyTracer) => (
   token = tokens @ index;
   if(
     token.type | eq("OPEN_PAREN"),
     then: $ (
       parenStart = index | add(1);
-      [args, argsEnd] = parseArguments(tokens, parenStart, []);
+      [args, argsEnd] = parseArguments(tokens, parenStart, [], tracer:);
       if(
         tokens @ argsEnd |.type | eq("CLOSE_PAREN"),
         then: $ (
@@ -645,17 +717,17 @@ parseArgumentList = (tokens, index) => (
   )
 );
 
-parseArguments = (tokens, index, args) => (
+parseArguments = (tokens, index, args, tracer: = dummyTracer) => (
   if(
     tokens @ index |.type | eq("CLOSE_PAREN"),
     then: $ [args, index],
     else: $ (
-      [arg, argEnd] = parseArgument(tokens, index);
+      [arg, argEnd] = parseArgument(tokens, index, tracer:);
       if(
         tokens @ argEnd |.type | eq("COMMA"),
         then: $ (
           commaEnd = argEnd | add(1);
-          parseArguments(tokens, commaEnd, args | add(arg))
+          parseArguments(tokens, commaEnd, args | add(arg), tracer:)
         ),
         else: $ [args | add(arg), argEnd],
       )
@@ -702,7 +774,6 @@ parseArgument = (tokens, index) => (
   )
 );
 
-error = (type, line:, column:, character: = null) => (
-  // Error creation - this will need to be handled properly
-  null
+error = (type, line:, column:, **properties) => (
+  throw(newError(type, line:, column:, **properties))
 );
