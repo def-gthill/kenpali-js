@@ -155,54 +155,6 @@ getStringValue = (code, index, line, lineStart, value, escaped) => (
   )
 );
 
-lexStringContent = (code, index, line, lineStart, text, value, escaped) => (
-  if(
-    index | gt(code | length),
-    then: $ [text, value, index],
-    else: $ (
-      char = code @ index;
-      if(
-        escaped,
-        then: $ (
-          if(
-            char | eq("u") | and($ code @ (index | add(1)) | eq("{")),
-            then: $ lexUnicodeEscape(code, index, text, value),
-            else: $ (
-              escapedChar = char | switch(
-                ["\"", $ "\""],
-                ["\\", $ "\\"],
-                ["\/", $ "\/"],
-                ["b", $ "\b"],
-                ["f", $ "\f"],
-                ["n", $ "\n"],
-                ["r", $ "\r"],
-                ["t", $ "\t"],
-                else: $ error("invalidStringLiteral", line:, column: index | sub(lineStart), value: text),
-              );
-              newText = [text, "\\", char] | join;
-              newValue = [value, escapedChar] | join;
-              lexStringContent(code, index | add(1), line, lineStart, newText, newValue, false)
-            ),
-          )
-        ),
-        else: $ if(
-          char | eq("\\"),
-          then: $ lexStringContent(code, index | add(1), line, lineStart, text, value, true),
-          else: $ if(
-            char | eq("\""),
-            then: $ [text, value, index],
-            else: $ (
-              newText = [text, char] | join;
-              newValue = [value, char] | join;
-              lexStringContent(code, index | add(1), line, lineStart, newText, newValue, false)
-            ),
-          ),
-        ),
-      )
-    ),
-  )
-);
-
 lexUnicodeEscape = (code, index, value) => (
   braceStart = index | add(2);
   [hex, hexEnd] = lexHexDigits(code, braceStart, "");
