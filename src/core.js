@@ -4,6 +4,7 @@ absolute = (n) => n | butIf(n | lt(0), $ negative(n));
 isDivisibleBy = (a, b) => a | remainderBy(b) | eq(0);
 joinLines = (strings) => (strings | join(on: "\n"));
 splitLines = (string) => (string | split(on: "\n"));
+eqOneOf = (value, *options) => options | forSome(| eq(value));
 isBetween = (n, lower, upper) => (
     n | ge(lower) | and($ n | le(upper))
 );
