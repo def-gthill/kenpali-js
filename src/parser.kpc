@@ -365,28 +365,13 @@ parseObjectPatternSimple = (tokens, index, tracer:) => (
   )
 );
 
-parseAssignable = (tokens, index, tracer:) => (
-  parseArrowFunction(tokens, index, tracer:)
-);
-
-parseArrowFunction = (tokens, index, tracer:) => tracer.inBlock(
-  "arrowFunction",
+parseAssignable = (tokens, index, tracer:) => tracer.inBlock(
+  "assignable",
   $ (
     token = tokens @ index;
     if(
       token.type | eq("OPEN_PAREN"),
-      then: $ (
-        [params, paramsEnd] = parseParameterListOrGroup(tokens, index, tracer:);
-        if(
-          tokens @ paramsEnd |.type | eq("ARROW"),
-          then: $ (
-            arrowEnd = paramsEnd | add(1);
-            [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
-            [{type: "arrow", params: params, body: body}, bodyEnd]
-          ),
-          else: $ [params, paramsEnd],
-        )
-      ),
+      then: $ parseArrowFunctionOrGroup(tokens, index, tracer:),
       else: $ (
         [result, resultEnd] = parseLoosePipelineCall(tokens, index, tracer:);
         if(
@@ -404,8 +389,48 @@ parseArrowFunction = (tokens, index, tracer:) => tracer.inBlock(
   )
 );
 
+parseArrowFunctionOrGroup = (tokens, index, tracer:) => (
+  [params, paramsEnd] = parseParameterListOrGroup(tokens, index, tracer:);
+  if(
+    tokens @ paramsEnd |.type | eq("ARROW"),
+    then: $ (
+      arrowEnd = paramsEnd | up;
+      [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
+      [{type: "arrow", params: params | toParameterList(tokens, index), body: body}, bodyEnd]
+    ),
+    else: $ [params, paramsEnd],
+  )
+);
+
 parseParameterListOrGroup = (tokens, index, tracer:) => (
-  parseGroup(tokens, index, tracer:)
+  parenEnd = index | up;
+  if(
+    tokens @ parenEnd |.type | eq("CLOSE_PAREN"),
+    then: $ [{type: "mixedParamList", params: []}, parenEnd | up],
+    else: $ (
+      [expr, exprEnd] = parseExpression(tokens, parenEnd, tracer:);
+      tokens @ exprEnd |.type | switch(
+        ["CLOSE_PAREN", $ [{type: "group", expression: expr}, exprEnd | up]],
+        ["COMMA", $ (
+          [params, paramsEnd] = parseParameters(tokens, exprEnd, [], tracer:);
+          [{type: "mixedParamList", params:}, paramsEnd]
+        )],
+        else: $ error("unclosedGroup", line: tokens @ exprEnd |.line, column: tokens @ exprEnd |.column),
+      )
+    )
+  )
+);
+
+toParameterList = (paramsOrGroup, tokens, index) => (
+  if(
+    paramsOrGroup.type | eq("group"),
+    then: $ if(
+      paramsOrGroup.expression.type | eq("name"),
+      then: $ {type: "mixedParamList", params: [paramsOrGroup.expression]},
+      else: $ error("invalidParameters", line: tokens @ index |.line, column: tokens @ index |.column),
+    ),
+    else: $ paramsOrGroup,
+  )
 );
 
 parseParameterList = (tokens, index) => (
@@ -708,20 +733,7 @@ parseObjectElement = (tokens, index, tracer:) => tracer.inBlock(
       ),
       else: $ (
         [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-        colonEnd = keyEnd | up;
-        nextToken = tokens @ colonEnd;
-        if(
-          nextToken.type | eq("COMMA") | or(
-            $ nextToken.type | eq("CLOSE_BRACE")
-          ) | and(
-            $ key.type | eq("name")
-          ),
-          then: $ [{type: "keyName", key:}, colonEnd],
-          else: $ (
-            [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-            [{type: "entry", key: key, value: value}, valueEnd]
-          )
-        )
+        parseSimpleObjectElement(tokens, keyEnd, key, tracer:)
       ),
     )
   )
@@ -824,7 +836,7 @@ parseArguments = (tokens, index, args, tracer:) => (
   )
 );
 
-parseArgument = (tokens, index, tracer:) => (
+parseArgumentOLD = (tokens, index, tracer:) => (
   token = tokens @ index;
   if(
     token.type | eq("STAR"),
@@ -860,6 +872,50 @@ parseArgument = (tokens, index, tracer:) => (
         ),
       ),
     ),
+  )
+);
+
+parseArgument = (tokens, index, tracer:) => tracer.inBlock(
+  "argument",
+  $ (
+    tokens @ index |.type | switch(
+      ["STAR", $ (
+        starEnd = index | add(1);
+        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
+        [{type: "arraySpread", value: value}, valueEnd]
+      )],
+      ["DOUBLE_STAR", $ (
+        starEnd = index | add(1);
+        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
+        [{type: "objectSpread", value: value}, valueEnd]
+      )],
+      else: $ (
+        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
+        if(
+          tokens @ keyEnd |.type | eq("COLON"),
+          then: $ parseSimpleObjectElement(tokens, keyEnd, key, tracer:),
+          else: $ [key, keyEnd],
+        )
+      )
+    )
+  )
+);
+
+parseSimpleObjectElement = (tokens, index, key, tracer:) => (
+  colonEnd = index | up;
+  nextToken = tokens @ colonEnd;
+  if(
+    nextToken.type | eq("COMMA") | or(
+      $ nextToken.type | eq("CLOSE_BRACE"),
+      $ nextToken.type | eq("CLOSE_PAREN"),
+    ) | and(
+      $ key.type | eq("name")
+    ),
+    then: $ [{type: "keyName", key:}, colonEnd],
+    else: $ (
+      [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
+      [{type: "entry", key: key, value: value}, valueEnd]
+    )
   )
 );
 

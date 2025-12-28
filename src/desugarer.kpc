@@ -9,6 +9,7 @@ desugar = (ast) => (
   | convertPipelines
   | normalizeObjectSyntax
   | removeGroups
+  | removeEmptyLists
 );
 
 splitMixedLists = (ast) => (
@@ -62,51 +63,21 @@ splitMixedListsTransform = (node) => (
 );
 
 splitParamList = (params) => (
-  [posParams, namedParams] = splitParamListLoop(params, 1, [], []);
+  isNamed = (param) => (
+    param.type | eq("optional") | and($ param.name | isNamed) | or(
+      $ param.type | eqOneOf("objectRest", "keyName", "entry"),
+    )
+  );
+  {yes: namedParams, no: posParams} = params | sift(isNamed);
   [posParams, namedParams]
-);
-
-splitParamListLoop = (params, index, posParams, namedParams) => (
-  if(
-    index | gt(params | length),
-    then: $ [posParams, namedParams],
-    else: $ (
-      param = params @ index;
-      if(
-        param.type | eq("optional") | and($ (param.name.type | eq("keyName") | or($ param.name.type | eq("entry")))),
-        then: $ splitParamListLoop(params, index | add(1), posParams, namedParams | add(param)),
-        else: $ if(
-          param.type | eq("objectRest") | or($ param.type | eq("keyName") | or($ param.type | eq("entry"))),
-          then: $ splitParamListLoop(params, index | add(1), posParams, namedParams | add(param)),
-          else: $ splitParamListLoop(params, index | add(1), posParams | add(param), namedParams),
-        ),
-      )
-    ),
-  )
 );
 
 splitArgList = (args) => (
   isNamed = (arg) => (
-    arg.type | eq("objectSpread") | or($ arg.type | eq("keyName") | or($ arg.type | eq("entry")))
+    arg.type | eqOneOf("objectSpread", "keyName", "entry")
   );
-  posArgs = args | where(| isNamed | not) | toArray;
-  namedArgs = args | where(| isNamed) | toArray;
+  {yes: namedArgs, no: posArgs} = args | sift(isNamed);
   [posArgs, namedArgs]
-);
-
-splitArgListLoopOLD = (args, index, posArgs, namedArgs) => (
-  if(
-    index | gt(args | length),
-    then: $ [posArgs, namedArgs],
-    else: $ (
-      arg = args @ index;
-      if(
-        arg.type | eq("objectSpread") | or($ arg.type | eq("keyName") | or($ arg.type | eq("entry"))),
-        then: $ splitArgListLoop(args, index | add(1), posArgs, namedArgs | add(arg)),
-        else: $ splitArgListLoop(args, index | add(1), posArgs | add(arg), namedArgs),
-      )
-    ),
-  )
 );
 
 normalizeExpressionStatements = (ast) => (
@@ -271,7 +242,7 @@ convertLoosePipelineSteps = (axis, steps, index) => (
             then: $ step.args.namedArgs,
             else: $ [],
           );
-          call(step.callee, [axis, *posArgs], namedArgs)
+          {type: "call", callee: step.callee, posArgs: [axis, *posArgs], namedArgs:}
         ),
         else: $ if(
           step.type | eq("pipeDot"),
@@ -281,7 +252,7 @@ convertLoosePipelineSteps = (axis, steps, index) => (
           ),
           else: $ if(
             step.type | eq("pipe"),
-            then: $ call(step.callee, [axis], []),
+            then: $ {type: "call", callee: step.callee, posArgs: [axis], namedArgs: []},
             else: $ if(
               step.type | eq("at"),
               then: $ {type: "index", collection: axis, index: step.index},
@@ -318,7 +289,7 @@ convertTightPipelineSteps = (axis, steps, index) => (
             then: $ step.args.namedArgs,
             else: $ [],
           );
-          call(axis, posArgs, namedArgs)
+          {type: "call", callee: axis, posArgs:, namedArgs:}
         ),
         else: $ if(
           step.type | eq("dot"),
@@ -338,23 +309,6 @@ convertTightPipelineSteps = (axis, steps, index) => (
   )
 );
 
-call = (f, posArgs, namedArgs) => (
-  {
-    type: "call",
-    callee: f,
-    **if(
-      posArgs | isEmpty,
-      then: $ {},
-      else: $ {posArgs:}
-    ),
-    **if(
-      namedArgs | isEmpty,
-      then: $ {},
-      else: $ {namedArgs:}
-    )
-  }
-);
-
 normalizeObjectSyntax = (ast) => (
   transformTree(ast, normalizeObjectSyntaxTransform)
 );
@@ -362,70 +316,78 @@ normalizeObjectSyntax = (ast) => (
 normalizeObjectSyntaxTransform = (node) => (
   node.type | switch(
     ["object", $ (
-      entries = node.entries | transformArray((entry) => (
-        if(
-          entry.type | eq("keyName"),
-          then: $ [
-            if(
-              entry.key.type | eq("name"),
-              then: $ {type: "literal", value: entry.key.name},
-              else: $ entry.key,
-            ),
-            entry.key,
-          ],
-          else: $ if(
-            entry.type | eq("entry"),
-            then: $ [
-              if(
-                entry.key.type | eq("name"),
-                then: $ {type: "literal", value: entry.key.name},
-                else: $ entry.key,
-              ),
-              entry.value,
-            ],
-            else: $ if(
-              entry.type | eq("spread"),
-              then: $ [{type: "spread"}, entry.value],
-              else: $ entry,
-            ),
-          ),
-        )
-      ));
+      entries = node.entries | transformArray(normalizeObjectElement);
       {**node, entries:}
     )],
+    ["call", $ (
+      namedArgs = node.namedArgs | transformArray(normalizeObjectElement);
+      {**node, namedArgs:}
+    )],
     ["objectPattern", $ (
-      entries = node.entries | transformArray((entry) => (
-        if(
-          entry.type | eq("keyName"),
-          then: $ [
-            if(
-              entry.key.type | eq("name"),
-              then: $ {type: "literal", value: entry.key.name},
-              else: $ entry.key,
-            ),
-            entry.key,
-          ],
-          else: $ if(
-            entry.type | eq("entry"),
-            then: $ [
-              if(
-                entry.key.type | eq("name"),
-                then: $ {type: "literal", value: entry.key.name},
-                else: $ entry.key,
-              ),
-              entry.value,
-            ],
-            else: $ if(
-              entry.type | eq("spread"),
-              then: $ [{type: "spread"}, entry.value],
-              else: $ entry,
-            ),
-          ),
-        )
-      ));
+      entries = node.entries | transformArray(normalizeObjectPatternElement);
       {**node, entries:}
     )],
     else: $ node,
+  )
+);
+
+normalizeObjectElement = (entry) => (
+  if(
+    entry.type | eq("keyName"),
+    then: $ [
+      if(
+        entry.key.type | eq("name"),
+        then: $ {type: "literal", value: entry.key.name},
+        else: $ entry.key,
+      ),
+      entry.key,
+    ],
+    else: $ if(
+      entry.type | eq("entry"),
+      then: $ [
+        if(
+          entry.key.type | eq("name"),
+          then: $ {type: "literal", value: entry.key.name},
+          else: $ entry.key,
+        ),
+        entry.value,
+      ],
+      else: $ if(
+        entry.type | eq("spread"),
+        then: $ [{type: "spread"}, entry.value],
+        else: $ entry,
+      ),
+    ),
+  )
+);
+
+normalizeObjectPatternElement = (entry) => (
+  if(
+    entry.type | eq("keyName"),
+    then: $ [
+      if(
+        entry.key.type | eq("name"),
+        then: $ {type: "literal", value: entry.key.name},
+        else: $ entry.key,
+      ),
+      entry.key,
+    ],
+    else: $ if(
+      entry.type | eq("entry"),
+      then: $ [
+        if(
+          entry.key.type | eq("name"),
+          then: $ {type: "literal", value: entry.key.name},
+          else: $ entry.key,
+        ),
+        entry.value,
+      ],
+      else: $ if(
+        entry.type | eq("spread"),
+        then: $ [{type: "spread"}, entry.value],
+        else: $ entry,
+      ),
+    ),
   )
 );
 
@@ -439,6 +401,23 @@ removeGroupsTransform = (node) => (
     then: $ node.expression,
     else: $ node,
   )
+);
+
+removeEmptyLists = (ast) => (
+  transformTree(ast, (node) => (
+    node.type | switch(
+      ["function", $ node | removeEmptyArrayProperties],
+      ["call", $ node | removeEmptyArrayProperties],
+      else: $ node,
+    )
+  ))
+);
+
+removeEmptyArrayProperties = (obj) => (
+  obj
+  | properties
+  | where(([_, value]) => value | eq([]) | not)
+  | toObject
 );
 
 transformTree = (node, f) => (
