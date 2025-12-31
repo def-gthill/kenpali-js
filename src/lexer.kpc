@@ -31,38 +31,20 @@ lexTokens = (code, index, line, lineStart) => (
 
 lexToken = (code, index, line, lineStart) => (
   char = code @ index;
-  if(
-    char | eq("\""),
-    then: $ lexString(code, index, line, lineStart),
-    else: $ if(
-      char | eq("`"),
-      then: $ lexRawString(code, index, line, lineStart),
-      else: $ if(
-        char | eq("/") | and($ code @ (index | add(1)) | eq("/")),
-        then: $ lexComment(code, index, line, lineStart),
-        else: $ if(
-          char | eq(" ") | or($ char | eq("\t")),
-          then: $ lexWhitespace(code, index, line, lineStart),
-          else: $ if(
-            char | eq("\r") | and($ code @ (index | add(1)) | eq("\n")),
-            then: $ [null, index | add(2), line | add(1), index | add(2)],
-            else: $ if(
-              char | eq("\n") | or($ char | eq("\r")),
-              then: $ [null, index | add(1), line | add(1), index | add(1)],
-              else: $ if(
-                char | eq("-") | or($ char | ge("0") | and($ char | le("9"))),
-                then: $ lexNumber(code, index, line, lineStart),
-                else: $ if(
-                  char | ge("A") | and($ char | le("Z")) | or($ char | ge("a") | and($ char | le("z"))),
-                  then: $ lexName(code, index, line, lineStart),
-                  else: $ lexOperator(code, index, line, lineStart),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+  nextChar = code | at(index | add(1), default: $ null);
+  char | switch(
+    ["\"", $ lexString(code, index, line, lineStart)],
+    ["`", $ lexRawString(code, index, line, lineStart)],
+    [| eq("/") | and($ nextChar | eq("/")), $ lexComment(code, index, line, lineStart)],
+    [| eqOneOf(" ", "\t"), $ lexWhitespace(code, index, line, lineStart)],
+    [| eq("\r") | and($ nextChar | eq("\n")), $ [null, index | add(2), line | add(1), index | add(2)]],
+    ["\n", $ [null, index | add(1), line | add(1), index | add(1)]],
+    ["\r", $ [null, index | add(1), line | add(1), index | add(1)]],
+    ["-", $ lexNumber(code, index, line, lineStart)],
+    [| isBetween("0", "9"), $ lexNumber(code, index, line, lineStart)],
+    [| isBetween("A", "Z"), $ lexName(code, index, line, lineStart)],
+    [| isBetween("a", "z"), $ lexName(code, index, line, lineStart)],
+    else: $ lexOperator(code, index, line, lineStart),
   )
 );
 
@@ -138,17 +120,15 @@ getStringValue = (code, index, line, lineStart, value, escaped) => (
             ),
           )
         ),
-        else: $ if(
-          char | eq("\\"),
-          then: $ getStringValue(code, index | add(1), line, lineStart, value, true),
-          else: $ if(
-            char | eq("\""),
-            then: $ value,
+        else: $ (
+          char | switch(
+            ["\\", $ getStringValue(code, index | add(1), line, lineStart, value, true)],
+            ["\"", $ value],
             else: $ (
               newValue = [value, char] | join;
               getStringValue(code, index | add(1), line, lineStart, newValue, false)
             ),
-          ),
+          )
         ),
       )
     ),
@@ -197,14 +177,11 @@ parseHexDigits = (hex, index, value) => (
     else: $ (
       char = hex @ index;
       charCode = char | toCodePoints | first;
-      digit = if(
-        char | ge("0") | and($ char | le("9")),
-        then: $ charCode | sub("0" | toCodePoints | first),
-        else: $ if(
-          char | ge("a") | and($ char | le("f")),
-          then: $ charCode | sub("a" | toCodePoints | first) | add(10),
-          else: $ charCode | sub("A" | toCodePoints | first) | add(10),
-        ),
+      digit = char | switch(
+        [| isBetween("0", "9"), $ charCode | sub("0" | toCodePoints | first)],
+        [| isBetween("a", "f"), $ charCode | sub("a" | toCodePoints | first) | add(10)],
+        [| isBetween("A", "F"), $ charCode | sub("A" | toCodePoints | first) | add(10)],
+        else: $ 0,
       );
       parseHexDigits(hex, index | add(1), value | mul(16) | add(digit))
     ),
@@ -437,18 +414,11 @@ parseNumber = (text) => (
 lexName = (code, index, line, lineStart) => (
   startIndex = index;
   [text, nameEnd] = lexNameContent(code, index, "");
-  [kind, value] = if(
-    text | eq("null"),
-    then: $ ["LITERAL", null],
-    else: $ if(
-      text | eq("false"),
-      then: $ ["LITERAL", false],
-      else: $ if(
-        text | eq("true"),
-        then: $ ["LITERAL", true],
-        else: $ ["NAME", null],
-      ),
-    ),
+  [kind, value] = text | switch(
+    ["null", $ ["LITERAL", null]],
+    ["false", $ ["LITERAL", false]],
+    ["true", $ ["LITERAL", true]],
+    else: $ ["NAME", null],
   );
   token = {
     type: kind,
@@ -478,86 +448,44 @@ lexNameContent = (code, index, text) => (
 lexOperator = (code, index, line, lineStart) => (
   startIndex = index;
   char = code @ index;
-  if(
-    char | eq("("),
-    then: $ makeToken("OPEN_PAREN", "(", index | add(1), line, lineStart),
-    else: $ if(
-      char | eq(")"),
-      then: $ makeToken("CLOSE_PAREN", ")", index | add(1), line, lineStart),
-      else: $ if(
-        char | eq("["),
-        then: $ makeToken("OPEN_BRACKET", "[", index | add(1), line, lineStart),
-        else: $ if(
-          char | eq("]"),
-          then: $ makeToken("CLOSE_BRACKET", "]", index | add(1), line, lineStart),
-          else: $ if(
-            char | eq("{"),
-            then: $ makeToken("OPEN_BRACE", "{", index | add(1), line, lineStart),
-            else: $ if(
-              char | eq("}"),
-              then: $ makeToken("CLOSE_BRACE", "}", index | add(1), line, lineStart),
-              else: $ if(
-                char | eq(","),
-                then: $ makeToken("COMMA", ",", index | add(1), line, lineStart),
-                else: $ if(
-                  char | eq(";"),
-                  then: $ makeToken("SEMICOLON", ";", index | add(1), line, lineStart),
-                  else: $ if(
-                    char | eq(":"),
-                    then: $ makeToken("COLON", ":", index | add(1), line, lineStart),
-                    else: $ if(
-                      char | eq("=") | and($ code @ (index | add(1)) | eq(">")),
-                      then: $ makeToken("ARROW", "=>", index | add(2), line, lineStart),
-                      else: $ if(
-                        char | eq("="),
-                        then: $ makeToken("EQUALS", "=", index | add(1), line, lineStart),
-                        else: $ if(
-                          char | eq("|") | and($ code @ (index | add(1)) | eq(".")),
-                          then: $ makeToken("PIPE_DOT", "|.", index | add(2), line, lineStart),
-                          else: $ if(
-                            char | eq("|"),
-                            then: $ makeToken("PIPE", "|", index | add(1), line, lineStart),
-                            else: $ if(
-                              char | eq("@"),
-                              then: $ makeToken("AT", "@", index | add(1), line, lineStart),
-                              else: $ if(
-                                char | eq("."),
-                                then: $ makeToken("DOT", ".", index | add(1), line, lineStart),
-                                else: $ if(
-                                  char | eq("$"),
-                                  then: $ makeToken("DOLLAR", "$", index | add(1), line, lineStart),
-                                  else: $ if(
-                                    char | eq("*") | and($ code @ (index | add(1)) | eq("*")),
-                                    then: $ makeToken("DOUBLE_STAR", "**", index | add(2), line, lineStart),
-                                    else: $ if(
-                                      char | eq("*"),
-                                      then: $ makeToken("STAR", "*", index | add(1), line, lineStart),
-                                      else: $ if(
-                                        char | eq("_"),
-                                        then: $ makeToken("UNDERSCORE", "_", index | add(1), line, lineStart),
-                                        else: $ if(
-                                          char | eq("/"),
-                                          then: $ makeToken("SLASH", "/", index | add(1), line, lineStart),
-                                          else: $ error("invalidCharacter", line:, column: startIndex | sub(lineStart), character: char),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+  nextChar = code | at(index | add(1), default: $ null);
+  char | switch(
+    ["(", $ makeToken("OPEN_PAREN", "(", index | add(1), line, lineStart)],
+    [")", $ makeToken("CLOSE_PAREN", ")", index | add(1), line, lineStart)],
+    ["[", $ makeToken("OPEN_BRACKET", "[", index | add(1), line, lineStart)],
+    ["]", $ makeToken("CLOSE_BRACKET", "]", index | add(1), line, lineStart)],
+    ["{", $ makeToken("OPEN_BRACE", "{", index | add(1), line, lineStart)],
+    ["}", $ makeToken("CLOSE_BRACE", "}", index | add(1), line, lineStart)],
+    [",", $ makeToken("COMMA", ",", index | add(1), line, lineStart)],
+    [";", $ makeToken("SEMICOLON", ";", index | add(1), line, lineStart)],
+    [":", $ makeToken("COLON", ":", index | add(1), line, lineStart)],
+    ["=", $ (
+      if(
+        nextChar | eq(">"),
+        then: $ makeToken("ARROW", "=>", index | add(2), line, lineStart),
+        else: $ makeToken("EQUALS", "=", index | add(1), line, lineStart),
+      )
+    )],
+    ["|", $ (
+      if(
+        nextChar | eq("."),
+        then: $ makeToken("PIPE_DOT", "|.", index | add(2), line, lineStart),
+        else: $ makeToken("PIPE", "|", index | add(1), line, lineStart),
+      )
+    )],
+    ["@", $ makeToken("AT", "@", index | add(1), line, lineStart)],
+    [".", $ makeToken("DOT", ".", index | add(1), line, lineStart)],
+    ["$", $ makeToken("DOLLAR", "$", index | add(1), line, lineStart)],
+    ["*", $ (
+      if(
+        nextChar | eq("*"),
+        then: $ makeToken("DOUBLE_STAR", "**", index | add(2), line, lineStart),
+        else: $ makeToken("STAR", "*", index | add(1), line, lineStart),
+      )
+    )],
+    ["_", $ makeToken("UNDERSCORE", "_", index | add(1), line, lineStart)],
+    ["/", $ makeToken("SLASH", "/", index | add(1), line, lineStart)],
+    else: $ error("invalidCharacter", line:, column: startIndex | sub(lineStart), character: char),
   )
 );
 

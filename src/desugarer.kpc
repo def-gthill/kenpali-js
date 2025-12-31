@@ -17,9 +17,8 @@ splitMixedLists = (ast) => (
 );
 
 splitMixedListsTransform = (node) => (
-  if(
-    node.type | eq("arrow"),
-    then: $ (
+  node.type | switch(
+    ["arrow", $ (
       params = node.params;
       if(
         params.type | eq("mixedParamList"),
@@ -29,36 +28,30 @@ splitMixedListsTransform = (node) => (
         ),
         else: $ node,
       )
-    ),
-    else: $ if(
-      node.type | eq("args"),
-      then: $ (
-        args = node.args;
-        if(
-          args.type | eq("mixedArgList"),
-          then: $ (
-            [posArgs, namedArgs] = splitArgList(args.args);
-            {type: node.type, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
-          ),
-          else: $ node,
-        )
-      ),
-      else: $ if(
-        node.type | eq("pipeArgs"),
+    )],
+    ["args", $ (
+      args = node.args;
+      if(
+        args.type | eq("mixedArgList"),
         then: $ (
-          args = node.args;
-          if(
-            args.type | eq("mixedArgList"),
-            then: $ (
-              [posArgs, namedArgs] = splitArgList(args.args);
-              {type: node.type, callee: node.callee, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
-            ),
-            else: $ node,
-          )
+          [posArgs, namedArgs] = splitArgList(args.args);
+          {type: node.type, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
         ),
         else: $ node,
-      ),
-    ),
+      )
+    )],
+    ["pipeArgs", $ (
+      args = node.args;
+      if(
+        args.type | eq("mixedArgList"),
+        then: $ (
+          [posArgs, namedArgs] = splitArgList(args.args);
+          {type: node.type, callee: node.callee, args: {type: "argList", posArgs: posArgs, namedArgs: namedArgs}}
+        ),
+        else: $ node,
+      )
+    )],
+    else: $ node,
   )
 );
 
@@ -107,14 +100,10 @@ removeSpecializedSpreads = (ast) => (
 );
 
 removeSpecializedSpreadsTransform = (node) => (
-  if(
-    node.type | eq("arraySpread"),
-    then: $ {type: "spread", value: node.value},
-    else: $ if(
-      node.type | eq("objectSpread"),
-      then: $ {type: "spread", value: node.value},
-      else: $ node,
-    ),
+  node.type | switch(
+    ["arraySpread", $ {type: "spread", value: node.value}],
+    ["objectSpread", $ {type: "spread", value: node.value}],
+    else: $ node,
   )
 );
 
@@ -123,14 +112,10 @@ removeSpecializedRests = (ast) => (
 );
 
 removeSpecializedRestsTransform = (node) => (
-  if(
-    node.type | eq("arrayRest"),
-    then: $ {type: "rest", name: node.name},
-    else: $ if(
-      node.type | eq("objectRest"),
-      then: $ {type: "rest", name: node.name},
-      else: $ node,
-    ),
+  node.type | switch(
+    ["arrayRest", $ {type: "rest", name: node.name}],
+    ["objectRest", $ {type: "rest", name: node.name}],
+    else: $ node,
   )
 );
 
@@ -139,9 +124,8 @@ convertFunctionSyntax = (ast) => (
 );
 
 convertFunctionSyntaxTransform = (node) => (
-  if(
-    node.type | eq("arrow"),
-    then: $ (
+  node.type | switch(
+    ["arrow", $ (
       params = node.params;
       [posParams, namedParams] = if(
         params.type | eq("paramList"),
@@ -149,12 +133,9 @@ convertFunctionSyntaxTransform = (node) => (
         else: $ [[], []],
       );
       {type: "function", body: node.body, posParams: posParams, namedParams: namedParams}
-    ),
-    else: $ if(
-      node.type | eq("constantFunction"),
-      then: $ ast/function(posParams: [], namedParams: [], node.body),
-      else: $ node,
-    ),
+    )],
+    ["constantFunction", $ ast/function(posParams: [], namedParams: [], node.body)],
+    else: $ node,
   )
 );
 
@@ -231,9 +212,8 @@ convertLoosePipelineSteps = (axis, steps, index) => (
     then: $ axis,
     else: $ (
       step = steps @ index;
-      newAxis = if(
-        step.type | eq("pipeArgs"),
-        then: $ (
+      newAxis = step.type | switch(
+        ["pipeArgs", $ (
           posArgs = if(
             step.args.type | eq("argList"),
             then: $ step.args.posArgs,
@@ -245,23 +225,14 @@ convertLoosePipelineSteps = (axis, steps, index) => (
             else: $ [],
           );
           {type: "call", callee: step.callee, posArgs: [axis, *posArgs], namedArgs:}
-        ),
-        else: $ if(
-          step.type | eq("pipeDot"),
-          then: $ (
-            tightSteps = [ast/dot(step.index), *step.steps];
-            convertTightPipeline(axis, tightSteps)
-          ),
-          else: $ if(
-            step.type | eq("pipe"),
-            then: $ {type: "call", callee: step.callee, posArgs: [axis], namedArgs: []},
-            else: $ if(
-              step.type | eq("at"),
-              then: $ {type: "index", collection: axis, index: step.index},
-              else: $ axis,
-            ),
-          ),
-        ),
+        )],
+        ["pipeDot", $ (
+          tightSteps = [ast/dot(step.index), *step.steps];
+          convertTightPipeline(axis, tightSteps)
+        )],
+        ["pipe", $ {type: "call", callee: step.callee, posArgs: [axis], namedArgs: []}],
+        ["at", $ {type: "index", collection: axis, index: step.index}],
+        else: $ axis,
       );
       convertLoosePipelineSteps(newAxis, steps, index | add(1))
     ),
@@ -278,9 +249,8 @@ convertTightPipelineSteps = (axis, steps, index) => (
     then: $ axis,
     else: $ (
       step = steps @ index;
-      newAxis = if(
-        step.type | eq("args"),
-        then: $ (
+      newAxis = step.type | switch(
+        ["args", $ (
           posArgs = if(
             step.args.type | eq("argList"),
             then: $ step.args.posArgs,
@@ -292,18 +262,15 @@ convertTightPipelineSteps = (axis, steps, index) => (
             else: $ [],
           );
           {type: "call", callee: axis, posArgs:, namedArgs:}
-        ),
-        else: $ if(
-          step.type | eq("dot"),
-          then: $ (
-            index = step.index | butIf(
-              |.type | eq("name"),
-              |.name | ast/literal,
-            );
-            ast/index(axis, index)
-          ),
-          else: $ axis,
-        ),
+        )],
+        ["dot", $ (
+          index = step.index | butIf(
+            |.type | eq("name"),
+            |.name | ast/literal,
+          );
+          ast/index(axis, index)
+        )],
+        else: $ axis,
       );
       convertTightPipelineSteps(newAxis, steps, index | add(1))
     ),
@@ -337,32 +304,25 @@ normalizeObjectSyntaxTransform = (node) => (
 );
 
 normalizeObjectElement = (entry) => (
-  if(
-    entry.type | eq("keyName"),
-    then: $ [
+  entry.type | switch(
+    ["keyName", $ [
       if(
         entry.key.type | eq("name"),
         then: $ {type: "literal", value: entry.key.name},
         else: $ entry.key,
       ),
       entry.key,
-    ],
-    else: $ if(
-      entry.type | eq("entry"),
-      then: $ [
-        if(
-          entry.key.type | eq("name"),
-          then: $ {type: "literal", value: entry.key.name},
-          else: $ entry.key,
-        ),
-        entry.value,
-      ],
-      else: $ if(
-        entry.type | eq("spread"),
-        then: $ [{type: "spread"}, entry.value],
-        else: $ entry,
+    ]],
+    ["entry", $ [
+      if(
+        entry.key.type | eq("name"),
+        then: $ {type: "literal", value: entry.key.name},
+        else: $ entry.key,
       ),
-    ),
+      entry.value,
+    ]],
+    ["spread", $ [{type: "spread"}, entry.value]],
+    else: $ entry,
   )
 );
 
@@ -398,9 +358,8 @@ removeGroups = (ast) => (
 );
 
 removeGroupsTransform = (node) => (
-  if(
-    node.type | eq("group"),
-    then: $ node.expression,
+  node.type | switch(
+    ["group", $ node.expression],
     else: $ node,
   )
 );
