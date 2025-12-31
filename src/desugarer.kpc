@@ -152,7 +152,7 @@ convertFunctionSyntaxTransform = (node) => (
     ),
     else: $ if(
       node.type | eq("constantFunction"),
-      then: $ {type: "function", body: node.body},
+      then: $ ast/function(posParams: [], namedParams: [], node.body),
       else: $ node,
     ),
   )
@@ -172,12 +172,11 @@ makePipeArgsTransform = (node) => (
         then: $ (
           steps = callee.pipeline.steps;
           if(
-            steps | length | gt(0) | and($ steps @ (steps | length | sub(1)) |.type | eq("args")),
+            steps | isEmpty | not | and($ steps | last |.type | eq("args")),
             then: $ (
-              lastStep = steps @ (steps | length | sub(1));
-              otherSteps = steps | slice(0, steps | length | sub(1));
+              [lastStep, *otherSteps] = steps;
               if(
-                otherSteps | length | eq(0),
+                otherSteps | isEmpty,
                 then: $ {type: "pipeArgs", callee: callee.start, args: lastStep.args},
                 else: $ (
                   otherPipeline = {type: "tightPipeline", steps: otherSteps};
@@ -200,21 +199,24 @@ convertPipelines = (ast) => (
 );
 
 convertPipelinesTransform = (node) => (
-  if(
-    node.type | eq("pipelineCall"),
-    then: $ (
+  node.type | switch(
+    ["pipelineCall", $ (
       start = node.start;
       pipeline = node.pipeline;
       if(
         pipeline.type | eq("loosePipeline"),
         then: $ convertLoosePipeline(start, pipeline.steps),
-        else: $ if(
-          pipeline.type | eq("tightPipeline"),
-          then: $ convertTightPipeline(start, pipeline.steps),
-          else: $ node,
-        ),
+        else: $ convertTightPipeline(start, pipeline.steps),
       )
-    ),
+    )],
+    ["loosePipeline", $ (
+      arg = ast/name("pipelineArg");
+      ast/function(
+        posParams: [arg],
+        namedParams: [],
+        convertLoosePipeline(arg, node.steps),
+      )
+    )],
     else: $ node,
   )
 );
@@ -247,7 +249,7 @@ convertLoosePipelineSteps = (axis, steps, index) => (
         else: $ if(
           step.type | eq("pipeDot"),
           then: $ (
-            tightSteps = [step.index] | add(*step.steps);
+            tightSteps = [ast/dot(step.index), *step.steps];
             convertTightPipeline(axis, tightSteps)
           ),
           else: $ if(
@@ -294,12 +296,11 @@ convertTightPipelineSteps = (axis, steps, index) => (
         else: $ if(
           step.type | eq("dot"),
           then: $ (
-            indexValue = if(
-              step.index.type | eq("literal"),
-              then: $ step.index.value,
-              else: $ step.index,
+            index = step.index | butIf(
+              |.type | eq("name"),
+              |.name | ast/literal,
             );
-            {type: "index", collection: axis, index: {type: "literal", value: indexValue}}
+            ast/index(axis, index)
           ),
           else: $ axis,
         ),
@@ -326,6 +327,10 @@ normalizeObjectSyntaxTransform = (node) => (
     ["objectPattern", $ (
       entries = node.entries | transformArray(normalizeObjectPatternElement);
       {**node, entries:}
+    )],
+    ["function", $ (
+      namedParams = node.namedParams | transformArray(normalizeObjectPatternElement);
+      {**node, namedParams:}
     )],
     else: $ node,
   )
@@ -362,32 +367,29 @@ normalizeObjectElement = (entry) => (
 );
 
 normalizeObjectPatternElement = (entry) => (
-  if(
-    entry.type | eq("keyName"),
-    then: $ [
+  entry.type | switch(
+    ["optional", $ (
+      [key, pattern] = normalizeObjectPatternElement(entry.name);
+      [key, ast/optional(pattern, entry.defaultValue)]
+    )],
+    ["keyName", $ [
       if(
         entry.key.type | eq("name"),
         then: $ {type: "literal", value: entry.key.name},
         else: $ entry.key,
       ),
       entry.key,
-    ],
-    else: $ if(
-      entry.type | eq("entry"),
-      then: $ [
-        if(
-          entry.key.type | eq("name"),
-          then: $ {type: "literal", value: entry.key.name},
-          else: $ entry.key,
-        ),
-        entry.value,
-      ],
-      else: $ if(
-        entry.type | eq("spread"),
-        then: $ [{type: "spread"}, entry.value],
-        else: $ entry,
+    ]],
+    ["entry", $ [
+      if(
+        entry.key.type | eq("name"),
+        then: $ {type: "literal", value: entry.key.name},
+        else: $ entry.key,
       ),
-    ),
+      entry.value,
+    ]],
+    ["rest", $ [ast/restKey(), entry.name]],
+    else: $ entry,
   )
 );
 

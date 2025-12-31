@@ -1,22 +1,11 @@
 parse = (code, trace: = false) => (
   tracer = getTracer(trace);
-  tokens = lexer/lex(code) | toArray;
-  [ast, end] = tracer.inBlock("parse", $ parseExpression(tokens, 1, tracer:));
+  tokens = lexer/lex(code);
+  [ast, tail] = tracer.inBlock("parse", $ parseExpression(tokens, tracer:));
   if(
-    tokens @ end |.type | eq("EOF"),
-    then: $ desugarer/desugar(ast),
-    else: $ error("unparsedInput", line: tokens @ end |.line, column: tokens @ end |.column),
-  )
-);
-
-parseModule = (code, trace: = false) => (
-  tracer = getTracer(trace);
-  tokens = lexer/lex(code) | toArray;
-  definitions = parseModuleDefinitions(tokens, 1);
-  if(
-    tokens @ definitions.end |.type | eq("EOF"),
-    then: $ definitions.definitions | transform(([name, value]) => [name.name, desugarer/desugar(value)]),
-    else: $ error("unparsedInput", line: tokens @ definitions.end |.line, column: tokens @ definitions.end |.column),
+    tail | firstType | eq("EOF"),
+    then: $ ast | validateExpression | desugarer/desugar,
+    else: $ errorAtToken("unparsedInput", tail.value()),
   )
 );
 
@@ -26,17 +15,17 @@ newTracer = $ (
   indent = newVar(0);
   self = {
     inBlock: (name, f) => (
-      self.log(["Begin ", name] | join);
+      self.log($ ["Begin ", name] | join);
       indent.get() | up | indent.set;
       result = f();
       indent.get() | down | indent.set;
-      self.log(["End ", name] | join);
+      self.log($ ["End ", name] | join);
       result
     ),
-    log: (value) => (
+    log: (valueF) => (
       [
         *("| " | repeat | keepFirst(indent.get())),
-        value,
+        valueF(),
       ]
       | join
       | write
@@ -50,873 +39,495 @@ dummyTracer = $ {
   log: $ null,
 };
 
-parseModuleDefinitions = (tokens, index) => (
-  [definitions, definitionsEnd] = parseModuleDefinitionsLoop(tokens, index, []);
-  {definitions: definitions, end: definitionsEnd}
+parseExpression = (tokens, tracer:) => (
+  parseBlock(tokens, tracer:)
 );
 
-parseModuleDefinitionsLoop = (tokens, index, definitions) => (
-  if(
-    tokens @ index |.type | eq("EOF"),
-    then: $ [definitions, index],
-    else: $ (
-      [def, statementEnd] = parseStatement(tokens, index);
-      if(
-        tokens @ statementEnd |.type | eq("SEMICOLON"),
-        then: $ (
-          semicolonEnd = statementEnd | add(1);
-          parseModuleDefinitionsLoop(tokens, semicolonEnd, definitions | add(def))
-        ),
-        else: $ [definitions | add(def), statementEnd],
-      )
-    ),
+parseBlock = (tokens, tracer:) => tracer.inBlock(
+  "block",
+  $ (
+    [statements, tails] = parseStatement(tokens, tracer:)
+    | build(([_, tokens]) => (
+      parseStatement(tokens.next(), tracer:)
+    ))
+    | continueIf(([_, tokens]) => (
+      tokens | firstType | eq("SEMICOLON")
+    ))
+    | unzip;
+    result = if(
+      statements | length | gt(1),
+      then: $ statements | statementsToBlock,
+      else: $ statements | first,
+    );
+    [result, tails | last]
   )
 );
 
-parseExpression = (tokens, index, tracer:) => (
-  parseScope(tokens, index, tracer:)
+statementsToBlock = (statements) => (
+  [*defs, result] = statements;
+  blockDefs = defs
+  | transform(statementToDef);
+  ast/block(*blockDefs, result)
 );
 
-parseScope = (tokens, index, tracer:) => tracer.inBlock(
-  "scope",
-    $ (
-    [[*statements, [target, result]], statementEnd] = parseStatements(tokens, index, [], tracer:);
+statementToDef = (statement) => (
+  if(
+    statement.type | eq("optional"),
+    then: $ [statement.name, statement.defaultValue],
+    else: $ [null, statement],
+  )
+);
+
+parseStatement = (tokens, tracer:) => tracer.inBlock(
+  "statement",
+  $ (
+    [entry, entryTail] = parseEntry(tokens, tracer:);
     if(
-      target | isNull | not, // Result is an assignment
-      then: $ error("missingStatementSeparator", line: tokens @ statementEnd |.line, column: tokens @ statementEnd |.column)
-    );
-    if(
-      statements | isEmpty,
-      then: $ [result, statementEnd],
-      else: $ [{type: "block", defs: statements, result: result}, statementEnd],
+      entryTail | firstType | eq("EQUALS"),
+      then: $ (
+        [rhs, rhsTail] = parseAssignable(entryTail.next(), tracer:);
+        [ast/optional(entry | expressionToNamePattern, rhs), rhsTail]
+      ),
+      else: $ [entry, entryTail],
     )
   )
 );
 
-parseStatements = (tokens, index, statements, tracer:) => (
-  if(
-    tokens @ index |.type | eq("EOF"),
-    then: $ [statements, index],
-    else: $ (
-      token = tokens @ index;
-      if(
-        token.type | eq("SEMICOLON"),
-        then: $ [statements, index],
-        else: $ (
-          [def, statementEnd] = parseStatement(tokens, index, tracer:);
-          if(
-            tokens @ statementEnd |.type | eq("SEMICOLON"),
-            then: $ (
-              semicolonEnd = statementEnd | add(1);
-              parseStatements(tokens, semicolonEnd, [*statements, def], tracer:)
-            ),
-            else: $ [[*statements, def], statementEnd],
-          )
-        ),
-      )
-    ),
+expressionToNamePattern = (expression) => (
+  expression.type | switch(
+    ["array", $ expression | arrayToArrayPattern],
+    ["object", $ expression | objectToObjectPattern],
+    ["arraySpread", $ expression | arraySpreadToArrayRest],
+    ["objectSpread", $ expression | objectSpreadToObjectRest],
+    else: $ expression,
   )
 );
 
-parseStatementOLD = (tokens, index, tracer:) => tracer.inBlock(
-  "statement",
+arrayToArrayPattern = (array) => (
+  ast/arrayPattern(*(array.elements | transform(expressionToNamePattern)))
+);
+
+objectToObjectPattern = (object) => (
+  ast/objectPattern(*(object.entries))
+);
+
+arraySpreadToArrayRest = (arraySpread) => (
+  ast/arrayRest(arraySpread.value)
+);
+
+objectSpreadToObjectRest = (objectSpread) => (
+  ast/objectRest(objectSpread.value)
+);
+
+parseEntry = (tokens, tracer:) => tracer.inBlock(
+  "entry",
   $ (
-    token = tokens @ index;
+    [key, keyTail] = parseAssignable(tokens, tracer:);
     if(
-      token.type | eq("NAME") | or($ token.type | eq("UNDERSCORE") | or($ token.type | eq("OPEN_BRACKET") | or($ token.type | eq("OPEN_BRACE")))),
+      keyTail | firstType | eq("COLON"),
       then: $ (
-        [target, patternEnd] = parseNamePattern(tokens, index, tracer:);
+        colonTail = keyTail.next();
         if(
-          tokens @ patternEnd |.type | eq("EQUALS"),
-          then: $ (
-            equalsEnd = patternEnd | add(1);
-            [value, assignableEnd] = parseAssignable(tokens, equalsEnd, tracer:);
-            [[target, value], assignableEnd]
-          ),
+          colonTail
+          | firstType
+          | eqOneOf("COMMA", "EQUALS", "CLOSE_PAREN", "CLOSE_BRACKET", "CLOSE_BRACE"),
+          then: $ [ast/keyName(key), colonTail],
           else: $ (
-            [value, assignableEnd] = parseAssignable(tokens, index, tracer:);
-            [[null, value], assignableEnd]
-          ),
+            [value, valueTail] = parseAssignable(colonTail, tracer:);
+            [ast/entry(key, value), valueTail]
+          )
         )
       ),
-      else: $ (
-        [value, assignableEnd] = parseAssignable(tokens, index, tracer:);
-        [[null, value], assignableEnd]
-      ),
+      else: $ [key, keyTail],
     )
   )
 );
 
-parseStatement = (tokens, index, tracer:) => tracer.inBlock(
-  "statement",
+parseAssignable = (tokens, tracer:) => (
+  tokens | firstType | switch(
+    ["DOLLAR", $ parseConstantFunction(tokens, tracer:)],
+    [| eqOneOf("PIPE_DOT", "PIPE", "AT"), $ parseLoosePipeline(tokens, tracer:)],
+    else: $ parseArrow(tokens, tracer:),
+  )
+);
+
+parseConstantFunction = (tokens, tracer:) => tracer.inBlock(
+  "constant function",
   $ (
-    [target, targetEnd] = parseAssignable(tokens, index, tracer:);
-    if(
-      tokens @ targetEnd |.type | eq("EQUALS"),
-      then: $ (
-        namePattern = target | toNamePattern(token: tokens @ index);
-        equalsEnd = targetEnd | up;
-        [value, assignableEnd] = parseAssignable(tokens, equalsEnd, tracer:);
-        [[namePattern, value], assignableEnd]
-      ),
-      else: $ [[null, validateAssignable(target, token: tokens @ index)], targetEnd]
+    [body, tail] = parseAssignable(tokens.next(), tracer:);
+    [ast/constantFunction(body), tail]
+  )
+);
+
+parseLoosePipeline = (tokens, tracer:) => tracer.inBlock(
+  "loose pipeline",
+  $ (
+    [steps, tails] = parseLoosePipelineStep(tokens, tracer:)
+    | build(([_, tokens]) => (
+      parseLoosePipelineStep(tokens, tracer:)
+    ))
+    | continueIf(([_, tokens]) => (
+      tokens | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
+    ))
+    | unzip;
+    [ast/loosePipeline(*steps), tails | last]
+  )
+);
+
+parseArrow = (tokens, tracer:) => tracer.inBlock(
+  "arrow",
+  $ (
+    [start, tail] = parseLoosePipelineCall(tokens, tracer:);
+    start.type | switch(
+      ["mixedParamList", $ (
+        if(
+          tail | firstType | eq("ARROW"),
+          then: $ (
+            [result, resultTail] = parseAssignable(tail.next(), tracer:);
+            [ast/arrow(start, result), resultTail]
+          ),
+          else: $ errorAtToken("expectedArrow", tail.value()),
+        )
+      )],
+      ["group", $ (
+        if(
+          tail | firstType | eq("ARROW"),
+          then: $ (
+            [result, resultTail] = parseAssignable(tail.next(), tracer:);
+            [ast/arrow(start | groupToParameterList, result), resultTail]
+          ),
+          else: $ [start, tail],
+        )
+      )],
+      else: $ [start, tail],
     )
   )
 );
 
-toNamePattern = (assignable, token:) => (
-  assignable.type | switch(
-    ["ignore", $ assignable],
-    ["name", $ assignable],
-    ["array", $ (
-      {
-        type: "arrayPattern",
-        names: assignable.elements | transformArray(| toNamePattern(token:)),
-      }
-    )],
-    ["object", $ (
-      {
-        type: "objectPattern",
-        entries: assignable.entries | transformArray((entry) => (
-          entry.type | switch(
-            ["entry", $ {
-              type: "entry",
-              key: entry.key,
-              value: entry.value | toNamePattern(token:),
-            }],
-            ["keyName", $ entry],
-            else: $ error("invalidNamePattern", line: token.line, column: token.column)
+groupToParameterList = (group) => (
+  ast/mixedParamList(group.expression | expressionToParameter)
+);
+
+expressionToParameter = (expression) => (
+  expression | expressionToNamePattern
+);
+
+parseLoosePipelineCall = (tokens, tracer:) => tracer.inBlock(
+  "loose pipeline call",
+  $ (
+    [[start, *steps], tails] = parseTightPipelineCall(tokens, tracer:)
+    | build(([_, tokens]) => (
+      parseLoosePipelineStep(tokens, tracer:)
+    ))
+    | continueIf(([_, tokens]) => (
+      tokens | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
+    ))
+    | unzip;
+    call = if(
+      steps | isEmpty,
+      then: $ start,
+      else: $ (
+        pipeline = ast/loosePipeline(*steps);
+        ast/pipelineCall(start, pipeline)
+      ),
+    );
+    [call, tails | last]
+  )
+);
+
+parseLoosePipelineStep = (tokens, tracer:) => tracer.inBlock(
+  "loose pipeline step",
+  $ (
+    tokens | firstType | switch(
+      ["PIPE_DOT", $ (
+        [name, nameTail] = parseName(tokens.next(), tracer:);
+        [steps, stepsTail] = parseTightPipelineSteps(nameTail, tracer:);
+        [ast/pipeDot(name, *steps), stepsTail]
+      )],
+      ["PIPE", $ (
+        [callee, calleeTail] = parseTightPipelineCall(tokens.next(), tracer:);
+        [ast/pipe(callee), calleeTail]
+      )],
+      else: $ (
+        [index, indexTail] = parseTightPipelineCall(tokens.next(), tracer:);
+        [ast/at(index), indexTail]
+      ),
+    )
+  )
+);
+
+parseTightPipelineCall = (tokens, tracer:) => tracer.inBlock(
+  "tight pipeline call",
+  $ (
+    [start, tail] = parseAtomic(tokens, tracer:);
+    [steps, stepTail] = parseTightPipelineSteps(tail, tracer:);
+    call = if(
+      steps | isEmpty,
+      then: $ start,
+      else: $ (
+        pipeline = ast/tightPipeline(*steps);
+        ast/pipelineCall(start, pipeline)
+      ),
+    );
+    [call, stepTail]
+  )
+);
+
+parseTightPipelineSteps = (tokens, tracer:) => (
+  [steps, tails] = [null, tokens]
+  | build(([_, tokens]) => (
+    parseTightPipelineStep(tokens, tracer:)
+  ))
+  | continueIf(([_, tokens]) => (
+    tokens | firstType | eqOneOf("DOT", "OPEN_PAREN")
+  ))
+  | unzip;
+  [steps | dropFirst, tails | last]
+);
+
+parseTightPipelineStep = (tokens, tracer:) => tracer.inBlock(
+  "tight pipeline step",
+  $ (
+    if(
+      tokens | firstType | eq("DOT"),
+      then: $ (
+        [name, nameEnd] = parseName(tokens.next(), tracer:);
+        [ast/dot(ast/literal(name.name)), nameEnd]
+      ),
+      else: $ (
+        [args, tail] = parseArgumentList(tokens, tracer:);
+        [ast/args(args), tail]
+      )
+    )
+  )
+);
+
+parseArgumentList = (tokens, tracer:) => tracer.inBlock(
+  "argument list",
+  $ (
+    contentTokens = tokens.next();
+    if(
+      contentTokens | firstType | eq("CLOSE_PAREN"),
+      then: $ [ast/mixedArgList(), contentTokens.next()],
+      else: $ (
+        [args, tails] = parseEntry(contentTokens, tracer:)
+        | build(([_, tokens]) => (
+          parseEntry(tokens.next(), tracer:)
+        ))
+        | continueIf(([_, tokens]) => (
+          tokens | firstType | eq("COMMA") | and(
+            $ tokens @ 2 |.type | eq("CLOSE_PAREN") | not
           )
         ))
-      }
-    )],
-    else: $ error("invalidNamePattern", line: token.line, column: token.column)
-  )
-);
-
-validateAssignable = (assignable, token:) => (
-  assignable | desugarer/transformTree((node) => (
-    if(
-      node.type | eq("ignore"),
-      then: $ error("missingEqualsInDefinition", line: token.line, column: token.column),
-      else: $ node,
-    )
-  ))
-);
-
-parseNamePattern = (tokens, index, tracer:) => tracer.inBlock(
-  "name pattern",
-  $ (
-    token = tokens @ index;
-    if(
-      token.type | eq("UNDERSCORE"),
-      then: $ (
-        underscoreEnd = index | add(1);
-        [{type: "ignore"}, underscoreEnd]
-      ),
-      else: $ if(
-        token.type | eq("OPEN_BRACKET"),
-        then: $ parseArrayPattern(tokens, index, tracer:),
-        else: $ if(
-          token.type | eq("OPEN_BRACE"),
-          then: $ parseObjectPattern(tokens, index),
-          else: $ parseName(tokens, index, tracer:),
-        ),
-      ),
-    )
-  )
-);
-
-parseArrayPattern = (tokens, index, tracer:) => (
-  bracketStart = index | add(1);
-  [elements, elementsEnd] = parseArrayPatternElements(tokens, bracketStart, [], tracer:);
-  if(
-    tokens @ elementsEnd |.type | eq("CLOSE_BRACKET"),
-    then: $ (
-      bracketEnd = elementsEnd | add(1);
-      [{type: "arrayPattern", names: elements}, bracketEnd]
-    ),
-    else: $ error("unclosedArrayPattern", line: tokens @ elementsEnd |.line, column: tokens @ elementsEnd |.column),
-  )
-);
-
-parseArrayPatternElements = (tokens, index, elements, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_BRACKET"),
-    then: $ [elements, index],
-    else: $ (
-      [element, elementEnd] = parseArrayPatternElement(tokens, index, tracer:);
-      if(
-        tokens @ elementEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = elementEnd | add(1);
-          parseArrayPatternElements(tokens, commaEnd, elements | add(element), tracer:)
-        ),
-        else: $ [elements | add(element), elementEnd],
-      )
-    ),
-  )
-);
-
-parseArrayPatternElement = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("STAR"),
-    then: $ (
-      starEnd = index | add(1);
-      [pattern, patternEnd] = parseNamePattern(tokens, starEnd, tracer:);
-      [{type: "arrayRest", name: pattern}, patternEnd]
-    ),
-    else: $ if(
-      tokens @ (index | add(1)) |.type | eq("EQUALS"),
-      then: $ (
-        [pattern, patternEnd] = parseNamePattern(tokens, index, tracer:);
-        equalsEnd = patternEnd | add(1);
-        [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd, tracer:);
-        [{type: "optional", name: pattern, defaultValue: defaultValue}, defaultValueEnd]
-      ),
-      else: $ parseNamePattern(tokens, index, tracer:),
-    ),
-  )
-);
-
-parseObjectPattern = (tokens, index, tracer:) => (
-  braceStart = index | add(1);
-  [elements, elementsEnd] = parseObjectPatternElements(tokens, braceStart, [], tracer:);
-  if(
-    tokens @ elementsEnd |.type | eq("CLOSE_BRACE"),
-    then: $ (
-      braceEnd = elementsEnd | add(1);
-      [{type: "objectPattern", entries: elements}, braceEnd]
-    ),
-    else: $ error("unclosedObjectPattern", line: tokens @ elementsEnd |.line, column: tokens @ elementsEnd |.column),
-  )
-);
-
-parseObjectPatternElements = (tokens, index, elements, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_BRACE"),
-    then: $ [elements, index],
-    else: $ (
-      [element, elementEnd] = parseObjectPatternElement(tokens, index, tracer:);
-      if(
-        tokens @ elementEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = elementEnd | add(1);
-          parseObjectPatternElements(tokens, commaEnd, elements | add(element), tracer:)
-        ),
-        else: $ [elements | add(element), elementEnd],
-      )
-    ),
-  )
-);
-
-parseObjectPatternElement = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("DOUBLE_STAR"),
-    then: $ (
-      starEnd = index | add(1);
-      [pattern, patternEnd] = parseNamePattern(tokens, starEnd, tracer:);
-      [{type: "objectRest", name: pattern}, patternEnd]
-    ),
-    else: $ if(
-      tokens @ (index | add(1)) |.type | eq("COLON"),
-      then: $ (
-        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-        colonEnd = keyEnd | add(1);
-        [pattern, patternEnd] = parseNamePattern(tokens, colonEnd, tracer:);
-        [{type: "entry", key: key, value: pattern}, patternEnd]
-      ),
-      else: $ if(
-        tokens @ (index | add(1)) |.type | eq("EQUALS"),
-        then: $ (
-          [simple, simpleEnd] = parseObjectPatternSimple(tokens, index, tracer:);
-          equalsEnd = simpleEnd | add(1);
-          [defaultValue, defaultValueEnd] = parseAssignable(tokens, equalsEnd, tracer:);
-          [{type: "optional", name: simple, defaultValue: defaultValue}, defaultValueEnd]
-        ),
-        else: $ (
-          parseObjectPatternSimple(tokens, index, tracer:)
-        ),
-      ),
-    ),
-  )
-);
-
-parseObjectPatternSimple = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("NAME"),
-    then: $ (
-      nameStart = index | add(1);
-      if(
-        tokens @ nameStart |.type | eq("COLON"),
-        then: $ (
-          name = token.text;
-          colonEnd = nameStart | add(1);
-          [pattern, patternEnd] = parseNamePattern(tokens, colonEnd, tracer:);
-          [{type: "keyName", key: {type: "name", name: name}}, patternEnd]
-        ),
-        else: $ [{type: "name", name: token.text}, nameStart],
-      )
-    ),
-    else: $ error("expectedObjectPatternSimple", line: token.line, column: token.column),
-  )
-);
-
-parseAssignable = (tokens, index, tracer:) => tracer.inBlock(
-  "assignable",
-  $ (
-    token = tokens @ index;
-    if(
-      token.type | eq("OPEN_PAREN"),
-      then: $ parseArrowFunctionOrGroup(tokens, index, tracer:),
-      else: $ (
-        [result, resultEnd] = parseLoosePipelineCall(tokens, index, tracer:);
+        | unzip;
+        tail = tails | last | skipIfPresent("COMMA");
         if(
-          tokens @ resultEnd |.type | eq("ARROW"),
-          then: $ (
-            arrowEnd = resultEnd | add(1);
-            [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
-            params = {type: "mixedParamList", params: []};
-            [{type: "arrow", params: params, body: body}, bodyEnd]
-          ),
-          else: $ [result, resultEnd],
+          tail | firstType | eq("CLOSE_PAREN"),
+          then: $ [ast/mixedArgList(*args), tail.next()],
+          else: $ errorAtToken("unclosedArguments", tail.value()),
         )
-      ),
-    )
-  )
-);
-
-parseArrowFunctionOrGroup = (tokens, index, tracer:) => (
-  [params, paramsEnd] = parseParameterListOrGroup(tokens, index, tracer:);
-  if(
-    tokens @ paramsEnd |.type | eq("ARROW"),
-    then: $ (
-      arrowEnd = paramsEnd | up;
-      [body, bodyEnd] = parseAssignable(tokens, arrowEnd, tracer:);
-      [{type: "arrow", params: params | toParameterList(tokens, index), body: body}, bodyEnd]
-    ),
-    else: $ [params, paramsEnd],
-  )
-);
-
-parseParameterListOrGroup = (tokens, index, tracer:) => (
-  parenEnd = index | up;
-  if(
-    tokens @ parenEnd |.type | eq("CLOSE_PAREN"),
-    then: $ [{type: "mixedParamList", params: []}, parenEnd | up],
-    else: $ (
-      [expr, exprEnd] = parseExpression(tokens, parenEnd, tracer:);
-      tokens @ exprEnd |.type | switch(
-        ["CLOSE_PAREN", $ [{type: "group", expression: expr}, exprEnd | up]],
-        ["COMMA", $ (
-          [params, paramsEnd] = parseParameters(tokens, exprEnd, [], tracer:);
-          [{type: "mixedParamList", params:}, paramsEnd]
-        )],
-        else: $ error("unclosedGroup", line: tokens @ exprEnd |.line, column: tokens @ exprEnd |.column),
       )
     )
   )
 );
 
-toParameterList = (paramsOrGroup, tokens, index) => (
-  if(
-    paramsOrGroup.type | eq("group"),
-    then: $ if(
-      paramsOrGroup.expression.type | eq("name"),
-      then: $ {type: "mixedParamList", params: [paramsOrGroup.expression]},
-      else: $ error("invalidParameters", line: tokens @ index |.line, column: tokens @ index |.column),
-    ),
-    else: $ paramsOrGroup,
+parseAtomic = (tokens, tracer:) => (
+  token = tokens.value();
+  token.type | switch(
+    ["OPEN_PAREN", $ parseGroup(tokens, tracer:)],
+    ["OPEN_BRACKET", $ parseArray(tokens, tracer:)],
+    ["STAR", $ parseArraySpread(tokens, tracer:)],
+    ["OPEN_BRACE", $ parseObject(tokens, tracer:)],
+    ["DOUBLE_STAR", $ parseObjectSpread(tokens, tracer:)],
+    ["LITERAL", $ parseLiteral(tokens, tracer:)],
+    ["NAME", $ parseName(tokens, tracer:)],
+    ["UNDERSCORE", $ [ast/ignore(), tokens.next()]],
+    else: $ errorAtToken("unexpectedToken", token, type: token.type)
   )
 );
 
-parseParameterList = (tokens, index) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("OPEN_PAREN"),
-    then: $ (
-      parenStart = index | add(1);
-      [params, paramsEnd] = parseParameters(tokens, parenStart, []);
-      if(
-        tokens @ paramsEnd |.type | eq("CLOSE_PAREN"),
-        then: $ (
-          parenEnd = paramsEnd | add(1);
-          [{type: "mixedParamList", params: params}, parenEnd]
-        ),
-        else: $ error("unclosedParameters", line: tokens @ paramsEnd |.line, column: tokens @ paramsEnd |.column),
-      )
-    ),
-    else: $ error("expectedParameterList", line: token.line, column: token.column),
-  )
-);
-
-parseParameters = (tokens, index, params, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_PAREN"),
-    then: $ [params, index],
-    else: $ (
-      [param, paramEnd] = parseParameter(tokens, index, tracer:);
-      if(
-        tokens @ paramEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = paramEnd | add(1);
-          parseParameters(tokens, commaEnd, params | add(param))
-        ),
-        else: $ [params | add(param), paramEnd],
-      )
-    ),
-  )
-);
-
-parseParameter = (tokens, index, tracer:) => (
-  parseObjectPatternElement(tokens, index, tracer:)
-);
-
-parseLoosePipelineCall = (tokens, index, tracer:) => tracer.inBlock(
-  "loosePipelineCall",
-  $ (
-    [start, startEnd] = parseTightPipelineCall(tokens, index, tracer:);
-    if(
-      tokens @ startEnd |.type | eq("PIPE") | or($ tokens @ startEnd |.type | eq("PIPE_DOT") | or($ tokens @ startEnd |.type | eq("AT"))),
-      then: $ (
-        [pipeline, pipelineEnd] = parseLoosePipeline(tokens, startEnd, tracer:);
-        [{type: "pipelineCall", start: start, pipeline: pipeline}, pipelineEnd]
-      ),
-      else: $ [start, startEnd],
-    )
-  )
-);
-
-parseLoosePipeline = (tokens, index, tracer:) => (
-  [steps, stepsEnd] = parseLoosePipelineSteps(tokens, index, [], tracer:);
-  [{type: "loosePipeline", steps: steps}, stepsEnd]
-);
-
-parseLoosePipelineSteps = (tokens, index, steps, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("PIPE") | or($ token.type | eq("PIPE_DOT") | or($ token.type | eq("AT"))),
-    then: $ (
-      [step, stepEnd] = parseLoosePipelineStep(tokens, index, tracer:);
-      parseLoosePipelineSteps(tokens, stepEnd, [*steps, step], tracer:)
-    ),
-    else: $ [steps, index],
-  )
-);
-
-parseLoosePipelineStep = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("PIPE_DOT"),
-    then: $ (
-      dotStart = index | add(1);
-      [name, nameEnd] = parseName(tokens, dotStart, tracer:);
-      [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, nameEnd, [], tracer:);
-      [{type: "pipeDot", index: {type: "literal", value: name.name}, steps: tightSteps}, stepsEnd]
-    ),
-    else: $ if(
-      token.type | eq("PIPE"),
-      then: $ (
-        pipeStart = index | add(1);
-        [callee, calleeEnd] = parseTightPipelineCall(tokens, pipeStart, tracer:);
-        [{type: "pipe", callee: callee}, calleeEnd]
-      ),
-      else: $ (
-        atStart = index | add(1);
-        [idx, idxEnd] = parseTightPipelineCall(tokens, atStart, tracer:);
-        [{type: "at", index: idx}, idxEnd]
-      ),
-    ),
-  )
-);
-
-parseTightPipelineCall = (tokens, index, tracer:) => tracer.inBlock(
-  "tightPipelineCall",
-  $ (
-    [start, startEnd] = parseAtomic(tokens, index, tracer:);
-    [tightSteps, stepsEnd] = parseTightPipelineSteps(tokens, startEnd, [], tracer:);
-    if(
-      tightSteps | length | gt(0),
-      then: $ (
-        pipeline = {type: "tightPipeline", steps: tightSteps};
-        [{type: "pipelineCall", start: start, pipeline: pipeline}, stepsEnd]
-      ),
-      else: $ [start, stepsEnd],
-    )
-  )
-);
-
-parseTightPipelineSteps = (tokens, index, steps, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("DOT") | or($ token.type | eq("OPEN_PAREN")),
-    then: $ (
-      [step, stepEnd] = parseTightPipelineStep(tokens, index, tracer:);
-      parseTightPipelineSteps(tokens, stepEnd, [*steps, step], tracer:)
-    ),
-    else: $ [steps, index],
-  )
-);
-
-parseTightPipelineStep = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("DOT"),
-    then: $ (
-      dotStart = index | add(1);
-      [name, nameEnd] = parseName(tokens, dotStart, tracer:);
-      [{type: "dot", index: {type: "literal", value: name.name}}, nameEnd]
-    ),
-    else: $ (
-      [args, argsEnd] = parseArgumentList(tokens, index, tracer:);
-      [{type: "args", args:}, argsEnd]
-    ),
-  )
-);
-
-parseAtomic = (tokens, index, tracer:) => (
-  tokens @ index |.type | switch(
-    ["OPEN_PAREN", $ parseGroup(tokens, index, tracer:)],
-    ["OPEN_BRACKET", $ parseArray(tokens, index, tracer:)],
-    ["OPEN_BRACE", $ parseObject(tokens, index, tracer:)],
-    ["LITERAL", $ parseLiteral(tokens, index, tracer:)],
-    ["DOLLAR", $ parseConstantFunction(tokens, index, tracer:)],
-    ["UNDERSCORE", $ [{type: "ignore"}, index | up]],
-    else: $ parseName(tokens, index, tracer:),
-  )
-);
-
-parseGroup = (tokens, index, tracer:) => tracer.inBlock(
+parseGroup = (tokens, tracer:) => tracer.inBlock(
   "group",
   $ (
-    parenStart = index | add(1);
-    [expr, exprEnd] = parseExpression(tokens, parenStart, tracer:);
-    if(
-      tokens @ exprEnd |.type | eq("CLOSE_PAREN"),
-      then: $ (
-        parenEnd = exprEnd | add(1);
-        [{type: "group", expression: expr}, parenEnd]
+    parseEnclosedList(
+      tokens,
+      parseElement: parseExpression,
+      makeNode: (*elements) => (
+        if (
+          elements | length | eq(1),
+          then: $ ast/group(elements | first),
+          else: $ ast/mixedParamList(*(elements | transform(expressionToParameter))),
+        )
       ),
-      else: $ error("unclosedGroup", line: tokens @ exprEnd |.line, column: tokens @ exprEnd |.column),
+      terminator: "CLOSE_PAREN",
+      onUnclosed: (token) => errorAtToken("unclosedGroup", token),
+      tracer:
     )
   )
 );
 
-parseArray = (tokens, index, tracer:) => tracer.inBlock(
+parseArray = (tokens, tracer:) => tracer.inBlock(
   "array",
   $ (
-    bracketStart = index | add(1);
-    [elements, elementsEnd] = parseArrayElements(tokens, bracketStart, [], tracer:);
-    if(
-      tokens @ elementsEnd |.type | eq("CLOSE_BRACKET"),
-      then: $ (
-        bracketEnd = elementsEnd | add(1);
-        [{type: "array", elements: elements}, bracketEnd]
-      ),
-      else: $ error("unclosedArray", line: tokens @ elementsEnd |.line, column: tokens @ elementsEnd |.column),
+    parseEnclosedList(
+      tokens,
+      parseElement: parseStatement,
+      makeNode: ast/array,
+      terminator: "CLOSE_BRACKET",
+      onUnclosed: (token) => errorAtToken("unclosedArray", token),
+      tracer:,
     )
   )
 );
 
-parseArrayElements = (tokens, index, elements, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_BRACKET"),
-    then: $ [elements, index],
-    else: $ (
-      [element, elementEnd] = parseArrayElement(tokens, index, tracer:);
-      if(
-        tokens @ elementEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = elementEnd | add(1);
-          parseArrayElements(tokens, commaEnd, [*elements, element], tracer:)
-        ),
-        else: $ [[*elements, element], elementEnd],
-      )
-    ),
+parseArraySpread = (tokens, tracer:) => tracer.inBlock(
+  "array spread",
+  $ (
+    [expr, tail] = parseAtomic(tokens.next(), tracer:);
+    [ast/arraySpread(expr), tail]
   )
 );
 
-parseArrayElement = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("STAR"),
-    then: $ (
-      starEnd = index | add(1);
-      [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-      [{type: "arraySpread", value: value}, valueEnd]
-    ),
-    else: $ parseAssignable(tokens, index, tracer:),
-  )
-);
-
-parseObject = (tokens, index, tracer:) => tracer.inBlock(
+parseObject = (tokens, tracer:) => tracer.inBlock(
   "object",
   $ (
-    braceStart = index | add(1);
-    [entries, entriesEnd] = parseObjectElements(tokens, braceStart, [], tracer:);
+    contentTokens = tokens.next();
     if(
-      tokens @ entriesEnd |.type | eq("CLOSE_BRACE"),
-      then: $ (
-        braceEnd = entriesEnd | add(1);
-        [{type: "object", entries: entries}, braceEnd]
-      ),
-      else: $ error("unclosedObject", line: tokens @ entriesEnd |.line, column: tokens @ entriesEnd |.column),
-    )
-  )
-);
-
-parseObjectElements = (tokens, index, entries, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_BRACE"),
-    then: $ [entries, index],
-    else: $ (
-      [entry, entryEnd] = parseObjectElement(tokens, index, tracer:);
-      if(
-        tokens @ entryEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = entryEnd | add(1);
-          parseObjectElements(tokens, commaEnd, [*entries, entry], tracer:)
-        ),
-        else: $ [[*entries, entry], entryEnd],
-      )
-    ),
-  )
-);
-
-parseObjectElementOLD = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("DOUBLE_STAR"),
-    then: $ (
-      starEnd = index | add(1);
-      [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-      [{type: "objectSpread", value: value}, valueEnd]
-    ),
-    else: $ if(
-      tokens @ (index | add(1)) |.type | eq("COLON"),
-      then: $ (
-        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-        colonEnd = keyEnd | add(1);
-        [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-        [{type: "entry", key: key, value: value}, valueEnd]
-      ),
+      contentTokens | firstType | eq("CLOSE_BRACE"),
+      then: $ [ast/object(), contentTokens.next()],
       else: $ (
-        [name, nameEnd] = parseName(tokens, index, tracer:);
+        [entries, tails] = parseStatement(contentTokens, tracer:)
+        | build(([_, tokens]) => (
+          parseStatement(tokens.next(), tracer:)
+        ))
+        | continueIf(([_, tokens]) => (
+          tokens | firstType | eq("COMMA") | and(
+            $ tokens @ 2 |.type | eq("CLOSE_BRACE") | not
+          )
+        ))
+        | unzip;
+        tail = tails | last | skipIfPresent("COMMA");
         if(
-          tokens @ nameEnd |.type | eq("COLON"),
-          then: $ (
-            colonEnd = nameEnd | add(1);
-            [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-            [{type: "entry", key: {type: "keyName", key: name}, value: value}, valueEnd]
-          ),
-          else: $ (
-            [{type: "keyName", key: name}, nameEnd]
-          ),
+          tail | firstType | eq("CLOSE_BRACE"),
+          then: $ [ast/object(*entries), tail.next()],
+          else: $ errorAtToken("unclosedObject", tail.value())
         )
-      ),
-    ),
-  )
-);
-
-parseObjectElement = (tokens, index, tracer:) => tracer.inBlock(
-  "object element",
-  $ (
-    if(
-      tokens @ index |.type | eq("DOUBLE_STAR"),
-      then: $ (
-        starEnd = index | add(1);
-        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-        [{type: "objectSpread", value: value}, valueEnd]
-      ),
-      else: $ (
-        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-        parseSimpleObjectElement(tokens, keyEnd, key, tracer:)
-      ),
+      )
     )
   )
 );
 
-parseLiteral = (tokens, index, tracer:) => tracer.inBlock(
+parseObjectSpread = (tokens, tracer:) => tracer.inBlock(
+  "object spread",
+  $ (
+    [expr, tail] = parseAtomic(tokens.next(), tracer:);
+    [ast/objectSpread(expr), tail]
+  )
+);
+
+parseLiteral = (tokens, tracer:) => tracer.inBlock(
   "literal",
   $ (
-    token = tokens @ index;
-    literalEnd = index | add(1);
+    token = tokens.value();
     tracer.log(
-      ["Matched literal ", token.value | display, " at ", index | display]
-      | join
+      $ (
+        ["Matched literal ", token.value | display, " at ", formatLineColumn(token)]
+        | join
+      )
     );
-    [{type: "literal", value: token.value}, literalEnd]
+    [ast/literal(token.value), tokens.next()]
   )
 );
 
-parseConstantFunction = (tokens, index, tracer:) => tracer.inBlock(
-  "constantFunction",
-  $ (
-    dollarEnd = index | add(1);
-    [body, bodyEnd] = parseAssignable(tokens, dollarEnd, tracer:);
-    [{type: "constantFunction", body: body}, bodyEnd]
-  )
-);
-
-parseName = (tokens, index, tracer:) => tracer.inBlock(
+parseName = (tokens, tracer:) => tracer.inBlock(
   "name",
-  $ (
-    token = tokens @ index;
-    if(
-      token.type | eq("NAME"),
-      then: $ (
-        nameStart = index | add(1);
-        if(
-          tokens @ nameStart |.type | eq("SLASH"),
-          then: $ (
-            moduleName = token.text;
-            slashEnd = nameStart | add(1);
-            nameToken = tokens @ slashEnd;
-            if(
-              nameToken.type | eq("NAME"),
-              then: $ (
-                nameEnd = slashEnd | add(1);
-                [{type: "name", name: nameToken.text, from: moduleName}, nameEnd]
-              ),
-              else: $ error("expectedNameInModule", line: nameToken.line, column: nameToken.column),
-            )
-          ),
-          else: $ (
-            tracer.log(
-              ["Matched name ", token.text, " at ", index | display]
-              | join
-            );
-            [{type: "name", name: token.text}, nameStart]
-          ),
-        )
-      ),
-      else: $ error("expectedName", line: token.line, column: token.column),
-    )
-  )
-);
-
-parseArgumentList = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("OPEN_PAREN"),
-    then: $ (
-      parenStart = index | add(1);
-      [args, argsEnd] = parseArguments(tokens, parenStart, [], tracer:);
-      if(
-        tokens @ argsEnd |.type | eq("CLOSE_PAREN"),
-        then: $ (
-          parenEnd = argsEnd | add(1);
-          [{type: "mixedArgList", args: args}, parenEnd]
-        ),
-        else: $ error("unclosedArguments", line: tokens @ argsEnd |.line, column: tokens @ argsEnd |.column),
-      )
-    ),
-    else: $ error("expectedArguments", line: token.line, column: token.column),
-  )
-);
-
-parseArguments = (tokens, index, args, tracer:) => (
-  if(
-    tokens @ index |.type | eq("CLOSE_PAREN"),
-    then: $ [args, index],
+  $ if(
+    tokens.next() | firstType | eq("SLASH"),
+    then: $ parseNameInModule(tokens, tracer:),
     else: $ (
-      [arg, argEnd] = parseArgument(tokens, index, tracer:);
-      if(
-        tokens @ argEnd |.type | eq("COMMA"),
-        then: $ (
-          commaEnd = argEnd | add(1);
-          parseArguments(tokens, commaEnd, [*args, arg], tracer:)
-        ),
-        else: $ [[*args, arg], argEnd],
-      )
-    ),
-  )
-);
-
-parseArgumentOLD = (tokens, index, tracer:) => (
-  token = tokens @ index;
-  if(
-    token.type | eq("STAR"),
-    then: $ (
-      starEnd = index | add(1);
-      [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-      [{type: "arraySpread", value: value}, valueEnd]
-    ),
-    else: $ if(
-      token.type | eq("DOUBLE_STAR"),
-      then: $ (
-        starEnd = index | add(1);
-        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-        [{type: "objectSpread", value: value}, valueEnd]
-      ),
-      else: $ if(
-        tokens @ (index | add(1)) |.type | eq("COLON"),
-        then: $ (
-          [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-          colonEnd = keyEnd | add(1);
-          [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-          [{type: "entry", key: key, value: value}, valueEnd]
-        ),
-          else: $ if(
-            token.type | eq("NAME") | and($ tokens @ (index | add(1)) |.type | eq("COLON")),
-            then: $ (
-              [name, nameEnd] = parseName(tokens, index, tracer:);
-              colonEnd = nameEnd | add(1);
-              [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-              [{type: "entry", key: {type: "keyName", key: name}, value: value}, valueEnd]
-            ),
-          else: $ parseAssignable(tokens, index, tracer:),
-        ),
-      ),
-    ),
-  )
-);
-
-parseArgument = (tokens, index, tracer:) => tracer.inBlock(
-  "argument",
-  $ (
-    tokens @ index |.type | switch(
-      ["STAR", $ (
-        starEnd = index | add(1);
-        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-        [{type: "arraySpread", value: value}, valueEnd]
-      )],
-      ["DOUBLE_STAR", $ (
-        starEnd = index | add(1);
-        [value, valueEnd] = parseAssignable(tokens, starEnd, tracer:);
-        [{type: "objectSpread", value: value}, valueEnd]
-      )],
-      else: $ (
-        [key, keyEnd] = parseAssignable(tokens, index, tracer:);
-        if(
-          tokens @ keyEnd |.type | eq("COLON"),
-          then: $ parseSimpleObjectElement(tokens, keyEnd, key, tracer:),
-          else: $ [key, keyEnd],
+      token = tokens.value();
+      name = token.text;
+      tracer.log(
+        $ (
+          ["Matched name ", name, " at ", formatLineColumn(token)]
+          | join
         )
+      );
+      [ast/name(name), tokens.next()]
+    ),
+  )
+);
+
+parseNameInModule = (tokens, tracer:) => (
+  moduleToken = tokens.value();
+  moduleName = moduleToken.text;
+  tail = tokens | dropFirst(2);
+  innerToken = tail.value();
+  innerName = innerToken.text;
+  if(
+    innerToken.type | eq("NAME"),
+    then: $ (
+      tracer.log(
+        $ (
+          ["Matched name ", moduleName, "/", innerName, " at ", formatLineColumn(moduleToken)]
+          | join
+        )
+      );
+      [ast/nameInModule(moduleName, innerName), tail.next()]
+    ),
+    else: $ errorAtToken("expectedName", innerToken)
+  )
+);
+
+parseEnclosedList = (
+  tokens,
+  parseElement:,
+  makeNode:,
+  terminator:,
+  onUnclosed:,
+  tracer:,
+) => (
+  contentTokens = tokens.next();
+  if(
+    contentTokens | firstType | eq(terminator),
+    then: $ [makeNode(), contentTokens.next()],
+    else: $ (
+      [elements, tails] = parseElement(contentTokens, tracer:)
+      | build(([_, tokens]) => (
+        parseElement(tokens.next(), tracer:)
+      ))
+      | continueIf(([_, tokens]) => (
+        tokens | firstType | eq("COMMA") | and(
+          $ tokens @ 2 |.type | eq(terminator) | not
+        )
+      ))
+      | unzip;
+      tail = tails | last | skipIfPresent("COMMA");
+      if(
+        tail | firstType | eq(terminator),
+        then: $ [makeNode(*elements), tail.next()],
+        else: $ onUnclosed(tail.value()),
       )
     )
   )
 );
 
-parseSimpleObjectElement = (tokens, index, key, tracer:) => (
-  colonEnd = index | up;
-  nextToken = tokens @ colonEnd;
-  if(
-    nextToken.type | eq("COMMA") | or(
-      $ nextToken.type | eq("CLOSE_BRACE"),
-      $ nextToken.type | eq("CLOSE_PAREN"),
-    ) | and(
-      $ key.type | eq("name")
-    ),
-    then: $ [{type: "keyName", key:}, colonEnd],
-    else: $ (
-      [value, valueEnd] = parseAssignable(tokens, colonEnd, tracer:);
-      [{type: "entry", key: key, value: value}, valueEnd]
-    )
-  )
+skipIfPresent = (tokens, type) => (
+  tokens | butIf(| firstType | eq(type), |.next())
+);
+
+firstType = (tokens) => tokens.value().type;
+
+formatLineColumn = (token) => (
+  [token.line, token.column] | transform(display) | join(on: ":")
+);
+
+validateExpression = (expression) => (
+  expression
+);
+
+errorAtToken = (type, token, **properties) => (
+  error(type, line: token.line, column: token.column, **properties)
 );
 
 error = (type, line:, column:, **properties) => (

@@ -399,11 +399,14 @@ export class Vm {
       this.logInstruction("ARRAY_POP");
     }
     const array = this.stack.at(-1);
+    let source;
     let value;
     if (isArray(array)) {
+      source = this.stack.at(-2);
       value = array.pop();
     } else {
       const stream = this.stack.pop();
+      source = stream;
       if (!stream.properties.isEmpty()) {
         this.pushCallFrame("$popStream");
         value = stream.properties.value();
@@ -412,7 +415,6 @@ export class Vm {
       }
     }
     if (value === undefined) {
-      const source = this.stack.at(-2);
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
         if (diagnostic.isArgument) {

@@ -1,0 +1,81 @@
+// Nodes defined by the Kenpali specification
+
+literal = (value) => {type: "literal", value:};
+
+array = (*elements) => {type: "array", elements:};
+
+arrayPattern = (*names) => {type: "arrayPattern", names:};
+
+object = (*entries) => {type: "object", entries:};
+
+objectPattern = (*entries) => {type: "objectPattern", entries:};
+
+ignore = () => {type: "ignore"};
+
+checked = (name, schema) => {type: "checked", name:, schema:};
+
+optional = (name, defaultValue) => {type: "optional", name:, defaultValue:};
+
+spread = (value) => {type: "spread", value:};
+
+spreadKey = () => {type: "spread"};
+
+rest = (value) => {type: "rest", value:};
+
+restKey = () => {type: "rest"};
+
+name = (name) => {type: "name", name:};
+
+nameInModule = (moduleName, name) => {type: "name", name:, from: moduleName};
+
+block = (*defs, result) => {type: "block", defs:, result:};
+
+function = (posParams: = [], namedParams: = [], body) => (
+  {type: "function", posParams:, namedParams:, body:}
+);
+
+call = (callee, posArgs: = [], namedArgs: = []) => (
+  {type: "call", callee:, posArgs:, namedArgs:}
+);
+
+index = (collection, index) => {type: "index", collection:, index:};
+
+// Syntactic sugar
+
+constantFunction = (body) => {type: "constantFunction", body:};
+
+arrow = (params, body) => {type: "arrow", params:, body:};
+
+mixedParamList = (*params) => {type: "mixedParamList", params:};
+
+pipelineCall = (start, pipeline) => {type: "pipelineCall", start:, pipeline:};
+
+loosePipeline = (*steps) => {type: "loosePipeline", steps:};
+
+pipeDot = (index, *steps) => {type: "pipeDot", index:, steps:};
+
+pipe = (callee) => {type: "pipe", callee:};
+
+at = (index) => {type: "at", index:};
+
+tightPipeline = (*steps) => {type: "tightPipeline", steps:};
+
+args = (args) => {type: "args", args:};
+
+mixedArgList = (*args) => {type: "mixedArgList", args:};
+
+dot = (index) => {type: "dot", index:};
+
+group = (expression) => {type: "group", expression:};
+
+keyName = (key) => {type: "keyName", key:};
+
+entry = (key, value) => {type: "entry", key:, value:};
+
+arraySpread = (value) => {type: "arraySpread", value:};
+
+objectSpread = (value) => {type: "objectSpread", value:};
+
+arrayRest = (name) => {type: "arrayRest", name:};
+
+objectRest = (name) => {type: "objectRest", name:};

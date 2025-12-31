@@ -16,12 +16,14 @@ export default function kpparseBootstrap(code, options = {}) {
   if (!parse) {
     kptry(
       () => {
-        const lexerModule = loadLexerModule();
-        const desugarerModule = loadDesugarerModule();
-        const parserModule = loadParserModule();
+        const parserModule = loadModule("parser");
+        const astModule = loadModule("ast");
+        const lexerModule = loadModule("lexer");
+        const desugarerModule = loadModule("desugarer");
         parse = kpeval(name("parse", "parser"), {
           modules: new Map([
             ["parser", parserModule],
+            ["ast", astModule],
             ["lexer", lexerModule],
             ["desugarer", desugarerModule],
           ]),
@@ -43,20 +45,7 @@ export default function kpparseBootstrap(code, options = {}) {
   return kpcall(parse, [code], options);
 }
 
-function loadLexerModule() {
-  const lexerCode = fs.readFileSync(path.join(dirname, "lexer.kpc"));
-  const lexerModule = kpmodule(kpparseModule(lexerCode));
-  return lexerModule;
-}
-
-function loadDesugarerModule() {
-  const desugarerCode = fs.readFileSync(path.join(dirname, "desugarer.kpc"));
-  const desugarerModule = kpmodule(kpparseModule(desugarerCode));
-  return desugarerModule;
-}
-
-function loadParserModule() {
-  const parserCode = fs.readFileSync(path.join(dirname, "parser.kpc"));
-  const parserModule = kpmodule(kpparseModule(parserCode));
-  return parserModule;
+function loadModule(name) {
+  const code = fs.readFileSync(path.join(dirname, `${name}.kpc`));
+  return kpmodule(kpparseModule(code));
 }
