@@ -1,5 +1,7 @@
 // Nodes defined by the Kenpali specification
 
+withIndices = (node, start:, end:) => {**node, start:, end:};
+
 literal = (value) => {type: "literal", value:};
 
 array = (*elements) => {type: "array", elements:};

@@ -6,13 +6,7 @@ lexTokens = (code, state) => (
   if(
     state.index | gt(code | length),
     then: $ newStream(
-      value: $ {
-        type: "EOF",
-        value: null,
-        text: "",
-        line: state.line,
-        column: code | length | sub(state.lineStart) | up,
-      },
+      value: $ makeToken("EOF", "", state) @ 1,
       next: emptyStream,
     ),
     else: $ (
@@ -52,24 +46,15 @@ lexToken = (code, state) => (
 
 lexString = (code, state) => (
   {index:, line:, lineStart:} = state;
-  startIndex = index;
   quoteStart = index | up;
   [text, contentEnd] = gatherStringContent(code, quoteStart);
-  value = getStringValue(text, 1, line, lineStart, "", false);
+  value = getStringValue(text, quoteStart, 1, line, lineStart, "", false);
   if(
     contentEnd | ge(code | length),
-    then: $ errorAt("unclosedStringLiteral", code, state, value: ["\"", value] | join),
+    then: $ error("unclosedStringLiteral", start: index, end: contentEnd, value: ["\"", value] | join),
     else: $ (
       finalText = ["\"", text, "\""] | join;
-      finalIndex = contentEnd | add(2);
-      token = {
-        type: "LITERAL",
-        value: value,
-        text: finalText,
-        line: line,
-        column: startIndex | sub(lineStart),
-      };
-      [token, {index: finalIndex, line: line, lineStart: lineStart}]
+      makeToken("LITERAL", finalText, state, value:)
     ),
   )
 );
@@ -94,18 +79,18 @@ gatherStringContent = (code, index) => (
   [code | slice(from: index, to: endIndex), endIndex]
 );
 
-getStringValue = (code, index, line, lineStart, value, escaped) => (
+getStringValue = (content, start, index, line, lineStart, value, escaped) => (
   if(
-    index | gt(code | length),
+    index | gt(content | length),
     then: $ value,
     else: $ (
-      char = code @ index;
+      char = content @ index;
       if(
         escaped,
         then: $ (
           if(
-            char | eq("u") | and($ code @ (index | up) | eq("{")),
-            then: $ lexUnicodeEscape(code, index, value),
+            char | eq("u") | and($ content @ (index | up) | eq("{")),
+            then: $ lexUnicodeEscape(content, start, index, value),
             else: $ (
               escapedChar = char | switch(
                 ["\"", $ "\""],
@@ -116,20 +101,25 @@ getStringValue = (code, index, line, lineStart, value, escaped) => (
                 ["n", $ "\n"],
                 ["r", $ "\r"],
                 ["t", $ "\t"],
-                else: $ error("invalidStringLiteral", line:, column: index | sub(lineStart), value: ["\"", code, "\""] | join),
+                else: $ error(
+                  "invalidEscapeSequence",
+                  start: start | add(index) | sub(2),
+                  end: start | add(index) | down,
+                  value: content | slice(from: index | down, to: index),
+                ),
               );
               newValue = [value, escapedChar] | join;
-              getStringValue(code, index | up, line, lineStart, newValue, false)
+              getStringValue(content, start, index | up, line, lineStart, newValue, false)
             ),
           )
         ),
         else: $ (
           char | switch(
-            ["\\", $ getStringValue(code, index | up, line, lineStart, value, true)],
+            ["\\", $ getStringValue(content, start, index | up, line, lineStart, value, true)],
             ["\"", $ value],
             else: $ (
               newValue = [value, char] | join;
-              getStringValue(code, index | up, line, lineStart, newValue, false)
+              getStringValue(content, start, index | up, line, lineStart, newValue, false)
             ),
           )
         ),
@@ -138,11 +128,11 @@ getStringValue = (code, index, line, lineStart, value, escaped) => (
   )
 );
 
-lexUnicodeEscape = (code, index, value) => (
+lexUnicodeEscape = (content, start, index, value) => (
   braceStart = index | add(2);
-  [hex, hexEnd] = lexHexDigits(code, braceStart, "");
+  [hex, hexEnd] = lexHexDigits(content, braceStart, "");
   if(
-    code | at(hexEnd, default: $ null) | eq("}"),
+    content | at(hexEnd, default: $ null) | eq("}"),
     then: $ (
       braceEnd = hexEnd | up;
       codePoint = parseHex(hex);
@@ -150,7 +140,12 @@ lexUnicodeEscape = (code, index, value) => (
       finalValue = [value, char] | join;
       finalValue
     ),
-    else: $ error("invalidStringLiteral", line: 0, column: 0, value: ["\"", code, "\""] | join),
+    else: $ error(
+      "unclosedUnicodeEscapeSequence",
+      start: start | add(index) | sub(2),
+      end: start | add(hexEnd) | sub(2),
+      value: content | slice(from: index | down, to: hexEnd | down),
+    ),
   )
 );
 
@@ -197,24 +192,15 @@ codePointToString = (codePoint) => (
 
 lexRawString = (code, state) => (
   {index:, line:, lineStart:} = state;
-  startIndex = index;
   backtickStart = index | up;
   [text, contentEnd] = lexRawStringContent(code, backtickStart, "`");
   if(
     contentEnd | gt(code | length),
-    then: $ error("unclosedStringLiteral", line:, column: contentEnd | sub(lineStart), value: text),
+    then: $ error("unclosedStringLiteral", start: index, end: contentEnd | down, value: text),
     else: $ (
       finalText = [text, "`"] | join;
-      finalIndex = contentEnd | up;
       value = finalText | slice(from: 2, to: -2);
-      token = {
-        type: "LITERAL",
-        value: value,
-        text: finalText,
-        line: line,
-        column: startIndex | sub(lineStart),
-      };
-      [token, {index: finalIndex, line: line, lineStart: lineStart}]
+      makeToken("LITERAL", finalText, state, value:)
     ),
   )
 );
@@ -288,14 +274,7 @@ lexNumber = (code, state) => (
   [textAfterDecimal, decimalEnd] = lexDecimalPart(code, intEnd, textAfterInt);
   [finalText, exponentEnd] = lexExponentPart(code, decimalEnd, textAfterDecimal);
   value = parseNumber(finalText);
-  token = {
-    type: "LITERAL",
-    value: value,
-    text: finalText,
-    line: line,
-    column: startIndex | sub(lineStart),
-  };
-  [token, {index: exponentEnd, line: line, lineStart: lineStart}]
+  makeToken("LITERAL", finalText, state, value:)
 );
 
 lexInteger = (code, index, text) => (
@@ -427,14 +406,7 @@ lexName = (code, state) => (
     ["true", $ ["LITERAL", true]],
     else: $ ["NAME", null],
   );
-  token = {
-    type: kind,
-    value: value,
-    text: text,
-    line: line,
-    column: startIndex | sub(lineStart),
-  };
-  [token, {index: nameEnd, line: line, lineStart: lineStart}]
+  makeToken(kind, text, state, value:)
 );
 
 lexNameContent = (code, index, text) => (
@@ -491,27 +463,36 @@ lexOperator = (code, state) => (
     )],
     ["_", $ makeToken("UNDERSCORE", "_", state)],
     ["/", $ makeToken("SLASH", "/", state)],
-    else: $ errorAt("invalidCharacter", code, state, character: code @ state.index),
+    else: $ error(
+      "invalidCharacter",
+      start: state.index,
+      end: state.index,
+      character: code @ state.index,
+    ),
   );
   [token, newState]
 );
 
-makeToken = (type, text, state) => (
+makeToken = (type, text, state, value: = null) => (
   endIndex = state.index | add(text | length);
   token = {
     type:,
-    value: null,
+    value:,
     text:,
-    line: state.line,
-    column: state.index | sub(state.lineStart),
+    start: state.index,
+    end: endIndex | down,
   };
   [token, {**state, index: endIndex}]
 );
 
 errorAt = (type, code, state, **properties) => (
-  error(type, line: state.line, column: state.index | sub(state.lineStart), **properties)
+  errorOLD(type, line: state.line, column: state.index | sub(state.lineStart), **properties)
 );
 
-error = (type, line:, column:, **properties) => (
+errorOLD = (type, line:, column:, **properties) => (
   throw(newError(type, line:, column:, **properties))
+);
+
+error = (type, start:, end:, **properties) => (
+  throw(newError(type, start:, end:, **properties))
 );

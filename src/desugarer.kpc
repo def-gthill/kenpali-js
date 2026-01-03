@@ -89,7 +89,7 @@ normalizeExpressionStatementsTransform = (node) => (
           else: $ def,
         )
       ));
-      {type: node.type, defs: defs, result: node.result}
+      {**node, defs:}
     ),
     else: $ node,
   )
@@ -101,8 +101,8 @@ removeSpecializedSpreads = (ast) => (
 
 removeSpecializedSpreadsTransform = (node) => (
   node.type | switch(
-    ["arraySpread", $ {type: "spread", value: node.value}],
-    ["objectSpread", $ {type: "spread", value: node.value}],
+    ["arraySpread", $ ast/spread(node.value) | withIndicesFrom(node)],
+    ["objectSpread", $ ast/spread(node.value) | withIndicesFrom(node)],
     else: $ node,
   )
 );
@@ -330,7 +330,7 @@ normalizeObjectPatternElement = (entry) => (
   entry.type | switch(
     ["optional", $ (
       [key, pattern] = normalizeObjectPatternElement(entry.name);
-      [key, ast/optional(pattern, entry.defaultValue)]
+      [key, ast/optional(pattern, entry.defaultValue) | withIndicesFrom(entry)]
     )],
     ["keyName", $ [
       if(
@@ -395,82 +395,10 @@ transformTree = (node, f) => (
   )
 );
 
-transformTreeOLD = (node, f) => (
-  transformed = f(node);
-  transformed.type | switch(
-    ["array", $ (
-      elements = transformed.elements | transformArray(| transformTree(f));
-      {**transformed, elements:}
-    )],
-    ["arrayPattern", $ (
-      names = transformed.names | transformArray(| transformTree(f));
-      {**transformed, names:}
-    )],
-    ["object", $ (
-      entries = transformed.entries | transformArray((entry) => (
-        if(
-          entry | isArray,
-          then: $ entry | transformArray(| transformTree(f)),
-          else: $ transformTree(entry, f),
-        )
-      ));
-      {type: transformed.type, entries: entries}
-    )],
-    ["block", $ (
-      defs = transformed.defs | transformArray((def) => (
-        [name, value] = def;
-        [
-          if(
-            name | isNull,
-            then: $ null,
-            else: $ transformTree(name, f),
-          ),
-          transformTree(value, f),
-        ]
-      ));
-      result = transformTree(transformed.result, f);
-      {type: transformed.type, defs: defs, result: result}
-    )],
-    ["function", $ (
-      posParams = transformed.posParams | transform((param) => transformTree(param, f));
-      namedParams = transformed.namedParams | transform((param) => (
-        if(
-          param | isArray,
-          then: $ [
-            transformTree(param @ 0, f),
-            transformTree(param @ 1, f),
-          ],
-          else: $ transformTree(param, f),
-        )
-      ));
-      body = transformTree(transformed.body, f);
-      {type: transformed.type, posParams: posParams, namedParams: namedParams, body: body}
-    )],
-    ["call", $ (
-      callee = transformTree(transformed.callee, f);
-      posArgs = transformed.posArgs | transform((arg) => transformTree(arg, f));
-      namedArgs = transformed.namedArgs | transform((arg) => (
-        if(
-          arg | isArray,
-          then: $ [
-            transformTree(arg @ 0, f),
-            transformTree(arg @ 1, f),
-          ],
-          else: $ transformTree(arg, f),
-        )
-      ));
-      {type: transformed.type, callee: callee, posArgs: posArgs, namedArgs: namedArgs}
-    )],
-    ["index", $ (
-      collection = transformTree(transformed.collection, f);
-      index = transformTree(transformed.index, f);
-      {type: transformed.type, collection: collection, index: index}
-    )],
-    ["pipelineCall", $ (
-      start = transformTree(transformed.start, f);
-      pipeline = transformTree(transformed.pipeline, f);
-      {**transformed, start:, pipeline:}
-    )],
-    else: $ transformed,
+withIndicesFrom = (node, originalNode) => (
+  if(
+    originalNode | matches(recordLike({start: Any, end: Any})),
+    then: $ node | ast/withIndices(start: originalNode.start, end: originalNode.end),
+    else: $ node,
   )
 );

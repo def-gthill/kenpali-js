@@ -673,7 +673,7 @@ export class Vm {
       this.logInstruction("CALL");
     }
     const callee = this.stack.at(-3);
-    if (typeof callee === "object" && "target" in callee) {
+    if (callee !== null && typeof callee === "object" && "target" in callee) {
       this.callNaturalFunction(callee);
     } else if (isPlatformFunction(callee)) {
       this.callPlatformFunction(callee);

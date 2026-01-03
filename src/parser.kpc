@@ -1,11 +1,12 @@
 parse = (code, trace: = false) => (
   tracer = getTracer(trace);
   tokens = lexer/lex(code);
-  [ast, tail] = tracer.inBlock("parse", $ parseExpression(tokens, tracer:));
+  [ast, end] = tracer.inBlock("parse", $ parseExpression(tokens, tracer:));
+  tail = end.next();
   if(
     tail | firstType | eq("EOF"),
     then: $ ast | validateExpression | desugarer/desugar,
-    else: $ errorAtToken("unparsedInput", tail.value()),
+    else: $ error("unparsedInput", start: tail.value().start, end: tail.value().end, token: tail.value()),
   )
 );
 
@@ -48,18 +49,23 @@ parseBlock = (tokens, tracer:) => tracer.inBlock(
   $ (
     [statements, tails] = parseStatement(tokens, tracer:)
     | build(([_, tokens]) => (
-      parseStatement(tokens.next(), tracer:)
+      parseStatement(tokens.next().next(), tracer:)
     ))
     | continueIf(([_, tokens]) => (
-      tokens | firstType | eq("SEMICOLON")
+      tokens.next() | firstType | eq("SEMICOLON")
     ))
     | unzip;
+    tail = tails | last;
     result = if(
       statements | length | gt(1),
-      then: $ statements | statementsToBlock,
+      then: $ (
+        statements
+        | statementsToBlock
+        | withIndicesBetween(tokens.value(), tail.value())
+      ),
       else: $ statements | first,
     );
-    [result, tails | last]
+    [result, tail]
   )
 );
 
@@ -81,14 +87,17 @@ statementToDef = (statement) => (
 parseStatement = (tokens, tracer:) => tracer.inBlock(
   "statement",
   $ (
-    [entry, entryTail] = parseEntry(tokens, tracer:);
+    [entry, entryEnd] = parseEntry(tokens, tracer:);
+    entryTail = entryEnd.next();
     if(
       entryTail | firstType | eq("EQUALS"),
       then: $ (
-        [rhs, rhsTail] = parseAssignable(entryTail.next(), tracer:);
-        [ast/optional(entry | expressionToNamePattern, rhs), rhsTail]
+        [rhs, rhsTail] = parseStatement(entryTail.next(), tracer:);
+        node = ast/optional(entry | expressionToNamePattern, rhs)
+        | withIndicesBetween(tokens.value(), rhsTail.value());
+        [node, rhsTail]
       ),
-      else: $ [entry, entryTail],
+      else: $ [entry, entryEnd],
     )
   )
 );
@@ -105,6 +114,7 @@ expressionToNamePattern = (expression) => (
 
 arrayToArrayPattern = (array) => (
   ast/arrayPattern(*(array.elements | transform(expressionToNamePattern)))
+  | withIndicesFrom(array)
 );
 
 objectToObjectPattern = (object) => (
@@ -122,23 +132,23 @@ objectSpreadToObjectRest = (objectSpread) => (
 parseEntry = (tokens, tracer:) => tracer.inBlock(
   "entry",
   $ (
-    [key, keyTail] = parseAssignable(tokens, tracer:);
+    [key, keyEnd] = parseAssignable(tokens, tracer:);
+    keyTail = keyEnd.next();
     if(
       keyTail | firstType | eq("COLON"),
       then: $ (
-        colonTail = keyTail.next();
         if(
-          colonTail
+          keyTail.next()
           | firstType
           | eqOneOf("COMMA", "EQUALS", "CLOSE_PAREN", "CLOSE_BRACKET", "CLOSE_BRACE"),
-          then: $ [ast/keyName(key), colonTail],
+          then: $ [ast/keyName(key), keyTail],
           else: $ (
-            [value, valueTail] = parseAssignable(colonTail, tracer:);
+            [value, valueTail] = parseStatement(keyTail.next(), tracer:);
             [ast/entry(key, value), valueTail]
           )
         )
       ),
-      else: $ [key, keyTail],
+      else: $ [key, keyEnd],
     )
   )
 );
@@ -154,7 +164,7 @@ parseAssignable = (tokens, tracer:) => (
 parseConstantFunction = (tokens, tracer:) => tracer.inBlock(
   "constant function",
   $ (
-    [body, tail] = parseAssignable(tokens.next(), tracer:);
+    [body, tail] = parseStatement(tokens.next(), tracer:);
     [ast/constantFunction(body), tail]
   )
 );
@@ -164,10 +174,10 @@ parseLoosePipeline = (tokens, tracer:) => tracer.inBlock(
   $ (
     [steps, tails] = parseLoosePipelineStep(tokens, tracer:)
     | build(([_, tokens]) => (
-      parseLoosePipelineStep(tokens, tracer:)
+      parseLoosePipelineStep(tokens.next(), tracer:)
     ))
     | continueIf(([_, tokens]) => (
-      tokens | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
+      tokens.next() | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
     ))
     | unzip;
     [ast/loosePipeline(*steps), tails | last]
@@ -177,29 +187,30 @@ parseLoosePipeline = (tokens, tracer:) => tracer.inBlock(
 parseArrow = (tokens, tracer:) => tracer.inBlock(
   "arrow",
   $ (
-    [start, tail] = parseLoosePipelineCall(tokens, tracer:);
+    [start, end] = parseLoosePipelineCall(tokens, tracer:);
+    tail = end.next();
     start.type | switch(
       ["mixedParamList", $ (
         if(
           tail | firstType | eq("ARROW"),
           then: $ (
-            [result, resultTail] = parseAssignable(tail.next(), tracer:);
+            [result, resultTail] = parseStatement(tail.next(), tracer:);
             [ast/arrow(start, result), resultTail]
           ),
-          else: $ errorAtToken("expectedArrow", tail.value()),
+          else: $ errorAtTokenOLD("expectedArrow", tail.value()),
         )
       )],
       ["group", $ (
         if(
           tail | firstType | eq("ARROW"),
           then: $ (
-            [result, resultTail] = parseAssignable(tail.next(), tracer:);
+            [result, resultTail] = parseStatement(tail.next(), tracer:);
             [ast/arrow(start | groupToParameterList, result), resultTail]
           ),
-          else: $ [start, tail],
+          else: $ [start, end],
         )
       )],
-      else: $ [start, tail],
+      else: $ [start, end],
     )
   )
 );
@@ -217,10 +228,10 @@ parseLoosePipelineCall = (tokens, tracer:) => tracer.inBlock(
   $ (
     [[start, *steps], tails] = parseTightPipelineCall(tokens, tracer:)
     | build(([_, tokens]) => (
-      parseLoosePipelineStep(tokens, tracer:)
+      parseLoosePipelineStep(tokens.next(), tracer:)
     ))
     | continueIf(([_, tokens]) => (
-      tokens | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
+      tokens.next() | firstType | eqOneOf("PIPE_DOT", "PIPE", "AT")
     ))
     | unzip;
     call = if(
@@ -276,10 +287,10 @@ parseTightPipelineCall = (tokens, tracer:) => tracer.inBlock(
 parseTightPipelineSteps = (tokens, tracer:) => (
   [steps, tails] = [null, tokens]
   | build(([_, tokens]) => (
-    parseTightPipelineStep(tokens, tracer:)
+    parseTightPipelineStep(tokens.next(), tracer:)
   ))
   | continueIf(([_, tokens]) => (
-    tokens | firstType | eqOneOf("DOT", "OPEN_PAREN")
+    tokens.next() | firstType | eqOneOf("DOT", "OPEN_PAREN")
   ))
   | unzip;
   [steps | dropFirst, tails | last]
@@ -305,28 +316,13 @@ parseTightPipelineStep = (tokens, tracer:) => tracer.inBlock(
 parseArgumentList = (tokens, tracer:) => tracer.inBlock(
   "argument list",
   $ (
-    contentTokens = tokens.next();
-    if(
-      contentTokens | firstType | eq("CLOSE_PAREN"),
-      then: $ [ast/mixedArgList(), contentTokens.next()],
-      else: $ (
-        [args, tails] = parseEntry(contentTokens, tracer:)
-        | build(([_, tokens]) => (
-          parseEntry(tokens.next(), tracer:)
-        ))
-        | continueIf(([_, tokens]) => (
-          tokens | firstType | eq("COMMA") | and(
-            $ tokens @ 2 |.type | eq("CLOSE_PAREN") | not
-          )
-        ))
-        | unzip;
-        tail = tails | last | skipIfPresent("COMMA");
-        if(
-          tail | firstType | eq("CLOSE_PAREN"),
-          then: $ [ast/mixedArgList(*args), tail.next()],
-          else: $ errorAtToken("unclosedArguments", tail.value()),
-        )
-      )
+    parseEnclosedList(
+      tokens,
+      parseElement: parseEntry,
+      makeNode: ast/mixedArgList,
+      terminator: "CLOSE_PAREN",
+      onUnclosed: (token) => errorAtTokenOLD("unclosedArguments", token),
+      tracer:,
     )
   )
 );
@@ -341,8 +337,8 @@ parseAtomic = (tokens, tracer:) => (
     ["DOUBLE_STAR", $ parseObjectSpread(tokens, tracer:)],
     ["LITERAL", $ parseLiteral(tokens, tracer:)],
     ["NAME", $ parseName(tokens, tracer:)],
-    ["UNDERSCORE", $ [ast/ignore(), tokens.next()]],
-    else: $ errorAtToken("unexpectedToken", token, type: token.type)
+    ["UNDERSCORE", $ [ast/ignore() | withIndicesFrom(token), tokens]],
+    else: $ errorAtTokenOLD("unexpectedToken", token, type: token.type)
   )
 );
 
@@ -360,7 +356,7 @@ parseGroup = (tokens, tracer:) => tracer.inBlock(
         )
       ),
       terminator: "CLOSE_PAREN",
-      onUnclosed: (token) => errorAtToken("unclosedGroup", token),
+      onUnclosed: (token) => errorAtTokenOLD("unclosedGroup", token),
       tracer:
     )
   )
@@ -374,7 +370,7 @@ parseArray = (tokens, tracer:) => tracer.inBlock(
       parseElement: parseStatement,
       makeNode: ast/array,
       terminator: "CLOSE_BRACKET",
-      onUnclosed: (token) => errorAtToken("unclosedArray", token),
+      onUnclosed: (token) => errorAtTokenOLD("unclosedArray", token),
       tracer:,
     )
   )
@@ -384,35 +380,21 @@ parseArraySpread = (tokens, tracer:) => tracer.inBlock(
   "array spread",
   $ (
     [expr, tail] = parseAtomic(tokens.next(), tracer:);
-    [ast/arraySpread(expr), tail]
+    node = ast/arraySpread(expr) | withIndicesBetween(tokens.value(), tail.value());
+    [node, tail]
   )
 );
 
 parseObject = (tokens, tracer:) => tracer.inBlock(
   "object",
   $ (
-    contentTokens = tokens.next();
-    if(
-      contentTokens | firstType | eq("CLOSE_BRACE"),
-      then: $ [ast/object(), contentTokens.next()],
-      else: $ (
-        [entries, tails] = parseStatement(contentTokens, tracer:)
-        | build(([_, tokens]) => (
-          parseStatement(tokens.next(), tracer:)
-        ))
-        | continueIf(([_, tokens]) => (
-          tokens | firstType | eq("COMMA") | and(
-            $ tokens @ 2 |.type | eq("CLOSE_BRACE") | not
-          )
-        ))
-        | unzip;
-        tail = tails | last | skipIfPresent("COMMA");
-        if(
-          tail | firstType | eq("CLOSE_BRACE"),
-          then: $ [ast/object(*entries), tail.next()],
-          else: $ errorAtToken("unclosedObject", tail.value())
-        )
-      )
+    parseEnclosedList(
+      tokens,
+      parseElement: parseStatement,
+      makeNode: ast/object,
+      terminator: "CLOSE_BRACE",
+      onUnclosed: (token) => errorAtTokenOLD("unclosedObject", token),
+      tracer:,
     )
   )
 );
@@ -435,7 +417,8 @@ parseLiteral = (tokens, tracer:) => tracer.inBlock(
         | join
       )
     );
-    [ast/literal(token.value), tokens.next()]
+    node = ast/literal(token.value) | withIndicesFrom(token);
+    [node, tokens]
   )
 );
 
@@ -453,7 +436,8 @@ parseName = (tokens, tracer:) => tracer.inBlock(
           | join
         )
       );
-      [ast/name(name), tokens.next()]
+      node = ast/name(name) | withIndicesFrom(token);
+      [node, tokens]
     ),
   )
 );
@@ -473,9 +457,11 @@ parseNameInModule = (tokens, tracer:) => (
           | join
         )
       );
-      [ast/nameInModule(moduleName, innerName), tail.next()]
+      node = ast/nameInModule(moduleName, innerName)
+      | withIndicesBetween(moduleToken, innerToken);
+      [node, tail]
     ),
-    else: $ errorAtToken("expectedName", innerToken)
+    else: $ errorAtTokenOLD("expectedName", innerToken)
   )
 );
 
@@ -490,22 +476,28 @@ parseEnclosedList = (
   contentTokens = tokens.next();
   if(
     contentTokens | firstType | eq(terminator),
-    then: $ [makeNode(), contentTokens.next()],
+    then: $ (
+      node = makeNode() | withIndicesBetween(tokens.value(), contentTokens.value());
+      [node, contentTokens]
+    ),
     else: $ (
       [elements, tails] = parseElement(contentTokens, tracer:)
       | build(([_, tokens]) => (
-        parseElement(tokens.next(), tracer:)
+        parseElement(tokens.next().next(), tracer:)
       ))
       | continueIf(([_, tokens]) => (
-        tokens | firstType | eq("COMMA") | and(
-          $ tokens @ 2 |.type | eq(terminator) | not
+        tokens.next() | firstType | eq("COMMA") | and(
+          $ tokens.next().next() | firstType | eq(terminator) | not
         )
       ))
       | unzip;
-      tail = tails | last | skipIfPresent("COMMA");
+      tail = tails | last |.next() | skipIfPresent("COMMA");
       if(
         tail | firstType | eq(terminator),
-        then: $ [makeNode(*elements), tail.next()],
+        then: $ (
+          node = makeNode(*elements) | withIndicesBetween(tokens.value(), tail.value());
+          [node, tail]
+        ),
         else: $ onUnclosed(tail.value()),
       )
     )
@@ -523,13 +515,39 @@ formatLineColumn = (token) => (
 );
 
 validateExpression = (expression) => (
+  expression.type | switch(
+    ["ignore", $ errorAtNode("ignoreAsExpression", expression)],
+    ["optional", $ errorAtNode("assignmentAsExpression", expression)],
+    ["block", $ (
+      expression.defs | forEach(([name, value]) => (
+        validateExpression(value)
+      ))
+    )],
+    else: $ null,
+  );
   expression
 );
 
-errorAtToken = (type, token, **properties) => (
-  error(type, line: token.line, column: token.column, **properties)
+withIndicesFrom = (node, token) => (
+  node | ast/withIndices(start: token.start, end: token.end)
 );
 
-error = (type, line:, column:, **properties) => (
+withIndicesBetween = (node, firstToken, lastToken) => (
+  node | ast/withIndices(start: firstToken.start, end: lastToken.end)
+);
+
+errorAtNode = (type, node, **properties) => (
+  error(type, start: node.start, end: node.end, **properties)
+);
+
+errorAtTokenOLD = (type, token, **properties) => (
+  errorOLD(type, line: token.line, column: token.column, **properties)
+);
+
+error = (type, start:, end:, **properties) => (
+  throw(newError(type, start:, end:, **properties))
+);
+
+errorOLD = (type, line:, column:, **properties) => (
   throw(newError(type, line:, column:, **properties))
 );
