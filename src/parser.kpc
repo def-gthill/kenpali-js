@@ -1,13 +1,40 @@
 parse = (code, trace: = false) => (
-  tracer = getTracer(trace);
-  tokens = lexer/lex(code);
-  [ast, end] = tracer.inBlock("parse", $ parseExpression(tokens, tracer:));
-  tail = end.next();
-  if(
-    tail | firstType | eq("EOF"),
-    then: $ ast | validateExpression | desugarer/desugar,
-    else: $ error("unparsedInput", start: tail.value().start, end: tail.value().end, token: tail.value()),
+  errorToLineColumn(
+    code,
+    $ (
+      tracer = getTracer(trace);
+      tokens = lexer/lex(code);
+      [ast, end] = tracer.inBlock("parse", $ parseExpression(tokens, tracer:));
+      tail = end.next();
+      if(
+        tail | firstType | eq("EOF"),
+        then: $ ast | validateExpression | desugarer/desugar,
+        else: $ error("unparsedInput", start: tail.value().start, end: tail.value().end, token: tail.value()),
+      )
+    )
   )
+);
+
+errorToLineColumn = (code, f) => (
+  try(
+    f,
+    onError: (error) => (
+      {start:, end:, **rest} = error.details;
+      throw(newError(
+        error.type,
+        start: indexToLineColumn(code, start),
+        end: indexToLineColumn(code, end),
+        **rest
+      ))
+    )
+  )
+);
+
+indexToLineColumn = (code, index) => (
+  lines = code | keepFirst(index) | splitLines;
+  line = lines | length;
+  column = lines | last | length;
+  {line:, column:}
 );
 
 getTracer = (trace) => if(trace, then: newTracer, else: dummyTracer);
@@ -516,6 +543,11 @@ formatLineColumn = (token) => (
 
 validateExpression = (expression) => (
   expression.type | switch(
+    ["array", $ (
+      expression.elements | forEach((element) => (
+        validateExpression(element)
+      ))
+    )],
     ["ignore", $ errorAtNode("ignoreAsExpression", expression)],
     ["optional", $ errorAtNode("assignmentAsExpression", expression)],
     ["block", $ (
