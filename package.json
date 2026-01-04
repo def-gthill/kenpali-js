@@ -10,6 +10,8 @@
     "benchmark": "node test/benchmark.js",
     "snapshot-benchmark": "rm src/previous/* && cp src/*.* src/previous",
     "reset-benchmark": "rm src/baseline/* && rm src/previous/* & cp src/*.* src/baseline && cp src/*.* src/previous",
+    "bootstrap-parser": "node src/kp.js compile parser.kpc --use lexer.kpc --use ast.kpc --use desugarer.kpc",
+    "selfhost-parser": "node src/kp.js compile parser.kpc --compiled parser --use lexer.kpc --use ast.kpc --use desugarer.kpc",
     "bootstrap": "node src/kp.js compile kenpali.kpc --use compiler.kpc --use parser.kpc"
   },
   "author": "Graham Hill",

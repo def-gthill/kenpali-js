@@ -3,14 +3,14 @@ primesUpTo = (max) => (
   | build(
     ({index:, numbers:}) => {
       numbers: numbers | where(
-        (n) => n | equals(numbers @ index) | or(
+        (n) => n | eq(numbers @ index) | or(
           $ n | isDivisibleBy(numbers @ index) | not
         )
       ),
       index: index | up,
     }
   )
-  | while(({index:, numbers:}) => index | isAtMost(numbers | length))
+  | while(({index:, numbers:}) => index | le(numbers | length))
   | last
   |.numbers
 );
