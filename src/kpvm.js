@@ -175,7 +175,7 @@ export class Vm {
     this.instructionTable[op.IS_CLASS] = this.runIsClass;
     this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
     this.instructionTable[op.HAS_TYPE] = this.runHasType;
-    this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
+    this.instructionTable[op.VALIDATION_ERROR] = this.runValidationError;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -1149,37 +1149,34 @@ export class Vm {
     this.stack.push(hasType(value, type));
   }
 
-  runErrorIfInvalid() {
+  runValidationError() {
     if (this.trace) {
       this.logInstruction(
-        `ERROR_IF_INVALID isArgument=${this.getDiagnostic().isArgument}`
+        `VALIDATION_ERROR isArgument=${this.getDiagnostic().isArgument}`
       );
     }
     const schema = this.stack.pop();
-    const isValid = this.stack.pop();
     const value = this.stack.at(-1);
-    if (!isValid) {
-      const kpcallback = this.kpcallback.bind(this);
-      try {
-        if (this.getDiagnostic().isArgument) {
-          transformError(
-            () => validate(value, schema, kpcallback),
-            argumentError
-          );
-        } else if (this.getDiagnostic().isArgumentPattern) {
-          transformError(
-            () => validate(value, schema, kpcallback),
-            argumentPatternError
-          );
-        } else {
-          validate(value, schema, kpcallback);
-        }
-      } catch (error) {
-        if (isError(error)) {
-          this.throw_(error);
-        } else {
-          throw error;
-        }
+    const kpcallback = this.kpcallback.bind(this);
+    try {
+      if (this.getDiagnostic().isArgument) {
+        transformError(
+          () => validate(value, schema, kpcallback),
+          argumentError
+        );
+      } else if (this.getDiagnostic().isArgumentPattern) {
+        transformError(
+          () => validate(value, schema, kpcallback),
+          argumentPatternError
+        );
+      } else {
+        validate(value, schema, kpcallback);
+      }
+    } catch (error) {
+      if (isError(error)) {
+        this.throw_(error);
+      } else {
+        throw error;
       }
     }
   }

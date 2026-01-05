@@ -233,13 +233,11 @@ opInfo[IS_PROTOCOL] = { name: "IS_PROTOCOL", args: 0 };
 // Push a boolean indicating whether the second-from-top value belongs to the type.
 export const HAS_TYPE = 0x8e;
 opInfo[HAS_TYPE] = { name: "HAS_TYPE", args: 0 };
-// Pop the top two values from the stack. The top value is treated as a validation schema, and
-// the second-from-top value is a boolean indicating whether the value was found to match the
-// schema using fast comparison. The value now at the top of the stack is the value to validate.
-// If the value does not match the schema, push an error value onto the stack indicating why.
-// Otherwise, do nothing.
-export const ERROR_IF_INVALID = 0x9f;
-opInfo[ERROR_IF_INVALID] = { name: "ERROR_IF_INVALID", args: 0 };
+// Pop the top value from the stack to use as a validation schema. The value now at the top
+// of the stack is the value that failed validation. Push an error value onto the stack
+// indicating why the validation failed.
+export const VALIDATION_ERROR = 0x9f;
+opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: 0 };
 
 export function dumpBinary(program) {
   return new BinaryDumper(program).dump();

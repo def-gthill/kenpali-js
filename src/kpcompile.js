@@ -796,10 +796,14 @@ class Compiler {
   }
 
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
-    this.validateRecursive(deepToKpobject(schema));
-    this.addInstruction(op.VALUE, schema);
-    this.addInstruction(op.ERROR_IF_INVALID);
+    const kpSchema = deepToKpobject(schema);
+    this.validateRecursive(kpSchema);
+    this.addInstruction(op.JUMP_IF_TRUE, 0);
+    const jumpIndex = this.nextInstructionIndex();
+    this.addInstruction(op.VALUE, kpSchema);
+    this.addInstruction(op.VALIDATION_ERROR);
     this.addDiagnostic({ isArgument, isArgumentPattern });
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
   }
 
   validateRecursive(schema) {
