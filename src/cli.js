@@ -1,6 +1,8 @@
 // Programmatic interface for the Kenpali CLI.
 
+import path from "node:path";
 import { display, kpcall } from "./interop.js";
+import kpcompile from "./kpcompile.js";
 import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
 
@@ -11,17 +13,13 @@ export function main(args, fs) {
   }
   switch (command) {
     case "compile":
-      throw new Error("Not implemented");
-      break;
+      return compile(args, fs);
     case "vm":
       throw new Error("Not implemented");
-      break;
     case "run":
       return run(args, fs);
-      break;
     case "dis":
       throw new Error("Not implemented");
-      break;
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -81,4 +79,16 @@ function parseFunctionArgs(args) {
     }
   }
   return [posArgs, Object.fromEntries(namedArgs)];
+}
+
+function compile(args, fs) {
+  const fileName = args[1];
+  if (!fileName) {
+    throw new Error("Usage: kp compile <file>");
+  }
+  const outFileName = fileName.replace(path.extname(fileName), ".kpb");
+  const code = fs.readFileSync(fileName);
+  const program = kpcompile(kpparse(code));
+  fs.writeFileSync(outFileName, program);
+  return `Wrote bytecode to ${outFileName}`;
 }

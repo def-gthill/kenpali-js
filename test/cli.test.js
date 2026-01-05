@@ -29,3 +29,18 @@ test("The run command passes named arguments to the function", (t) => {
   const result = main(args, fs);
   t.is(result, `"Hello, Alice and Bob!"`);
 });
+
+test("The compile command produces a bytecode file", (t) => {
+  const args = ["compile", "hello.kpc"];
+  let fileWritten = false;
+  const fs = {
+    readFileSync: () => `"Hello, world!"`,
+    writeFileSync: (file) => {
+      t.is(file, "hello.kpb");
+      fileWritten = true;
+    },
+  };
+  const result = main(args, fs);
+  t.is(result, "Wrote bytecode to hello.kpb");
+  t.true(fileWritten);
+});
