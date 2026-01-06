@@ -357,6 +357,7 @@ class BinaryDumper {
         new TextEncoder().encode(constant).buffer,
       ];
     } else {
+      console.log(constant);
       throw new Error("Not implemented");
     }
   }

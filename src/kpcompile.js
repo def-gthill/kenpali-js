@@ -75,7 +75,7 @@ function loadCore() {
 class Compiler {
   constructor(
     expression,
-    { library = new Map(), modules = new Map(), trace = false }
+    { library = new Map(), modules = new Map(), trace = false } = {}
   ) {
     const fullLibrary = addModulesToLibrary(library, modules);
     const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
@@ -800,7 +800,7 @@ class Compiler {
     this.validateRecursive(kpSchema);
     this.addInstruction(op.JUMP_IF_TRUE, 0);
     const jumpIndex = this.nextInstructionIndex();
-    this.addInstruction(op.VALUE, kpSchema);
+    this.pushSchema(kpSchema);
     this.addInstruction(op.VALIDATION_ERROR);
     this.addDiagnostic({ isArgument, isArgumentPattern });
     this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
@@ -1113,6 +1113,19 @@ class Compiler {
 
   invalidSchema(schema) {
     throw kperror("invalidSchema", ["schema", schema]);
+  }
+
+  pushSchema(schema) {
+    if (isObject(schema)) {
+      this.addInstruction(op.EMPTY_OBJECT);
+      for (const [key, value] of schema) {
+        this.addInstruction(op.VALUE, key);
+        this.pushSchema(value);
+        this.addInstruction(op.OBJECT_PUSH);
+      }
+    } else {
+      this.addInstruction(op.VALUE, schema);
+    }
   }
 
   currentScope() {
