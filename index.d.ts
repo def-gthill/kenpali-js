@@ -477,7 +477,9 @@ export function optional<T extends KpValue>(
 
 export interface KpProgram {
   instructions: any[];
+  platformValues: any[];
   diagnostics: any[];
+  functions: any[];
 }
 
 export type KpModule = Map<string, KpValue | FunctionSpec<{}>>;

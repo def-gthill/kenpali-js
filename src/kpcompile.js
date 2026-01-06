@@ -22,8 +22,10 @@ import {
   classClass,
   functionClass,
   instanceProtocol,
+  isArray,
   isObject,
   isPlatformFunction,
+  isPlatformValue,
   isType,
   nullClass,
   numberClass,
@@ -93,6 +95,9 @@ class Compiler {
     this.activeFunctions = [];
     this.activeScopes = [];
     this.finishedFunctions = [];
+
+    this.platformValues = [];
+    this.platformValueIndices = new Map();
   }
 
   compile() {
@@ -102,7 +107,7 @@ class Compiler {
     this.compileLibrary();
     const program = this.combineFunctions();
     if (this.trace) {
-      this.log("--- Instructions ---");
+      this.log("--------------------");
       this.log(op.disassemble(program));
       this.log("--------------------");
     }
@@ -129,7 +134,7 @@ class Compiler {
       for (const [name, value] of module) {
         const fullName = makeFullName(moduleName, name);
         if (isPlatformFunction(value)) {
-          this.compileBuiltin(fullName, value);
+          this.compilePlatformFunction(fullName, value);
           if (value.methods) {
             for (const method of value.methods) {
               this.compileMethod(fullName, method);
@@ -144,7 +149,7 @@ class Compiler {
     }
   }
 
-  compileBuiltin(name, expression) {
+  compilePlatformFunction(name, platformFunction) {
     if (this.trace) {
       this.log(`Compiling builtin ${name}`);
     }
@@ -153,7 +158,8 @@ class Compiler {
       functionStackIndex: this.activeFunctions.length,
     });
     this.beginFunction(name);
-    const { posParamPattern, namedParamPattern } = getParamPatterns(expression);
+    const { posParamPattern, namedParamPattern } =
+      getParamPatterns(platformFunction);
     if (posParamPattern.names.length > 0) {
       this.declareNames(posParamPattern);
     }
@@ -172,7 +178,7 @@ class Compiler {
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
-    this.addInstruction(op.VALUE, expression);
+    this.loadPlatformValue(platformFunction);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
@@ -215,7 +221,7 @@ class Compiler {
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
-    this.addInstruction(op.VALUE, method);
+    this.loadPlatformValue(method);
     this.addInstruction(op.WRITE_LOCAL, 1);
     this.addDiagnostic({ name: "<method>" });
     this.addInstruction(op.READ_LOCAL, 0, 0);
@@ -283,7 +289,12 @@ class Compiler {
         diagnostics[i + 1].number = functionNumber;
       }
     }
-    return { instructions, diagnostics, functions: functionTable };
+    return {
+      instructions,
+      platformValues: this.platformValues,
+      diagnostics,
+      functions: functionTable,
+    };
   }
 
   compileExpression(expression, name) {
@@ -489,7 +500,7 @@ class Compiler {
     }
 
     if (value.type === "value") {
-      this.addInstruction(op.VALUE, value.value);
+      this.loadValue(value.value);
     } else {
       this.addInstruction(op.FUNCTION, 0);
       this.addMark({ functionName: fullName });
@@ -792,7 +803,7 @@ class Compiler {
   }
 
   compileValue(expression) {
-    this.addInstruction(op.VALUE, expression.value);
+    this.loadValue(expression.value);
   }
 
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
@@ -848,7 +859,7 @@ class Compiler {
     this.addInstruction(op.ALIAS);
     const instruction = this.getTypeValidationInstruction(schema);
     if (instruction === op.HAS_TYPE) {
-      this.addInstruction(op.VALUE, schema);
+      this.loadPlatformValue(schema);
     }
     this.addInstruction(instruction);
   }
@@ -887,7 +898,7 @@ class Compiler {
     this.validateAny(
       ...schema.get("values").map((option) => () => {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, option);
+        this.loadValue(option);
         this.addInstruction(op.EQUALS);
       })
     );
@@ -909,7 +920,7 @@ class Compiler {
   }
 
   validateCondition(condition) {
-    this.addInstruction(op.VALUE, condition);
+    this.loadPlatformValue(condition);
     this.addInstruction(op.EMPTY_ARRAY);
     this.addInstruction(op.READ_RELATIVE, 2);
     this.addInstruction(op.ARRAY_PUSH);
@@ -1123,8 +1134,14 @@ class Compiler {
         this.pushSchema(value);
         this.addInstruction(op.OBJECT_PUSH);
       }
+    } else if (isArray(schema)) {
+      this.addInstruction(op.EMPTY_ARRAY);
+      for (const element of schema) {
+        this.pushSchema(element);
+        this.addInstruction(op.ARRAY_PUSH);
+      }
     } else {
-      this.addInstruction(op.VALUE, schema);
+      this.loadValue(schema);
     }
   }
 
@@ -1183,6 +1200,27 @@ class Compiler {
 
   nextInstructionIndex() {
     return this.currentFunction().instructions.length;
+  }
+
+  loadValue(value) {
+    if (isPlatformValue(value)) {
+      this.loadPlatformValue(value);
+    } else {
+      this.addInstruction(op.VALUE, value);
+    }
+  }
+
+  loadPlatformValue(value) {
+    if (this.platformValueIndices.has(value)) {
+      this.addInstruction(
+        op.PLATFORM_VALUE,
+        this.platformValueIndices.get(value)
+      );
+    } else {
+      this.platformValueIndices.set(value, this.platformValues.length);
+      this.addInstruction(op.PLATFORM_VALUE, this.platformValues.length);
+      this.platformValues.push(value);
+    }
   }
 
   addMark(mark) {

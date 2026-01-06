@@ -182,6 +182,10 @@ export function hasProtocol(type, protocol) {
   );
 }
 
+export function isPlatformValue(value) {
+  return typeof value === "function" || value instanceof Instance;
+}
+
 //#endregion
 
 //#region Polymorphic functions

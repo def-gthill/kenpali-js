@@ -7,6 +7,9 @@ import { displaySimple } from "./values.js";
 
 const opInfo = [];
 
+// Load the platform value at the specified index and push it onto the stack.
+export const PLATFORM_VALUE = 0x00;
+opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: 1 };
 // Push the specified value onto the stack.
 export const VALUE = 0x01;
 opInfo[VALUE] = { name: "VALUE", args: 1 };
@@ -440,8 +443,9 @@ export function disassemble(program) {
 }
 
 class Disassembler {
-  constructor({ instructions, diagnostics, functions }) {
+  constructor({ instructions, platformValues, diagnostics, functions }) {
     this.instructions = instructions;
+    this.platformValues = platformValues;
     this.diagnostics = diagnostics;
     this.functions = functions;
     this.cursor = 0;
@@ -449,9 +453,33 @@ class Disassembler {
 
   disassemble() {
     const instructionStrings = [];
+    this.disassemblePlatformValues(instructionStrings);
+    this.disassembleFunctions(instructionStrings);
+    this.disassembleInstructions(instructionStrings);
+    return instructionStrings.join("\n");
+  }
+
+  disassemblePlatformValues(instructionStrings) {
+    instructionStrings.push("--- Platform Values ---");
+    if (this.platformValues.length === 0) {
+      instructionStrings.push("<none>");
+    }
+    for (let i = 0; i < this.platformValues.length; i++) {
+      instructionStrings.push(
+        `${i} = ${displaySimple(this.platformValues[i])}`
+      );
+    }
+  }
+
+  disassembleFunctions(instructionStrings) {
+    instructionStrings.push("--- Functions ---");
     for (const { name, offset } of this.functions) {
       instructionStrings.push(`Function ${name} at ${offset}`);
     }
+  }
+
+  disassembleInstructions(instructionStrings) {
+    instructionStrings.push("--- Instructions ---");
     while (this.cursor < this.instructions.length) {
       const instructionStart = this.cursor;
       let instructionString = this.disassembleInstruction();

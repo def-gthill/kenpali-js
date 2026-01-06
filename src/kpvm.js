@@ -117,6 +117,7 @@ export class Vm {
     this.openUpvalues = [];
 
     this.instructionTable = [];
+    this.instructionTable[op.PLATFORM_VALUE] = this.runPlatformValue;
     this.instructionTable[op.VALUE] = this.runValue;
     this.instructionTable[op.ALIAS] = this.runAlias;
     this.instructionTable[op.DISCARD] = this.runDiscard;
@@ -262,6 +263,14 @@ export class Vm {
 
   logInstruction(message) {
     console.log(`${this.instructionStart} ${message}`);
+  }
+
+  runPlatformValue() {
+    const index = this.next();
+    if (this.trace) {
+      this.logInstruction(`PLATFORM_VALUE ${index}`);
+    }
+    this.stack.push(this.program.platformValues[index]);
   }
 
   runValue() {
