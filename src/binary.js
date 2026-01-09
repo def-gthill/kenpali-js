@@ -1,0 +1,402 @@
+import { loadBuiltins } from "./builtins.js";
+import {
+  IS_BOOLEAN,
+  IS_NULL,
+  IS_NUMBER,
+  IS_STRING,
+  opInfo,
+  VALUE,
+} from "./instructions.js";
+import { kpoMerge } from "./kpobject.js";
+import { displaySimple } from "./values.js";
+
+export function dumpBinary(program, { names = new Map() } = {}) {
+  const allNames = kpoMerge(loadBuiltins(), names);
+  return new BinaryDumper(program, { names: allNames }).dump();
+}
+
+class BinaryDumper {
+  constructor(program, { names }) {
+    this.program = program;
+    this.out = {
+      constants: [],
+      platformValues: [],
+      diagnostics: [],
+      functions: [],
+      instructions: [],
+    };
+    this.cursor = 0;
+    this.nameMap = new Map(
+      [...names].map(([name, value]) => [
+        value.type === "value" ? value.value : value,
+        name,
+      ])
+    );
+  }
+
+  dump() {
+    for (const value of this.program.platformValues) {
+      if (!this.nameMap.has(value)) {
+        throw new Error(`Unknown platform value ${displaySimple(value)}`);
+      }
+      this.out.platformValues.push(this.nameMap.get(value));
+    }
+    this.dumpDiagnostics();
+    this.dumpFunctions();
+    while (this.cursor < this.program.instructions.length) {
+      this.dumpInstruction();
+    }
+    return this.makeBinary();
+  }
+
+  dumpDiagnostics() {
+    for (let i = 0; i < this.program.diagnostics.length; i++) {
+      if (this.program.diagnostics[i] !== undefined) {
+        this.out.diagnostics.push([i, this.program.diagnostics[i]]);
+      }
+    }
+  }
+
+  dumpFunctions() {
+    for (const { name, offset } of this.program.functions) {
+      this.out.functions.push([offset, name]);
+    }
+  }
+
+  dumpInstruction() {
+    const instructionType = this.next();
+    if (!opInfo[instructionType]) {
+      throw new Error(`Unknown instruction ${instructionType}`);
+    }
+    this.out.instructions.push(instructionType);
+    if (instructionType === VALUE) {
+      this.out.instructions.push(this.out.constants.length);
+      this.out.constants.push(this.next());
+    } else {
+      const instructionInfo = opInfo[instructionType];
+      for (let i = 0; i < instructionInfo.args; i++) {
+        this.out.instructions.push(this.next());
+      }
+    }
+  }
+
+  next() {
+    const value = this.program.instructions[this.cursor];
+    this.cursor += 1;
+    return value;
+  }
+
+  makeBinary() {
+    const constantBuffers = this.out.constants.map((constant) =>
+      this.constantToBuffers(constant)
+    );
+    const platformValueBuffers = this.out.platformValues.map(
+      (value) => new TextEncoder().encode(value).buffer
+    );
+    const diagnosticBuffers = this.out.diagnostics.map(
+      ([index, diagnostic]) => {
+        const serialized = JSON.stringify(diagnostic);
+        const buffer = new TextEncoder().encode(serialized).buffer;
+        return [index, buffer];
+      }
+    );
+    const functionBuffers = this.out.functions.map(([offset, name]) => {
+      const buffer = new TextEncoder().encode(name).buffer;
+      return [offset, buffer];
+    });
+
+    const directoryLength =
+      4 + // Instruction section start index
+      4 + // Constant section start index
+      4 + // Platform value section start index
+      4 + // Diagnostic section start index
+      4; // Function section start index
+    const constantSectionLength =
+      4 + // Number of constants
+      4 * constantBuffers.length + // Start index of each constant
+      constantBuffers.reduce(
+        (acc, buffers) =>
+          acc + buffers.reduce((acc, buffer) => acc + buffer.byteLength, 0),
+        0
+      ); // The constants themselves
+    const platformValueSectionLength =
+      4 + // Number of platform values
+      4 * platformValueBuffers.length + // Start index of each platform value
+      4 * platformValueBuffers.length + // Lengths of the platform values
+      platformValueBuffers.reduce((acc, buffer) => acc + buffer.byteLength, 0); // The platform values themselves
+    const diagnosticSectionLength =
+      4 + // Number of diagnostics
+      4 * diagnosticBuffers.length + // Start index of each diagnostic
+      4 * diagnosticBuffers.length + // Instruction indices of the diagnostics
+      4 * diagnosticBuffers.length + // Lengths of the diagnostics
+      diagnosticBuffers.reduce(
+        (acc, [_, buffer]) => acc + buffer.byteLength,
+        0
+      ); // The diagnostics themselves
+    const functionSectionLength =
+      4 + // Number of functions
+      4 * functionBuffers.length + // Start index of each function
+      4 * functionBuffers.length + // Function offsets
+      4 * functionBuffers.length + // Lengths of the functions
+      functionBuffers.reduce((acc, [_, buffer]) => acc + buffer.byteLength, 0); // The functions themselves
+    const instructionSectionLength = 4 * this.out.instructions.length;
+    const bufferLength =
+      directoryLength +
+      constantSectionLength +
+      platformValueSectionLength +
+      diagnosticSectionLength +
+      functionSectionLength +
+      instructionSectionLength;
+    const buffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(buffer);
+    // Directory
+    let offset = 0;
+    view.setUint32(offset, bufferLength - instructionSectionLength);
+    offset += 4;
+    let directoryOffset = directoryLength;
+    view.setUint32(offset, directoryOffset);
+    offset += 4;
+    directoryOffset += constantSectionLength;
+    view.setUint32(offset, directoryOffset);
+    offset += 4;
+    directoryOffset += platformValueSectionLength;
+    view.setUint32(offset, directoryOffset);
+    offset += 4;
+    directoryOffset += diagnosticSectionLength;
+    view.setUint32(offset, directoryOffset);
+    offset += 4;
+    // Constant section
+    view.setUint32(offset, constantBuffers.length);
+    offset += 4;
+    let constantOffset = offset + 4 * constantBuffers.length;
+    for (let i = 0; i < constantBuffers.length; i++) {
+      view.setUint32(offset, constantOffset);
+      offset += 4;
+      const buffers = constantBuffers[i];
+      for (const buffer of buffers) {
+        const constantView = new DataView(buffer);
+        for (let j = 0; j < buffer.byteLength; j++) {
+          view.setUint8(constantOffset + j, constantView.getUint8(j));
+        }
+        constantOffset += buffer.byteLength;
+      }
+    }
+    offset = constantOffset;
+    // Platform value section
+    view.setUint32(offset, platformValueBuffers.length);
+    offset += 4;
+    let platformValueOffset = offset + 4 * platformValueBuffers.length;
+    for (let i = 0; i < platformValueBuffers.length; i++) {
+      view.setUint32(offset, platformValueOffset);
+      offset += 4;
+      const buffer = platformValueBuffers[i];
+      view.setUint32(platformValueOffset, buffer.byteLength);
+      platformValueOffset += 4;
+      const platformValueView = new DataView(buffer);
+      for (let j = 0; j < buffer.byteLength; j++) {
+        view.setUint8(platformValueOffset + j, platformValueView.getUint8(j));
+      }
+      platformValueOffset += buffer.byteLength;
+    }
+    offset = platformValueOffset;
+    // Diagnostic section
+    view.setUint32(offset, diagnosticBuffers.length);
+    offset += 4;
+    let diagnosticOffset = offset + 4 * diagnosticBuffers.length;
+    for (const [index, buffer] of diagnosticBuffers) {
+      view.setUint32(offset, diagnosticOffset);
+      offset += 4;
+      view.setUint32(diagnosticOffset, index);
+      diagnosticOffset += 4;
+      view.setUint32(diagnosticOffset, buffer.byteLength);
+      diagnosticOffset += 4;
+      const diagnosticView = new DataView(buffer);
+      for (let j = 0; j < buffer.byteLength; j++) {
+        view.setUint8(diagnosticOffset + j, diagnosticView.getUint8(j));
+      }
+      diagnosticOffset += buffer.byteLength;
+    }
+    offset = diagnosticOffset;
+    // Function section
+    view.setUint32(offset, functionBuffers.length);
+    offset += 4;
+    let functionOffset = offset + 4 * functionBuffers.length;
+    for (const [target, buffer] of functionBuffers) {
+      view.setUint32(offset, functionOffset);
+      offset += 4;
+      view.setUint32(functionOffset, target);
+      functionOffset += 4;
+      view.setUint32(functionOffset, buffer.byteLength);
+      functionOffset += 4;
+      const functionView = new DataView(buffer);
+      for (let j = 0; j < buffer.byteLength; j++) {
+        view.setUint8(functionOffset + j, functionView.getUint8(j));
+      }
+      functionOffset += buffer.byteLength;
+    }
+    offset = functionOffset;
+    // Instruction section
+    for (let i = 0; i < this.out.instructions.length; i++) {
+      view.setUint32(offset, this.out.instructions[i]);
+      offset += 4;
+    }
+    return buffer;
+  }
+
+  constantToBuffers(constant) {
+    if (constant === null) {
+      return [this.typeCodeBuffer(IS_NULL)];
+    } else if (typeof constant === "boolean") {
+      const buffer = new ArrayBuffer(1);
+      const view = new DataView(buffer);
+      view.setUint8(0, constant ? 1 : 0);
+      return [this.typeCodeBuffer(IS_BOOLEAN), buffer];
+    } else if (typeof constant === "number") {
+      const buffer = new ArrayBuffer(8);
+      const view = new DataView(buffer);
+      view.setFloat64(0, constant);
+      return [this.typeCodeBuffer(IS_NUMBER), buffer];
+    } else if (typeof constant === "string") {
+      const lengthBuffer = new ArrayBuffer(4);
+      const view = new DataView(lengthBuffer);
+      view.setUint32(0, constant.length);
+      return [
+        this.typeCodeBuffer(IS_STRING),
+        lengthBuffer,
+        new TextEncoder().encode(constant).buffer,
+      ];
+    } else {
+      throw new Error(
+        `Value ${displaySimple(constant)} cannot be stored as a constant`
+      );
+    }
+  }
+
+  typeCodeBuffer(typeCode) {
+    const buffer = new ArrayBuffer(1);
+    const view = new DataView(buffer);
+    view.setUint8(0, typeCode);
+    return buffer;
+  }
+}
+
+export function loadBinary(binary, { names = new Map() } = {}) {
+  const allNames = kpoMerge(loadBuiltins(), names);
+  return new BinaryLoader(binary, { names: allNames }).load();
+}
+
+class BinaryLoader {
+  constructor(binary, { names }) {
+    this.binary = binary;
+    this.view = new DataView(binary);
+    this.names = new Map(
+      [...names].map(([name, value]) => [
+        name,
+        value.type === "value" ? value.value : value,
+      ])
+    );
+    this.platformValues = [];
+    this.diagnostics = [];
+    this.functions = [];
+    this.instructions = [];
+  }
+
+  load() {
+    this.loadInstructions();
+    this.loadPlatformValues();
+    this.loadDiagnostics();
+    this.loadFunctions();
+    return {
+      instructions: this.instructions,
+      platformValues: this.platformValues,
+      diagnostics: this.diagnostics,
+      functions: this.functions,
+    };
+  }
+
+  loadInstructions() {
+    const instructionSectionStart = this.view.getUint32(0);
+    let cursor = instructionSectionStart;
+    while (cursor < this.binary.byteLength) {
+      const type = this.view.getUint32(cursor);
+      this.instructions.push(type);
+      cursor += 4;
+      if (type === VALUE) {
+        const index = this.view.getUint32(cursor);
+        cursor += 4;
+        const value = this.loadConstant(index);
+        this.instructions.push(value);
+      } else {
+        if (!opInfo[type]) {
+          throw new Error(`Unknown instruction type ${type}`);
+        }
+        for (let i = 0; i < opInfo[type].args; i++) {
+          const arg = this.view.getUint32(cursor);
+          cursor += 4;
+          this.instructions.push(arg);
+        }
+      }
+    }
+  }
+
+  loadConstant(index) {
+    const constantSectionStart = this.view.getUint32(4);
+    const constantOffset = this.view.getUint32(
+      constantSectionStart + 4 + 4 * index
+    );
+    const type = this.view.getUint8(constantOffset);
+    switch (type) {
+      case IS_NULL:
+        return null;
+      case IS_BOOLEAN:
+        return this.view.getUint8(constantOffset + 1) === 1;
+      case IS_NUMBER:
+        return this.view.getFloat64(constantOffset + 1);
+      case IS_STRING:
+        const length = this.view.getUint32(constantOffset + 1);
+        return new TextDecoder().decode(
+          this.binary.slice(constantOffset + 5, constantOffset + 5 + length)
+        );
+      default:
+        throw new Error(`Unknown constant type ${type}`);
+    }
+  }
+
+  loadPlatformValues() {
+    const platformValueSectionStart = this.view.getUint32(8);
+    const numPlatformValues = this.view.getUint32(platformValueSectionStart);
+    for (let i = 0; i < numPlatformValues; i++) {
+      const index = this.view.getUint32(platformValueSectionStart + 4 + 4 * i);
+      const length = this.view.getUint32(index);
+      const buffer = this.binary.slice(index + 4, index + 4 + length);
+      const platformValue = new TextDecoder().decode(buffer);
+      this.platformValues.push(this.names.get(platformValue));
+    }
+  }
+
+  loadDiagnostics() {
+    const diagnosticSectionStart = this.view.getUint32(12);
+    const numDiagnostics = this.view.getUint32(diagnosticSectionStart);
+    for (let i = 0; i < numDiagnostics; i++) {
+      const index = this.view.getUint32(diagnosticSectionStart + 4 + 4 * i);
+      const instructionIndex = this.view.getUint32(index);
+      const length = this.view.getUint32(index + 4);
+      const buffer = this.binary.slice(index + 8, index + 8 + length);
+      const diagnostic = JSON.parse(new TextDecoder().decode(buffer));
+      this.diagnostics[instructionIndex] = diagnostic;
+    }
+  }
+
+  loadFunctions() {
+    const functionSectionStart = this.view.getUint32(16);
+    const numFunctions = this.view.getUint32(functionSectionStart);
+    for (let i = 0; i < numFunctions; i++) {
+      const index = this.view.getUint32(functionSectionStart + 4 + 4 * i);
+      const target = this.view.getUint32(index);
+      const length = this.view.getUint32(index + 4);
+      const buffer = this.binary.slice(index + 8, index + 8 + length);
+      const functionName = new TextDecoder().decode(buffer);
+      this.functions.push({ name: functionName, offset: target });
+    }
+  }
+}

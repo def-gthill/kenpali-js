@@ -5,12 +5,13 @@ import { displaySimple } from "./values.js";
 // -- BASIC STACK OPERATIONS --
 // ----------------------------
 
-const opInfo = [];
+export const opInfo = [];
 
 // Load the platform value at the specified index and push it onto the stack.
 export const PLATFORM_VALUE = 0x00;
 opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: 1 };
-// Push the specified value onto the stack.
+// Push the specified value onto the stack. The argument must be a Kenpali primitive value
+// (`null` or a Boolean, number, or string).
 export const VALUE = 0x01;
 opInfo[VALUE] = { name: "VALUE", args: 1 };
 // Create an alias of the top of the stack, and push it onto the stack.
@@ -28,7 +29,8 @@ opInfo[WRITE_LOCAL] = { name: "WRITE_LOCAL", args: 1 };
 // Read the value from the local variable at the specified index and push it onto the stack.
 export const READ_LOCAL = 0x06;
 opInfo[READ_LOCAL] = { name: "READ_LOCAL", args: 2 };
-// Push a new scope frame onto the scope stack.
+// Push a new scope frame onto the scope stack, whose first slot is the specified number of steps
+// down the stack.
 export const PUSH_SCOPE = 0x07;
 opInfo[PUSH_SCOPE] = { name: "PUSH_SCOPE", args: 1 };
 // Pop the top scope frame from the scope stack.
@@ -241,202 +243,6 @@ opInfo[HAS_TYPE] = { name: "HAS_TYPE", args: 0 };
 // indicating why the validation failed.
 export const VALIDATION_ERROR = 0x9f;
 opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: 0 };
-
-export function dumpBinary(program) {
-  return new BinaryDumper(program).dump();
-}
-
-class BinaryDumper {
-  constructor(program) {
-    this.program = program;
-    this.out = {
-      constants: [],
-      instructions: [],
-    };
-    this.cursor = 0;
-  }
-
-  dump() {
-    while (this.cursor < this.program.instructions.length) {
-      this.dumpInstruction();
-    }
-    return this.makeBinary();
-  }
-
-  dumpInstruction() {
-    const instructionType = this.next();
-    if (!opInfo[instructionType]) {
-      throw new Error(`Unknown instruction ${instructionType}`);
-    }
-    this.out.instructions.push(instructionType);
-    if (instructionType === VALUE) {
-      this.out.instructions.push(this.out.constants.length);
-      this.out.constants.push(this.next());
-    } else {
-      const instructionInfo = opInfo[instructionType];
-      for (let i = 0; i < instructionInfo.args; i++) {
-        this.out.instructions.push(this.next());
-      }
-    }
-  }
-
-  next() {
-    const value = this.program.instructions[this.cursor];
-    this.cursor += 1;
-    return value;
-  }
-
-  makeBinary() {
-    const constantBuffers = [];
-    for (const constant of this.out.constants) {
-      constantBuffers.push(this.constantToBuffers(constant));
-    }
-    const directoryLength =
-      4 + // Constant section start index
-      4; // Instruction section start index
-    const constantSectionLength =
-      4 * constantBuffers.length + // Start index of each constant
-      constantBuffers.reduce(
-        (acc, buffers) =>
-          acc + buffers.reduce((acc, buffer) => acc + buffer.byteLength, 0),
-        0
-      ); // The constants themselves
-    const instructionSectionLength = 4 * this.out.instructions.length;
-    const bufferLength =
-      directoryLength + constantSectionLength + instructionSectionLength;
-    const buffer = new ArrayBuffer(bufferLength);
-    const view = new DataView(buffer);
-    // Directory
-    let offset = 0;
-    let directoryOffset = directoryLength;
-    view.setUint32(offset, directoryOffset);
-    offset += 4;
-    directoryOffset += constantSectionLength;
-    view.setUint32(offset, directoryOffset);
-    offset += 4;
-    // Constant section
-    let constantOffset = offset + 4 * constantBuffers.length;
-    for (let i = 0; i < constantBuffers.length; i++) {
-      view.setUint32(offset, constantOffset);
-      offset += 4;
-      const buffers = constantBuffers[i];
-      for (const buffer of buffers) {
-        const constantView = new DataView(buffer);
-        for (let j = 0; j < buffer.byteLength; j++) {
-          view.setUint8(constantOffset + j, constantView.getUint8(j));
-        }
-        constantOffset += buffer.byteLength;
-      }
-    }
-    offset = constantOffset;
-    // Instruction section
-    for (let i = 0; i < this.out.instructions.length; i++) {
-      view.setUint32(offset, this.out.instructions[i]);
-      offset += 4;
-    }
-    return buffer;
-  }
-
-  constantToBuffers(constant) {
-    if (constant === null) {
-      return [this.typeCodeBuffer(IS_NULL)];
-    } else if (typeof constant === "boolean") {
-      const buffer = new ArrayBuffer(1);
-      const view = new DataView(buffer);
-      view.setUint8(0, constant ? 1 : 0);
-      return [this.typeCodeBuffer(IS_BOOLEAN), buffer];
-    } else if (typeof constant === "number") {
-      const buffer = new ArrayBuffer(8);
-      const view = new DataView(buffer);
-      view.setFloat64(0, constant);
-      return [this.typeCodeBuffer(IS_NUMBER), buffer];
-    } else if (typeof constant === "string") {
-      const lengthBuffer = new ArrayBuffer(4);
-      const view = new DataView(lengthBuffer);
-      view.setUint32(0, constant.length);
-      return [
-        this.typeCodeBuffer(IS_STRING),
-        lengthBuffer,
-        new TextEncoder().encode(constant).buffer,
-      ];
-    } else {
-      console.log(constant);
-      throw new Error("Not implemented");
-    }
-  }
-
-  typeCodeBuffer(typeCode) {
-    const buffer = new ArrayBuffer(1);
-    const view = new DataView(buffer);
-    view.setUint8(0, typeCode);
-    return buffer;
-  }
-}
-
-export function loadBinary(binary) {
-  return new BinaryLoader(binary).load();
-}
-
-class BinaryLoader {
-  constructor(binary) {
-    this.binary = binary;
-    this.view = new DataView(binary);
-    this.instructions = [];
-  }
-
-  load() {
-    const instructionSectionStart = this.view.getUint32(4);
-    let cursor = instructionSectionStart;
-    while (cursor < this.binary.byteLength) {
-      const type = this.view.getUint32(cursor);
-      this.instructions.push(type);
-      cursor += 4;
-      if (type === VALUE) {
-        const index = this.view.getUint32(cursor);
-        cursor += 4;
-        const value = this.loadConstant(index);
-        this.instructions.push(value);
-      } else {
-        if (!opInfo[type]) {
-          throw new Error(`Unknown instruction type ${type}`);
-        }
-        for (let i = 0; i < opInfo[type].args; i++) {
-          const arg = this.view.getUint32(cursor);
-          cursor += 4;
-          this.instructions.push(arg);
-        }
-      }
-    }
-    return {
-      instructions: this.instructions,
-      diagnostics: [],
-      functions: [],
-    };
-  }
-
-  loadConstant(index) {
-    const constantSectionStart = this.view.getUint32(0);
-    const constantOffset = this.view.getUint32(
-      constantSectionStart + 4 * index
-    );
-    const type = this.view.getUint8(constantOffset);
-    switch (type) {
-      case IS_NULL:
-        return null;
-      case IS_BOOLEAN:
-        return this.view.getUint8(constantOffset + 1) === 1;
-      case IS_NUMBER:
-        return this.view.getFloat64(constantOffset + 1);
-      case IS_STRING:
-        const length = this.view.getUint32(constantOffset + 1);
-        return new TextDecoder().decode(
-          this.binary.slice(constantOffset + 5, constantOffset + 5 + length)
-        );
-      default:
-        throw new Error(`Unknown constant type ${type}`);
-    }
-  }
-}
 
 export function disassemble(program) {
   return new Disassembler(program).disassemble();

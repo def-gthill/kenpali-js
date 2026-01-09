@@ -181,7 +181,7 @@ class Compiler {
     this.loadPlatformValue(platformFunction);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
+    this.addInstruction(op.PUSH_SCOPE, numDeclaredNames);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, name);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
@@ -229,7 +229,7 @@ class Compiler {
     this.addInstruction(op.SELF);
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
-    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames - 1);
+    this.addInstruction(op.PUSH_SCOPE, numDeclaredNames + 1);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullName);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
@@ -773,7 +773,7 @@ class Compiler {
     this.compileExpression(expression.callee);
     this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
-    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstruction(op.PUSH_SCOPE, 2);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
     if (this.trace) {
@@ -925,7 +925,7 @@ class Compiler {
     this.addInstruction(op.READ_RELATIVE, 2);
     this.addInstruction(op.ARRAY_PUSH);
     this.addInstruction(op.EMPTY_OBJECT);
-    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstruction(op.PUSH_SCOPE, 2);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
   }

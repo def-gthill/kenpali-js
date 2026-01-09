@@ -339,7 +339,7 @@ export class Vm {
 
   runPushScope() {
     const offset = this.next();
-    const stackIndex = this.stack.length - 1 + offset;
+    const stackIndex = this.stack.length - 1 - offset;
     if (this.trace) {
       this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
     }

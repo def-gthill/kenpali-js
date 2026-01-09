@@ -73,7 +73,7 @@ test("The READ_LOCAL 0 instruction aliases the specified local slot to the top o
   t.deepEqual(vm.stack, [42, 216, 73, 216]);
 });
 
-test("The PUSH 0 instruction adds a new stack frame with slot 0 at the top of the stack", (t) => {
+test("The PUSH_SCOPE 0 instruction adds a new stack frame with slot 0 at the top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
       ...[op.VALUE, 42],
@@ -90,29 +90,12 @@ test("The PUSH 0 instruction adds a new stack frame with slot 0 at the top of th
   t.deepEqual(vm.stack, [42, 216, 73, 216]);
 });
 
-test("With a positive argument, PUSH puts slot 0 above the current top of the stack", (t) => {
+test("With a positive argument, PUSH_SCOPE puts slot 0 below the current top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
       ...[op.VALUE, 42],
       ...[op.VALUE, 216],
       ...[op.PUSH_SCOPE, 1],
-      ...[op.VALUE, 73],
-      ...[op.READ_LOCAL, 0, 0],
-      op.RETURN,
-    ],
-  });
-
-  vm.run();
-
-  t.deepEqual(vm.stack, [42, 216, 73, 73]);
-});
-
-test("With a negative argument, PUSH puts slot 0 below the current top of the stack", (t) => {
-  const vm = new Vm({
-    instructions: [
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 216],
-      ...[op.PUSH_SCOPE, -1],
       ...[op.VALUE, 73],
       ...[op.READ_LOCAL, 0, 0],
       op.RETURN,
