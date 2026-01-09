@@ -1101,10 +1101,10 @@ class Compiler {
     this.addInstruction(op.JUMP_IF_FALSE, 0);
     const failJumpIndex = this.nextInstructionIndex();
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.JUMP, 0);
+    this.addInstruction(op.JUMP_BACK, 0);
     this.setInstruction(
       this.nextInstructionIndex() - 1,
-      backwardLoopIndex - this.nextInstructionIndex()
+      this.nextInstructionIndex() - backwardLoopIndex
     );
     this.setInstruction(
       forwardLoopIndex - 1,

@@ -1,6 +1,5 @@
 import test from "ava";
 import { dumpBinary, loadBinary } from "../src/binary.js";
-import { disassemble } from "../src/instructions.js";
 import kpcompile from "../src/kpcompile.js";
 import kpparse from "../src/kpparse.js";
 import kpvm from "../src/kpvm.js";
@@ -22,9 +21,14 @@ const testPrograms = [
     expectedResult: "Hello, world!",
   },
   {
-    name: "Function",
+    name: "Natural Function",
     code: `foo = (x) => [x]; foo(729)`,
     expectedResult: [729],
+  },
+  {
+    name: "Platform Function",
+    code: "1 | add(2)",
+    expectedResult: 3,
   },
 ];
 
@@ -36,10 +40,8 @@ for (const testProgram of testPrograms) {
   }
   test(`Round-tripping ${testProgram.name} from binary produces the same binary`, (t) => {
     const program = kpcompile(kpparse(testProgram.code));
-    console.log(disassemble(program));
     const originalBinary = dumpBinary(program);
     const reloadedProgram = loadBinary(originalBinary);
-    console.log(disassemble(reloadedProgram));
     const roundTrippedBinary = dumpBinary(reloadedProgram);
     t.deepEqual(originalBinary, roundTrippedBinary);
   });

@@ -132,6 +132,9 @@ opInfo[JUMP_IF_TRUE] = { name: "JUMP_IF_TRUE", args: 1 };
 // if the value is `false`.
 export const JUMP_IF_FALSE = 0x32;
 opInfo[JUMP_IF_FALSE] = { name: "JUMP_IF_FALSE", args: 1 };
+// Move the cursor backward by the specified number of steps.
+export const JUMP_BACK = 0x33;
+opInfo[JUMP_BACK] = { name: "JUMP_BACK", args: 1 };
 
 // ----------------------------
 // -- FUNCTIONS ---------------

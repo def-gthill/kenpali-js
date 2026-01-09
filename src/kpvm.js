@@ -149,6 +149,7 @@ export class Vm {
     this.instructionTable[op.JUMP] = this.runJump;
     this.instructionTable[op.JUMP_IF_TRUE] = this.runJumpIfTrue;
     this.instructionTable[op.JUMP_IF_FALSE] = this.runJumpIfFalse;
+    this.instructionTable[op.JUMP_BACK] = this.runJumpBack;
     this.instructionTable[op.BEGIN] = this.runBegin;
     this.instructionTable[op.FUNCTION] = this.runFunction;
     this.instructionTable[op.CLOSURE] = this.runClosure;
@@ -630,6 +631,14 @@ export class Vm {
     if (!condition) {
       this.cursor += distance;
     }
+  }
+
+  runJumpBack() {
+    const distance = this.next();
+    if (this.trace) {
+      this.logInstruction(`JUMP_BACK ${distance}`);
+    }
+    this.cursor -= distance;
   }
 
   runBegin() {
