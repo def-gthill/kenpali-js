@@ -2,6 +2,7 @@
 
 import path from "node:path";
 import { dumpBinary, loadBinary } from "./binary.js";
+import { disassemble } from "./instructions.js";
 import { display, kpcall } from "./interop.js";
 import kpcompile from "./kpcompile.js";
 import kpeval from "./kpeval.js";
@@ -21,7 +22,7 @@ export function main(args, fs) {
     case "run":
       return run(args, fs);
     case "dis":
-      throw new Error("Not implemented");
+      return dis(args, fs);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -107,6 +108,16 @@ function vm(args, fs) {
   } else {
     return display(result);
   }
+}
+
+function dis(args, fs) {
+  const fileName = args[1];
+  if (!fileName) {
+    throw new Error("Usage: kp dis <file>");
+  }
+  const binary = fs.readBinaryFile(fileName);
+  const program = loadBinary(binary);
+  return disassemble(program);
 }
 
 function parseFlags(startIndex, args, allowedFlags) {
