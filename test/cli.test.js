@@ -30,6 +30,22 @@ test("The run command passes named arguments to the function", (t) => {
   t.is(result, `"Hello, Alice and Bob!"`);
 });
 
+test("The run command specify modules to use", (t) => {
+  const args = ["run", "--use", "greet.kpcm", "hello.kpc"];
+  const textFiles = new Map([
+    [
+      "greet.kpcm",
+      `greet = (name1:, name2:) => ["Hello, ", name1, " and ", name2, "!"] | join;`,
+    ],
+    ["hello.kpc", `greet/greet(name1: "Alice", name2: "Bob")`],
+  ]);
+  const fs = {
+    readTextFile: (file) => textFiles.get(file),
+  };
+  const result = main(args, fs);
+  t.is(result, `"Hello, Alice and Bob!"`);
+});
+
 test("The compile command produces a bytecode file", (t) => {
   const args = ["compile", "hello.kpc"];
   let fileWritten = false;
@@ -59,4 +75,26 @@ test("The compile and vm commands together produce the same result as the run co
   t.is(compileResult, "Wrote bytecode to hello.kpb");
   const vmResult = main(vmArgs, fs);
   t.is(vmResult, `"Hello, world!"`);
+});
+
+test("The compile command can bake dependencies into the binary", (t) => {
+  const compileArgs = ["compile", "--use", "greet.kpcm", "hello.kpc"];
+  const vmArgs = ["vm", "hello.kpb"];
+  const textFiles = new Map([
+    [
+      "greet.kpcm",
+      `greet = (name1:, name2:) => ["Hello, ", name1, " and ", name2, "!"] | join;`,
+    ],
+    ["hello.kpc", `greet/greet(name1: "Alice", name2: "Bob")`],
+  ]);
+  const binaryFiles = new Map();
+  const fs = {
+    readTextFile: (file) => textFiles.get(file),
+    readBinaryFile: (file) => binaryFiles.get(file),
+    writeBinaryFile: (file, content) => binaryFiles.set(file, content),
+  };
+  const compileResult = main(compileArgs, fs);
+  t.is(compileResult, "Wrote bytecode to hello.kpb");
+  const vmResult = main(vmArgs, fs);
+  t.is(vmResult, `"Hello, Alice and Bob!"`);
 });
