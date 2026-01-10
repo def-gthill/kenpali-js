@@ -1,10 +1,12 @@
 // Programmatic interface for the Kenpali CLI.
 
 import path from "node:path";
+import { dumpBinary, loadBinary } from "./binary.js";
 import { display, kpcall } from "./interop.js";
 import kpcompile from "./kpcompile.js";
 import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
+import kpvm from "./kpvm.js";
 
 export function main(args, fs) {
   const command = args[0];
@@ -15,7 +17,7 @@ export function main(args, fs) {
     case "compile":
       return compile(args, fs);
     case "vm":
-      throw new Error("Not implemented");
+      return vm(args, fs);
     case "run":
       return run(args, fs);
     case "dis":
@@ -25,17 +27,35 @@ export function main(args, fs) {
   }
 }
 
-function run(args, fs) {
-  let i = 1;
-  const isModule = args[i] === "-m" || args[i] === "--module";
-  if (isModule) {
-    i++;
+function compile(args, fs) {
+  const [flags, flagEnd] = parseFlags(1, args, [["-t", "--trace"]]);
+  const trace = flags.includes("-t");
+  let i = flagEnd;
+  const fileName = args[i++];
+  if (!fileName) {
+    throw new Error("Usage: kp compile <file>");
   }
+  const outFileName = fileName.replace(path.extname(fileName), ".kpb");
+  const code = fs.readTextFile(fileName);
+  const program = kpcompile(kpparse(code), { trace });
+  const binary = dumpBinary(program);
+  fs.writeBinaryFile(outFileName, binary);
+  return `Wrote bytecode to ${outFileName}`;
+}
+
+function run(args, fs) {
+  const [flags, flagEnd] = parseFlags(1, args, [
+    ["-t", "--trace"],
+    ["-m", "--module"],
+  ]);
+  const trace = flags.includes("-t");
+  const isModule = flags.includes("-m");
+  let i = flagEnd;
   const fileName = args[i++];
   if (!fileName) {
     throw new Error("Usage: kp run <file> [arguments...]");
   }
-  const code = fs.readFileSync(fileName);
+  const code = fs.readTextFile(fileName);
   let result;
   if (isModule) {
     const name = args[i++];
@@ -49,7 +69,7 @@ function run(args, fs) {
     }
     result = kpeval(definition[1]);
   } else {
-    result = kpeval(kpparse(code));
+    result = kpeval(kpparse(code), { trace });
   }
   const fArgs = args.slice(i);
   if (fArgs.length > 0) {
@@ -58,6 +78,52 @@ function run(args, fs) {
   } else {
     return display(result);
   }
+}
+
+function vm(args, fs) {
+  const [flags, flagEnd] = parseFlags(1, args, [
+    ["-t", "--trace"],
+    ["-m", "--module"],
+  ]);
+  const trace = flags.includes("-t");
+  const isModule = flags.includes("-m");
+  let i = flagEnd;
+  const fileName = args[i++];
+  if (!fileName) {
+    throw new Error("Usage: kp vm <file> [arguments...]");
+  }
+  const binary = fs.readBinaryFile(fileName);
+  const program = loadBinary(binary);
+  let result;
+  if (isModule) {
+    throw new Error("Modules are not supported yet for the vm command");
+  } else {
+    result = kpvm(program, { trace });
+  }
+  const fArgs = args.slice(i);
+  if (fArgs.length > 0) {
+    const [posArgs, namedArgs] = parseFunctionArgs(fArgs);
+    return display(kpcall(result, posArgs, namedArgs));
+  } else {
+    return display(result);
+  }
+}
+
+function parseFlags(startIndex, args, allowedFlags) {
+  const flags = [];
+  let i = startIndex;
+  while (i < args.length && args[i].startsWith("-")) {
+    const flag = allowedFlags.find(
+      ([short, long]) => args[i] === short || args[i] === long
+    );
+    if (flag) {
+      flags.push(flag[0]);
+      i++;
+    } else {
+      throw new Error(`Unknown flag: ${args[i]}`);
+    }
+  }
+  return [flags, i];
 }
 
 function parseFunctionArgs(args) {
@@ -79,16 +145,4 @@ function parseFunctionArgs(args) {
     }
   }
   return [posArgs, Object.fromEntries(namedArgs)];
-}
-
-function compile(args, fs) {
-  const fileName = args[1];
-  if (!fileName) {
-    throw new Error("Usage: kp compile <file>");
-  }
-  const outFileName = fileName.replace(path.extname(fileName), ".kpb");
-  const code = fs.readFileSync(fileName);
-  const program = kpcompile(kpparse(code));
-  fs.writeFileSync(outFileName, program);
-  return `Wrote bytecode to ${outFileName}`;
 }

@@ -448,11 +448,11 @@ class Compiler {
           const outermostFunction = functionsTraversed.at(-1);
           let upvalueIndex = this.activeFunctions[
             outermostFunction.functionStackIndex
-          ].upvalue(outermostFunction.numLayers, slot);
+          ].upvalue(outermostFunction.numLayers + 1, slot);
           for (let i = functionsTraversed.length - 2; i >= 0; i--) {
             upvalueIndex = this.activeFunctions[
               functionsTraversed[i].functionStackIndex
-            ].upvalue(-1, upvalueIndex);
+            ].upvalue(0, upvalueIndex);
           }
           this.addInstruction(op.READ_UPVALUE, upvalueIndex);
           scope.setNeedsClosing(slot);

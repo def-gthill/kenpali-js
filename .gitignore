@@ -1,4 +1,5 @@
 node_modules
 *.txt
-./*.kpc
+/*.kpc
+/*.kpb
 test-build

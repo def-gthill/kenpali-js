@@ -146,9 +146,10 @@ opInfo[BEGIN] = { name: "BEGIN", args: 0 };
 // Push the function starting at the specified instruction index onto the stack.
 export const FUNCTION = 0x41;
 opInfo[FUNCTION] = { name: "FUNCTION", args: 1 };
-// Prepare an upvalue for the variable the specified number of scope frames out at the
-// specified index. If the number of steps is -1, instead prepare a chained upvalue referring
-// to the specified variable in the enclosing function's closure.
+// Prepare an upvalue for the variable the specified number of scope frames out,
+// starting at 1, at the specified index. If the number of steps is 0, instead
+// prepare a chained upvalue referring to the specified variable in the enclosing
+// function's closure.
 export const CLOSURE = 0x42;
 opInfo[CLOSURE] = { name: "CLOSURE", args: 2 };
 // Call a function. The function is expected to be third from the top of the stack,

@@ -30,6 +30,11 @@ const testPrograms = [
     code: "1 | add(2)",
     expectedResult: 3,
   },
+  {
+    name: "Nested Closure",
+    code: `foo = (x) => (y) => (z) => [x, y, z]; foo(1)(2)(3)`,
+    expectedResult: [1, 2, 3],
+  },
 ];
 
 const only = [];

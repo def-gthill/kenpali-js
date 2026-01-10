@@ -29,7 +29,7 @@ import {
   pipelineCall,
   tightPipeline,
 } from "./kpast.js";
-import kperror, { isError } from "./kperror.js";
+import kperror, { isError, KenpaliError } from "./kperror.js";
 import kplex from "./kplex.js";
 import { deepToKpobject, kpoEntries } from "./kpobject.js";
 import { kpcallbackInNewSession } from "./kpvm.js";
@@ -48,8 +48,16 @@ export function kpparseSugared(
   code,
   { parseRoot = parseAll, trace = false } = {}
 ) {
-  const tokens = kplex(code);
-  return kpparseTokens(tokens, { parseRoot, trace });
+  try {
+    const tokens = kplex(code);
+    return kpparseTokens(tokens, { parseRoot, trace });
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession);
+    } else {
+      throw error;
+    }
+  }
 }
 
 export function kpparseTokens(
@@ -59,7 +67,7 @@ export function kpparseTokens(
   const tokenList = [...tokens];
   const parseResult = parseRoot({ tokens: tokenList, trace }, 0);
   if (isError(parseResult)) {
-    throw parseResult;
+    throw new KenpaliError(parseResult, kpcallbackInNewSession);
   } else {
     return parseResult.ast;
   }

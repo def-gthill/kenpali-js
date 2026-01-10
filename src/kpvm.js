@@ -668,13 +668,12 @@ export class Vm {
     }
     const f = this.stack.at(-1);
     let upvalue;
-    if (stepsOut === -1) {
+    if (stepsOut === 0) {
       const enclosingFunction = this.stack[this.callFrames.at(-1).stackIndex];
       const ref = enclosingFunction.closure[index];
       upvalue = new Upvalue(ref);
     } else {
-      const absoluteIndex =
-        this.scopeFrames.at(-1 - stepsOut).stackIndex + index;
+      const absoluteIndex = this.scopeFrames.at(-stepsOut).stackIndex + index;
 
       if (this.openUpvalues[absoluteIndex]) {
         upvalue = this.openUpvalues[absoluteIndex];
