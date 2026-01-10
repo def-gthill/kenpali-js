@@ -9,10 +9,79 @@ import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
 import kpvm from "./kpvm.js";
 
+const usage = "Usage: kp <command> [options...] <file> [arguments...]";
+
+const compileCommand = {
+  name: "compile",
+  description: "Compiles Kenpali code to bytecode.",
+  options: [
+    { type: "flag", short: "-t", long: "--trace" },
+    { type: "flag", short: "-j", long: "--javascript" },
+    { type: "multi", short: "-u", long: "--use" },
+  ],
+  documentation: [
+    "The output file is named the same as the input file, but with the .kpb extension.",
+    "Passing the -j/--javascript flag causes the output binary to be embedded into a JavaScript " +
+      "module that can be included in a package. In this case, the file name ends in .kpb.js.",
+    "Modules to be included in the binary can be specified with -u/--use; each -u/--use argument " +
+      "specifies a module to include, and must be the name of a file containing a Kenpali module.",
+  ],
+};
+
+const vmCommand = {
+  name: "vm",
+  description: "Runs Kenpali bytecode.",
+  options: [
+    { type: "flag", short: "-t", long: "--trace" },
+    { type: "flag", short: "-m", long: "--module" },
+  ],
+  documentation: [
+    "If there are no arguments after the file name, the contents of the file " +
+      "are evaluated as an expression and the result is printed.",
+    "Otherwise, the result is treated as a function, and any arguments " +
+      "after the file name are passed to the function. The value returned by " +
+      "the function is printed.",
+    "Passing the -m/--module flag causes the file's contents to be treated as " +
+      "a module instead. In this case, the first argument after the file name is " +
+      "looked up in the module. Then the above behaviour is applied to any remaining " +
+      "arguments.",
+  ],
+};
+
+const runCommand = {
+  name: "run",
+  description: "Compiles and runs Kenpali code.",
+  options: [
+    { type: "flag", short: "-t", long: "--trace" },
+    { type: "flag", short: "-m", long: "--module" },
+    { type: "multi", short: "-u", long: "--use" },
+  ],
+  documentation: [
+    ...vmCommand.documentation,
+    "Modules can be made available by passing in module filenames with -u/--use.",
+  ],
+};
+
+const disCommand = {
+  name: "dis",
+  description: "Disassembles Kenpali bytecode to human-readable assembly.",
+  options: [],
+  documentation: ["The output is printed to the console."],
+};
+
+const commands = [compileCommand, vmCommand, runCommand, disCommand];
+
+export class UsageError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
 export function main(args, fs) {
   const command = args[0];
-  if (!command) {
-    throw new Error("Usage: kp <command> <file>");
+  if (!command || command === "--help") {
+    return makeHelp();
   }
   switch (command) {
     case "compile":
@@ -24,11 +93,16 @@ export function main(args, fs) {
     case "dis":
       return dis(args, fs);
     default:
-      throw new Error(`Unknown command: ${command}`);
+      throw new UsageError(
+        [`Unknown command: ${command}`, makeHelp()].join("\n\n")
+      );
   }
 }
 
 function compile(args, fs) {
+  if (args.length === 1 || args[1] === "--help") {
+    return makeCommandHelp(compileCommand);
+  }
   const [settings, settingsEnd] = parseSettings(1, args, [
     { type: "flag", short: "-t", long: "--trace" },
     { type: "flag", short: "-j", long: "--javascript" },
@@ -37,7 +111,7 @@ function compile(args, fs) {
   let i = settingsEnd;
   const fileName = args[i++];
   if (!fileName) {
-    throw new Error("Usage: kp compile <file>");
+    throw new UsageError(makeUsageHelp(compileCommand));
   }
   const outFileName =
     fileName.replace(path.extname(fileName), ".kpb") +
@@ -61,6 +135,9 @@ function compile(args, fs) {
 }
 
 function run(args, fs) {
+  if (args.length === 1 || args[1] === "--help") {
+    return makeCommandHelp(runCommand);
+  }
   const [settings, settingsEnd] = parseSettings(1, args, [
     { type: "flag", short: "-t", long: "--trace" },
     { type: "flag", short: "-m", long: "--module" },
@@ -69,7 +146,7 @@ function run(args, fs) {
   let i = settingsEnd;
   const fileName = args[i++];
   if (!fileName) {
-    throw new Error("Usage: kp run <file> [arguments...]");
+    throw new UsageError(makeUsageHelp(runCommand));
   }
   const code = fs.readTextFile(fileName);
   const modules = loadModules(fs, settings.use);
@@ -98,6 +175,9 @@ function run(args, fs) {
 }
 
 function vm(args, fs) {
+  if (args.length === 1 || args[1] === "--help") {
+    return makeCommandHelp(vmCommand);
+  }
   const [settings, settingsEnd] = parseSettings(1, args, [
     { type: "flag", short: "-t", long: "--trace" },
     { type: "flag", short: "-m", long: "--module" },
@@ -105,7 +185,7 @@ function vm(args, fs) {
   let i = settingsEnd;
   const fileName = args[i++];
   if (!fileName) {
-    throw new Error("Usage: kp vm <file> [arguments...]");
+    throw new UsageError(makeUsageHelp(vmCommand));
   }
   const binary = fs.readBinaryFile(fileName);
   const program = loadBinary(binary);
@@ -126,8 +206,8 @@ function vm(args, fs) {
 
 function dis(args, fs) {
   const fileName = args[1];
-  if (!fileName) {
-    throw new Error("Usage: kp dis <file>");
+  if (!fileName || fileName === "--help") {
+    return makeUsageHelp(disCommand);
   }
   const binary = fs.readBinaryFile(fileName);
   const program = loadBinary(binary);
@@ -213,4 +293,65 @@ function parseFunctionArgs(args) {
     }
   }
   return [posArgs, Object.fromEntries(namedArgs)];
+}
+
+function makeHelp() {
+  return [
+    usage,
+    "",
+    "Commands:",
+    commands
+      .map((command) => `- ${command.name}: ${command.description}`)
+      .join("\n"),
+  ].join("\n");
+}
+
+function makeCommandHelp(command) {
+  return [
+    makeUsageHelp(command),
+    command.documentation.map(linewrap).join("\n\n"),
+  ].join("\n\n");
+}
+
+function makeUsageHelp(command) {
+  if (command.options.length === 0) {
+    return `Usage: kp ${command.name} <file> [arguments...]`;
+  } else {
+    return `Usage: kp ${command.name} ${makeOptionHelp(command.options)} <file> [arguments...]`;
+  }
+}
+
+function makeOptionHelp(options) {
+  return options
+    .map((option) => {
+      switch (option.type) {
+        case "flag":
+          return `[${option.short}|${option.long}]`;
+        case "value":
+          return `[${option.short}|${option.long} <value>]`;
+        case "multi":
+          return `[${option.short}|${option.long} <value>...]`;
+        default:
+          throw new Error(`Unknown option type: ${option.type}`);
+      }
+    })
+    .join(" ");
+}
+
+function linewrap(text) {
+  const lines = [];
+  let currentLine = "";
+  for (const word of text.split(" ")) {
+    if (currentLine.length + word.length > 80) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      if (currentLine.length > 0) {
+        currentLine += " ";
+      }
+      currentLine += word;
+    }
+  }
+  lines.push(currentLine);
+  return lines.join("\n");
 }

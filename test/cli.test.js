@@ -1,7 +1,55 @@
 import test from "ava";
 import { main } from "../src/cli.js";
 
-test("The run command with no arguments evaluates an expression", (t) => {
+const commands = ["compile", "vm", "run", "dis"];
+
+test("Running with no arguments prints the help message", (t) => {
+  const args = [];
+  const fs = {};
+  const result = main(args, fs);
+  t.assert(result.includes("Usage"));
+  t.assert(result.includes("Commands"));
+});
+
+test("Running with --help prints the help message", (t) => {
+  const args = ["--help"];
+  const fs = {};
+  const result = main(args, fs);
+  t.assert(result.includes("Usage"));
+  t.assert(result.includes("Commands"));
+});
+
+test("Running with an unknown command prints the help message", (t) => {
+  const args = ["unknown"];
+  const fs = {};
+  try {
+    main(args, fs);
+  } catch (error) {
+    t.assert(error.message.includes("Unknown command"));
+    t.assert(error.message.includes("Usage"));
+    t.assert(error.message.includes("Commands"));
+  }
+});
+
+for (const command of commands) {
+  test(`Running the ${command} command without arguments prints the help message`, (t) => {
+    const args = [command];
+    const fs = {};
+    const result = main(args, fs);
+    t.assert(result.includes("Usage"));
+    t.assert(result.includes(command));
+  });
+
+  test(`Running the ${command} command with --help prints the help message`, (t) => {
+    const args = [command, "--help"];
+    const fs = {};
+    const result = main(args, fs);
+    t.assert(result.includes("Usage"));
+    t.assert(result.includes(command));
+  });
+}
+
+test("The run command with no arguments after the filename evaluates an expression", (t) => {
   const args = ["run", "hello.kpc"];
   const fs = {
     readTextFile: () => `"Hello, world!"`,
