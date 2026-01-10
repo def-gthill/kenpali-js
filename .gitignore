@@ -2,5 +2,6 @@ node_modules
 *.txt
 /*.kpc
 /*.kpb
+/*.kpb.js
 *.kpd
 test-build

@@ -1,7 +1,7 @@
 // Programmatic interface for the Kenpali CLI.
 
 import path from "node:path";
-import { dumpBinary, loadBinary } from "./binary.js";
+import { dumpBinary, loadBinary, toBase64 } from "./binary.js";
 import { disassemble } from "./instructions.js";
 import { display, kpcall } from "./interop.js";
 import kpcompile from "./kpcompile.js";
@@ -29,18 +29,31 @@ export function main(args, fs) {
 }
 
 function compile(args, fs) {
-  const [flags, flagEnd] = parseFlags(1, args, [["-t", "--trace"]]);
+  const [flags, flagEnd] = parseFlags(1, args, [
+    ["-t", "--trace"],
+    ["-j", "--javascript"],
+  ]);
   const trace = flags.includes("-t");
+  const isJavaScript = flags.includes("-j");
   let i = flagEnd;
   const fileName = args[i++];
   if (!fileName) {
     throw new Error("Usage: kp compile <file>");
   }
-  const outFileName = fileName.replace(path.extname(fileName), ".kpb");
+  const outFileName =
+    fileName.replace(path.extname(fileName), ".kpb") +
+    (isJavaScript ? ".js" : "");
   const code = fs.readTextFile(fileName);
   const program = kpcompile(kpparse(code), { trace });
   const binary = dumpBinary(program);
-  fs.writeBinaryFile(outFileName, binary);
+  if (isJavaScript) {
+    fs.writeTextFile(
+      outFileName,
+      `export const kpBytecode = "${toBase64(binary)}"`
+    );
+  } else {
+    fs.writeBinaryFile(outFileName, binary);
+  }
   return `Wrote bytecode to ${outFileName}`;
 }
 

@@ -18,8 +18,10 @@ Commands:
 
 const compileHelp = [
   "Compiles Kenpali code to bytecode.",
-  "Usage: kp compile [-t|--trace] <file>",
+  "Usage: kp compile [-t|--trace] [-j|--javascript] <file>",
   "The output file is named the same as the input file, but with the .kpb extension.",
+  "Passing the -j/--javascript flag causes the output binary to be embedded into a JavaScript " +
+    "module that can be included in a package.",
 ].join("\n\n");
 
 const vmHelp = [

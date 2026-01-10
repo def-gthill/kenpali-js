@@ -400,3 +400,15 @@ class BinaryLoader {
     }
   }
 }
+
+export function toBase64(binary) {
+  return btoa(String.fromCharCode(...new Uint8Array(binary)));
+}
+
+export function fromBase64(base64) {
+  return Uint8Array.from(
+    atob(base64)
+      .split("")
+      .map((c) => c.charCodeAt(0))
+  ).buffer;
+}

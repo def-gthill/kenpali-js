@@ -1,5 +1,5 @@
 import test from "ava";
-import { dumpBinary, loadBinary } from "../src/binary.js";
+import { dumpBinary, fromBase64, loadBinary, toBase64 } from "../src/binary.js";
 import kpcompile from "../src/kpcompile.js";
 import kpparse from "../src/kpparse.js";
 import kpvm from "../src/kpvm.js";
@@ -59,5 +59,13 @@ for (const testProgram of testPrograms) {
     const reloadedProgram = loadBinary(binary);
     const roundTrippedResult = kpvm(reloadedProgram);
     t.deepEqual(roundTrippedResult, testProgram.expectedResult);
+  });
+
+  test(`Round-tripping ${testProgram.name} to base64 and back produces the same binary`, (t) => {
+    const program = kpcompile(kpparse(testProgram.code));
+    const binary = dumpBinary(program);
+    const base64 = toBase64(binary);
+    const reloadedBinary = fromBase64(base64);
+    t.deepEqual(binary, reloadedBinary);
   });
 }
