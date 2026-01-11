@@ -4,7 +4,7 @@ import path from "node:path";
 import { dumpBinary, loadBinary, toBase64 } from "./binary.js";
 import { disassemble } from "./instructions.js";
 import { display, kpcall } from "./interop.js";
-import kpcompile from "./kpcompile.js";
+import kpcompile, { kpcompileModule } from "./kpcompile.js";
 import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
 import kpvm from "./kpvm.js";
@@ -16,13 +16,16 @@ const compileCommand = {
   description: "Compiles Kenpali code to bytecode.",
   options: [
     { type: "flag", short: "-t", long: "--trace" },
+    { type: "flag", short: "-m", long: "--module" },
     { type: "flag", short: "-j", long: "--javascript" },
     { type: "multi", short: "-u", long: "--use" },
   ],
   documentation: [
-    "The output file is named the same as the input file, but with the .kpb extension.",
+    "The output file is named the same as the input file, but with the approprate extension.",
+    "Passing the -m/--module flag causes the file to be compiled as a module instead of a program. " +
+      "The resulting binary can only be run by passing the -m/--module flag to the vm command.",
     "Passing the -j/--javascript flag causes the output binary to be embedded into a JavaScript " +
-      "module that can be included in a package. In this case, the file name ends in .kpb.js.",
+      "module that can be included in a package.",
     "Modules to be included in the binary can be specified with -u/--use; each -u/--use argument " +
       "specifies a module to include, and must be the name of a file containing a Kenpali module.",
   ],
@@ -103,25 +106,22 @@ function compile(args, fs) {
   if (args.length === 1 || args[1] === "--help") {
     return makeCommandHelp(compileCommand);
   }
-  const [settings, settingsEnd] = parseSettings(1, args, [
-    { type: "flag", short: "-t", long: "--trace" },
-    { type: "flag", short: "-j", long: "--javascript" },
-    { type: "multi", short: "-u", long: "--use" },
-  ]);
+  const [settings, settingsEnd] = parseSettings(1, args, compileCommand);
   let i = settingsEnd;
   const fileName = args[i++];
   if (!fileName) {
     throw new UsageError(makeUsageHelp(compileCommand));
   }
   const outFileName =
-    fileName.replace(path.extname(fileName), ".kpb") +
-    (settings.isJavaScript ? ".js" : "");
+    fileName.replace(
+      path.extname(fileName),
+      settings.module ? ".kpbm" : ".kpb"
+    ) + (settings.isJavaScript ? ".js" : "");
   const code = fs.readTextFile(fileName);
   const modules = loadModules(fs, settings.use);
-  const program = kpcompile(kpparse(code), {
-    modules,
-    trace: settings.trace,
-  });
+  const program = settings.module
+    ? kpcompileModule(kpparseModule(code), { modules, trace: settings.trace })
+    : kpcompile(kpparse(code), { modules, trace: settings.trace });
   const binary = dumpBinary(program);
   if (settings.isJavaScript) {
     fs.writeTextFile(
@@ -134,54 +134,11 @@ function compile(args, fs) {
   return `Wrote bytecode to ${outFileName}`;
 }
 
-function run(args, fs) {
-  if (args.length === 1 || args[1] === "--help") {
-    return makeCommandHelp(runCommand);
-  }
-  const [settings, settingsEnd] = parseSettings(1, args, [
-    { type: "flag", short: "-t", long: "--trace" },
-    { type: "flag", short: "-m", long: "--module" },
-    { type: "multi", short: "-u", long: "--use" },
-  ]);
-  let i = settingsEnd;
-  const fileName = args[i++];
-  if (!fileName) {
-    throw new UsageError(makeUsageHelp(runCommand));
-  }
-  const code = fs.readTextFile(fileName);
-  const modules = loadModules(fs, settings.use);
-  let result;
-  if (settings.isModule) {
-    const name = args[i++];
-    if (!name) {
-      throw new Error("Usage: kp run -m <file> <name> [arguments...]");
-    }
-    const module = kpparseModule(code);
-    const definition = module.find(([n]) => n === name);
-    if (!definition) {
-      throw new Error(`Name "${name}" not found in module "${fileName}"`);
-    }
-    result = kpeval(definition[1], { modules });
-  } else {
-    result = kpeval(kpparse(code), { modules, trace: settings.trace });
-  }
-  const fArgs = args.slice(i);
-  if (fArgs.length > 0) {
-    const [posArgs, namedArgs] = parseFunctionArgs(fArgs);
-    return display(kpcall(result, posArgs, namedArgs));
-  } else {
-    return display(result);
-  }
-}
-
 function vm(args, fs) {
   if (args.length === 1 || args[1] === "--help") {
     return makeCommandHelp(vmCommand);
   }
-  const [settings, settingsEnd] = parseSettings(1, args, [
-    { type: "flag", short: "-t", long: "--trace" },
-    { type: "flag", short: "-m", long: "--module" },
-  ]);
+  const [settings, settingsEnd] = parseSettings(1, args, vmCommand);
   let i = settingsEnd;
   const fileName = args[i++];
   if (!fileName) {
@@ -204,6 +161,42 @@ function vm(args, fs) {
   }
 }
 
+function run(args, fs) {
+  if (args.length === 1 || args[1] === "--help") {
+    return makeCommandHelp(runCommand);
+  }
+  const [settings, settingsEnd] = parseSettings(1, args, runCommand);
+  let i = settingsEnd;
+  const fileName = args[i++];
+  if (!fileName) {
+    throw new UsageError(makeUsageHelp(runCommand));
+  }
+  const code = fs.readTextFile(fileName);
+  const modules = loadModules(fs, settings.use);
+  let result;
+  if (settings.module) {
+    const name = args[i++];
+    if (!name) {
+      throw new Error("Usage: kp run -m <file> <name> [arguments...]");
+    }
+    const module = kpparseModule(code);
+    const definition = module.find(([n]) => n === name);
+    if (!definition) {
+      throw new Error(`Name "${name}" not found in module "${fileName}"`);
+    }
+    result = kpeval(definition[1], { modules });
+  } else {
+    result = kpeval(kpparse(code), { modules, trace: settings.trace });
+  }
+  const fArgs = args.slice(i);
+  if (fArgs.length > 0) {
+    const [posArgs, namedArgs] = parseFunctionArgs(fArgs);
+    return display(kpcall(result, posArgs, namedArgs));
+  } else {
+    return display(result);
+  }
+}
+
 function dis(args, fs) {
   const fileName = args[1];
   if (!fileName || fileName === "--help") {
@@ -214,7 +207,8 @@ function dis(args, fs) {
   return disassemble(program);
 }
 
-function parseSettings(startIndex, args, settingSpec) {
+function parseSettings(startIndex, args, command) {
+  const settingSpec = command.options;
   const settings = Object.fromEntries(
     settingSpec.map((spec) => [settingName(spec), settingDefault(spec)])
   );
@@ -226,7 +220,9 @@ function parseSettings(startIndex, args, settingSpec) {
     if (setting) {
       i = parseSetting(i, args, setting, settings);
     } else {
-      throw new Error(`Unknown setting: ${args[i]}`);
+      throw new Error(
+        [`Unknown setting: ${args[i]}`, makeUsageHelp(command)].join("\n\n")
+      );
     }
   }
   return [settings, i];

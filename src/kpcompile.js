@@ -50,12 +50,54 @@ export default function kpcompile(
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const library = new Map([...loadCore(), ...builtins]);
+  const fullLibrary = addModulesToLibrary(library, modules);
+  const filteredLibrary = new LibraryFilter(fullLibrary, [
+    ["<main>", "<main>", expression],
+  ]).filter();
+  if (trace && filteredLibrary.size > 0) {
+    console.log(
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
+    );
+  }
   try {
-    return new Compiler(expression, {
-      library,
-      modules,
+    const compiler = new Compiler(filteredLibrary, {
       trace,
-    }).compile();
+    });
+    compiler.compileMain(expression);
+    compiler.compileLibrary();
+    return compiler.finishProgram();
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession);
+    } else {
+      throw error;
+    }
+  }
+}
+
+export function kpcompileModule(
+  module,
+  { names = kpobject(), modules = kpobject(), trace = false } = {}
+) {
+  const builtins = kpoMerge(loadBuiltins(), names);
+  const library = new Map([...loadCore(), ...builtins]);
+  const fullLibrary = addModulesToLibrary(library, modules);
+  const filteredLibrary = new LibraryFilter(
+    fullLibrary,
+    module.map(([name, value]) => ["<main>", name, value])
+  ).filter();
+  if (trace && filteredLibrary.size > 0) {
+    console.log(
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
+    );
+  }
+  try {
+    const compiler = new Compiler(filteredLibrary, {
+      trace,
+    });
+    compiler.compileModule(module);
+    compiler.compileLibrary();
+    return compiler.finishProgram();
   } catch (error) {
     if (isError(error)) {
       throw new KenpaliError(error, kpcallbackInNewSession);
@@ -75,19 +117,8 @@ function loadCore() {
 }
 
 class Compiler {
-  constructor(
-    expression,
-    { library = new Map(), modules = new Map(), trace = false } = {}
-  ) {
-    const fullLibrary = addModulesToLibrary(library, modules);
-    const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
-    if (trace && filteredLibrary.size > 0) {
-      this.log(
-        `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
-      );
-    }
-    this.expression = expression;
-    this.library = filteredLibrary;
+  constructor(library, { trace = false } = {}) {
+    this.library = library;
     this.currentModuleName = "<main>";
     this.trace = trace;
     this.traceLevel = 0;
@@ -100,11 +131,21 @@ class Compiler {
     this.platformValueIndices = new Map();
   }
 
-  compile() {
+  compileMain(expression) {
     this.beginFunction("$main");
-    this.compileExpression(this.expression);
+    this.compileExpression(expression);
     this.activeFunctions.pop();
-    this.compileLibrary();
+  }
+
+  compileModule(module) {
+    for (const [name, value] of module) {
+      this.beginFunction(name);
+      this.compileExpression(value);
+      this.activeFunctions.pop();
+    }
+  }
+
+  finishProgram() {
     const program = this.combineFunctions();
     if (this.trace) {
       this.log("--------------------");
@@ -303,7 +344,7 @@ class Compiler {
       typeof expression !== "object" ||
       !("type" in expression)
     ) {
-      throw kperror("notAnExpression", ["value", expression]);
+      throw kperror("notAnExpression", ["value", deepToKpobject(expression)]);
     } else {
       this.compileExpressionByType(expression, name);
     }
@@ -1376,13 +1417,11 @@ function libraryGet(library, moduleName, name) {
 }
 
 class LibraryFilter extends TreeTransformer {
-  constructor(library, expression) {
+  constructor(library, rootExpressions) {
     super();
     this.libraryExpressions = flattenLibrary(library);
-    this.allExpressions = [
-      ...this.libraryExpressions,
-      ["<main>", "<main>", expression],
-    ];
+    this.rootExpressions = rootExpressions;
+    this.allExpressions = [...this.libraryExpressions, ...this.rootExpressions];
     this.libraryIndexMap = flattenedLibraryToIndexMap(this.libraryExpressions);
     this.activeScopes = [];
     this.usage = this.allExpressions.map(() => new Set());
@@ -1395,7 +1434,9 @@ class LibraryFilter extends TreeTransformer {
       this.currentModuleName = moduleName;
       this.transformExpression(expression);
     }
-    const grey = new Set([this.allExpressions.length - 1]);
+    const grey = new Set(
+      this.rootExpressions.map((_, i) => this.allExpressions.length - i - 1)
+    );
     const black = new Set();
     while (grey.size > 0) {
       for (const expression of grey) {
