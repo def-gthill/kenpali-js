@@ -46,6 +46,6 @@ export default function kpparseBootstrap(code, options = {}) {
 }
 
 function loadModule(name) {
-  const code = fs.readFileSync(path.join(dirname, `${name}.kpc`));
+  const code = fs.readFileSync(path.join(dirname, `${name}.kpcm`));
   return kpmodule(kpparseModule(code));
 }
