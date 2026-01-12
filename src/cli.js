@@ -116,14 +116,14 @@ function compile(args, fs) {
     fileName.replace(
       path.extname(fileName),
       settings.module ? ".kpbm" : ".kpb"
-    ) + (settings.isJavaScript ? ".js" : "");
+    ) + (settings.javascript ? ".js" : "");
   const code = fs.readTextFile(fileName);
   const modules = loadModules(fs, settings.use);
   const program = settings.module
     ? kpcompileModule(kpparseModule(code), { modules, trace: settings.trace })
     : kpcompile(kpparse(code), { modules, trace: settings.trace });
   const binary = dumpBinary(program);
-  if (settings.isJavaScript) {
+  if (settings.javascript) {
     fs.writeTextFile(
       outFileName,
       `export const kpBytecode = "${toBase64(binary)}"`

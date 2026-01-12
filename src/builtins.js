@@ -1,4 +1,5 @@
 import {
+  array,
   arrayPattern,
   checked,
   literal,
@@ -837,7 +838,7 @@ const rawBuiltins = [
           {
             name: "elements",
             type: collectionProtocol,
-            defaultValue: literal([]),
+            defaultValue: array(),
           },
         ],
         body: ([elements], { getMethod, kpcallback }) => {
@@ -899,7 +900,7 @@ const rawBuiltins = [
           {
             name: "entries",
             type: collectionProtocol,
-            defaultValue: literal([]),
+            defaultValue: array(),
           },
         ],
         body: ([entries], { getMethod, kpcallback }) => {
@@ -1030,7 +1031,7 @@ const rawBuiltins = [
           {
             name: "elements",
             type: sequenceProtocol,
-            defaultValue: literal([]),
+            defaultValue: array(),
           },
         ],
         body: ([elements], { getMethod, kpcallback }) => {
@@ -1131,7 +1132,7 @@ const rawBuiltins = [
           {
             name: "elements",
             type: collectionProtocol,
-            defaultValue: literal([]),
+            defaultValue: array(),
           },
         ],
         body: ([elements], { getMethod, kpcallback }) => {
@@ -1221,7 +1222,7 @@ const rawBuiltins = [
           {
             name: "entries",
             type: collectionProtocol,
-            defaultValue: literal([]),
+            defaultValue: array(),
           },
         ],
         body: ([entries], { getMethod, kpcallback }) => {

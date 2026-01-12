@@ -422,7 +422,12 @@ function extractPlatformNamesAndValues(names) {
 }
 
 export function toBase64(binary) {
-  return btoa(String.fromCharCode(...new Uint8Array(binary)));
+  const array = new Uint8Array(binary);
+  const chars = [];
+  for (let i = 0; i < array.length; i++) {
+    chars.push(String.fromCharCode(array[i]));
+  }
+  return btoa(chars.join(""));
 }
 
 export function fromBase64(base64) {
