@@ -118,6 +118,7 @@ class BinaryDumper {
     });
 
     const directoryLength =
+      2 + // Version
       4 + // Instruction section start index
       4 + // Constant section start index
       4 + // Platform value section start index
@@ -163,6 +164,8 @@ class BinaryDumper {
     const view = new DataView(buffer);
     // Directory
     let offset = 0;
+    view.setUint16(offset, 1);
+    offset += 2;
     view.setUint32(offset, bufferLength - instructionSectionLength);
     offset += 4;
     let directoryOffset = directoryLength;
@@ -294,10 +297,16 @@ class BinaryDumper {
 
 export function loadBinary(binary, { names = new Map() } = {}) {
   const allNames = kpoMerge(loadBuiltins(), names);
-  return new BinaryLoader(binary, { names: allNames }).load();
+  const view = new DataView(binary);
+  const version = view.getUint16(0);
+  if (version === 1) {
+    return new BinaryLoaderV1(binary, { names: allNames }).load();
+  } else {
+    throw new Error(`Binary version ${version} not supported`);
+  }
 }
 
-class BinaryLoader {
+class BinaryLoaderV1 {
   constructor(binary, { names }) {
     this.binary = binary;
     this.view = new DataView(binary);
@@ -322,7 +331,7 @@ class BinaryLoader {
   }
 
   loadInstructions() {
-    const instructionSectionStart = this.view.getUint32(0);
+    const instructionSectionStart = this.view.getUint32(2);
     let cursor = instructionSectionStart;
     while (cursor < this.binary.byteLength) {
       const type = this.view.getUint32(cursor);
@@ -347,7 +356,7 @@ class BinaryLoader {
   }
 
   loadConstant(index) {
-    const constantSectionStart = this.view.getUint32(4);
+    const constantSectionStart = this.view.getUint32(6);
     const constantOffset = this.view.getUint32(
       constantSectionStart + 4 + 4 * index
     );
@@ -370,7 +379,7 @@ class BinaryLoader {
   }
 
   loadPlatformValues() {
-    const platformValueSectionStart = this.view.getUint32(8);
+    const platformValueSectionStart = this.view.getUint32(10);
     const numPlatformValues = this.view.getUint32(platformValueSectionStart);
     for (let i = 0; i < numPlatformValues; i++) {
       const index = this.view.getUint32(platformValueSectionStart + 4 + 4 * i);
@@ -382,7 +391,7 @@ class BinaryLoader {
   }
 
   loadDiagnostics() {
-    const diagnosticSectionStart = this.view.getUint32(12);
+    const diagnosticSectionStart = this.view.getUint32(14);
     const numDiagnostics = this.view.getUint32(diagnosticSectionStart);
     for (let i = 0; i < numDiagnostics; i++) {
       const index = this.view.getUint32(diagnosticSectionStart + 4 + 4 * i);
@@ -395,7 +404,7 @@ class BinaryLoader {
   }
 
   loadFunctions() {
-    const functionSectionStart = this.view.getUint32(16);
+    const functionSectionStart = this.view.getUint32(18);
     const numFunctions = this.view.getUint32(functionSectionStart);
     for (let i = 0; i < numFunctions; i++) {
       const index = this.view.getUint32(functionSectionStart + 4 + 4 * i);
