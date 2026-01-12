@@ -49,7 +49,7 @@ import {
 export default function kpvm(
   program,
   {
-    entrypoint = "$main",
+    entrypoint = "main",
     trace = false,
     timeLimitSeconds = 0,
     stepLimit = 0,
@@ -215,7 +215,8 @@ export class Vm {
   }
 
   run(entrypoint = null) {
-    this.cursor = entrypoint === null ? 0 : this.functions.get(entrypoint);
+    this.cursor =
+      entrypoint === null ? 0 : this.functions.get(`$${entrypoint}`);
     if (this.cursor === undefined) {
       throw new Error(`Entrypoint "${entrypoint}" not found in program`);
     }

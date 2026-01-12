@@ -152,7 +152,7 @@ function vm(args, fs) {
     if (!name) {
       throw new UsageError(makeUsageHelp(vmCommand));
     }
-    result = kpvm(program, { entrypoint: `$${name}`, trace: settings.trace });
+    result = kpvm(program, { entrypoint: name, trace: settings.trace });
   } else {
     result = kpvm(program, { trace: settings.trace });
   }
