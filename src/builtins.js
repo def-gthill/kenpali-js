@@ -1503,8 +1503,9 @@ function platformConstructor(name, paramSpec, f, methods) {
   return result;
 }
 
-function platformMethod(name, paramSpec, f) {
-  f.methodName = name;
+function platformMethod(className, methodName, paramSpec, f) {
+  f.functionName = `${className}/${methodName}`;
+  f.methodName = methodName;
   if ("posParams" in paramSpec) {
     f.posParams = paramSpec.posParams;
   }
@@ -1520,8 +1521,8 @@ export function platformClass(
 ) {
   const class_ = new Class(name, protocols);
   const methods = Object.entries(methodSpecs).map(
-    ([name, { posParams, namedParams, body }]) =>
-      platformMethod(name, { posParams, namedParams }, body)
+    ([methodName, { posParams, namedParams, body }]) =>
+      platformMethod(name, methodName, { posParams, namedParams }, body)
   );
   return [
     constant(name, class_),

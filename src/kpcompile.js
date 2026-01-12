@@ -79,12 +79,12 @@ export function kpcompileModule(
   module,
   { names = kpobject(), modules = kpobject(), trace = false } = {}
 ) {
-  const builtins = kpoMerge(loadBuiltins(), names);
+  const builtins = kpoMerge(loadBuiltins(), names, module);
   const library = new Map([...loadCore(), ...builtins]);
   const fullLibrary = addModulesToLibrary(library, modules);
   const filteredLibrary = new LibraryFilter(
     fullLibrary,
-    module.map(([name, value]) => ["<main>", name, value])
+    module.map(([name, value]) => ["<entry>", name, value])
   ).filter();
   if (trace && filteredLibrary.size > 0) {
     console.log(
@@ -139,7 +139,7 @@ class Compiler {
 
   compileModule(module) {
     for (const [name, value] of module) {
-      this.beginFunction(name);
+      this.beginFunction(`$${name}`);
       this.compileExpression(value);
       this.activeFunctions.pop();
     }

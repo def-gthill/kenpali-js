@@ -31,6 +31,11 @@ const testPrograms = [
     expectedResult: 3,
   },
   {
+    name: "Constructor and methods",
+    code: `foo = newVar("Hello"); foo.set("Goodbye"); [foo.get(), ", world!"] | join`,
+    expectedResult: "Goodbye, world!",
+  },
+  {
     name: "Nested Closure",
     code: `foo = (x) => (y) => (z) => [x, y, z]; foo(1)(2)(3)`,
     expectedResult: [1, 2, 3],

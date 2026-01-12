@@ -49,6 +49,7 @@ import {
 export default function kpvm(
   program,
   {
+    entrypoint = "$main",
     trace = false,
     timeLimitSeconds = 0,
     stepLimit = 0,
@@ -60,7 +61,7 @@ export default function kpvm(
     timeLimitSeconds,
     stepLimit,
     debugLog,
-  }).run();
+  }).run(entrypoint);
 }
 
 export function kpvmCall(
@@ -202,7 +203,7 @@ export class Vm {
       console.log(`Callback invoked at ${target}`);
     }
     this.cursor = target;
-    const result = this.run();
+    const result = this.start();
     if (this.trace) {
       console.log(
         `Returning ${display(result, kpcallbackInNewSession)} from callback`
@@ -213,7 +214,16 @@ export class Vm {
     return result;
   }
 
-  run() {
+  run(entrypoint = null) {
+    this.cursor = entrypoint === null ? 0 : this.functions.get(entrypoint);
+    if (this.cursor === undefined) {
+      throw new Error(`Entrypoint "${entrypoint}" not found in program`);
+    }
+    this.instructionStart = this.cursor;
+    return this.start();
+  }
+
+  start() {
     while (this.cursor >= 0) {
       this.stepNumber += 1;
       if (this.stepLimit > 0 && this.stepNumber >= this.stepLimit) {

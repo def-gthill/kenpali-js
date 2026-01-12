@@ -134,6 +134,30 @@ test("The compile command produces a bytecode file", (t) => {
   t.true(fileWritten);
 });
 
+test("The compile command can compile a module whose functions reference each other", (t) => {
+  const args = ["compile", "-m", "greet.kpcm"];
+  const textFiles = new Map([
+    [
+      "greet.kpcm",
+      `hello = () => "Hello, world!"; ` +
+        `goodbye = () => "Goodbye, world!"; ` +
+        `greet = () => [hello(), goodbye()] | join(on: " ");`,
+    ],
+  ]);
+  let fileWritten = false;
+  const fs = {
+    readTextFile: (file) => textFiles.get(file),
+    writeBinaryFile: (file, content) => {
+      t.is(file, "greet.kpbm");
+      fileWritten = true;
+      t.assert(content instanceof ArrayBuffer);
+    },
+  };
+  const result = main(args, fs);
+  t.is(result, "Wrote bytecode to greet.kpbm");
+  t.true(fileWritten);
+});
+
 test("The compile and vm commands together produce the same result as the run command", (t) => {
   const compileArgs = ["compile", "hello.kpc"];
   const vmArgs = ["vm", "hello.kpb"];
@@ -164,7 +188,8 @@ test("The compile and vm commands can process a module and then pick a function 
   const textFiles = new Map([
     [
       "greet.kpcm",
-      `greet = (name1:, name2:) => ["Hello, ", name1, " and ", name2, "!"] | join;`,
+      `distraction = (name1:, name2:) => [name1, " and ", name2, " are distracted!"] | join; ` +
+        `greet = (name1:, name2:) => ["Hello, ", name1, " and ", name2, "!"] | join;`,
     ],
   ]);
   const binaryFiles = new Map();

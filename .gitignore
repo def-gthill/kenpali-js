@@ -5,3 +5,4 @@ node_modules
 /*.kpb.js
 *.kpd
 test-build
+debug.log

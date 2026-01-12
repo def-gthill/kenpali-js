@@ -147,8 +147,12 @@ function vm(args, fs) {
   const binary = fs.readBinaryFile(fileName);
   const program = loadBinary(binary);
   let result;
-  if (settings.isModule) {
-    throw new Error("Modules are not supported yet for the vm command");
+  if (settings.module) {
+    const name = args[i++];
+    if (!name) {
+      throw new UsageError(makeUsageHelp(vmCommand));
+    }
+    result = kpvm(program, { entrypoint: `$${name}`, trace: settings.trace });
   } else {
     result = kpvm(program, { trace: settings.trace });
   }
@@ -177,12 +181,12 @@ function run(args, fs) {
   if (settings.module) {
     const name = args[i++];
     if (!name) {
-      throw new Error("Usage: kp run -m <file> <name> [arguments...]");
+      throw new UsageError(makeUsageHelp(runCommand));
     }
     const module = kpparseModule(code);
     const definition = module.find(([n]) => n === name);
     if (!definition) {
-      throw new Error(`Name "${name}" not found in module "${fileName}"`);
+      throw new UsageError(`Name "${name}" not found in module "${fileName}"`);
     }
     result = kpeval(definition[1], { modules });
   } else {

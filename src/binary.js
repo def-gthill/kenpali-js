@@ -1,5 +1,6 @@
 import { loadBuiltins } from "./builtins.js";
 import {
+  CALL_PLATFORM_FUNCTION,
   IS_BOOLEAN,
   IS_NULL,
   IS_NUMBER,
@@ -25,12 +26,10 @@ class BinaryDumper {
       functions: [],
       instructions: [],
     };
+    this.constantIndices = new Map();
     this.cursor = 0;
     this.nameMap = new Map(
-      [...names].map(([name, value]) => [
-        value.type === "value" ? value.value : value,
-        name,
-      ])
+      extractPlatformNamesAndValues(names).map(([name, value]) => [value, name])
     );
   }
 
@@ -69,14 +68,27 @@ class BinaryDumper {
       throw new Error(`Unknown instruction ${instructionType}`);
     }
     this.out.instructions.push(instructionType);
-    if (instructionType === VALUE) {
-      this.out.instructions.push(this.out.constants.length);
-      this.out.constants.push(this.next());
+    if (
+      instructionType === VALUE ||
+      instructionType === CALL_PLATFORM_FUNCTION
+    ) {
+      this.out.instructions.push(this.getConstantIndex(this.next()));
     } else {
       const instructionInfo = opInfo[instructionType];
       for (let i = 0; i < instructionInfo.args; i++) {
         this.out.instructions.push(this.next());
       }
+    }
+  }
+
+  getConstantIndex(constant) {
+    if (this.constantIndices.has(constant)) {
+      return this.constantIndices.get(constant);
+    } else {
+      const index = this.out.constants.length;
+      this.out.constants.push(constant);
+      this.constantIndices.set(constant, index);
+      return index;
     }
   }
 
@@ -289,12 +301,7 @@ class BinaryLoader {
   constructor(binary, { names }) {
     this.binary = binary;
     this.view = new DataView(binary);
-    this.names = new Map(
-      [...names].map(([name, value]) => [
-        name,
-        value.type === "value" ? value.value : value,
-      ])
-    );
+    this.names = new Map(extractPlatformNamesAndValues(names));
     this.platformValues = [];
     this.diagnostics = [];
     this.functions = [];
@@ -321,7 +328,7 @@ class BinaryLoader {
       const type = this.view.getUint32(cursor);
       this.instructions.push(type);
       cursor += 4;
-      if (type === VALUE) {
+      if (type === VALUE || type === CALL_PLATFORM_FUNCTION) {
         const index = this.view.getUint32(cursor);
         cursor += 4;
         const value = this.loadConstant(index);
@@ -399,6 +406,19 @@ class BinaryLoader {
       this.functions.push({ name: functionName, offset: target });
     }
   }
+}
+
+function extractPlatformNamesAndValues(names) {
+  const result = [];
+  for (const [name, value] of names) {
+    result.push([name, value.type === "value" ? value.value : value]);
+    if (value.methods) {
+      for (const method of value.methods) {
+        result.push([`${name}/${method.methodName}`, method]);
+      }
+    }
+  }
+  return result;
 }
 
 export function toBase64(binary) {
