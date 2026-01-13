@@ -319,7 +319,7 @@ class Disassembler {
     }
     const instructionInfo = opInfo[instructionType];
     const args = [];
-    for (let i = 0; i < instructionInfo.args; i++) {
+    for (const _ of instructionInfo.args) {
       args.push(this.next());
     }
     return `${instructionInfo.name} ${args.join(" ")}`;

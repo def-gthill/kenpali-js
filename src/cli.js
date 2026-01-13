@@ -1,7 +1,7 @@
 // Programmatic interface for the Kenpali CLI.
 
 import path from "node:path";
-import { dumpBinary, loadBinary, toBase64 } from "./binary.js";
+import { dumpBinary, fromBase64, loadBinary, toBase64 } from "./binary.js";
 import { disassemble } from "./instructions.js";
 import { display, kpcall } from "./interop.js";
 import kpcompile, { kpcompileModule } from "./kpcompile.js";
@@ -68,8 +68,11 @@ const runCommand = {
 const disCommand = {
   name: "dis",
   description: "Disassembles Kenpali bytecode to human-readable assembly.",
-  options: [],
-  documentation: ["The output is printed to the console."],
+  options: [{ type: "flag", short: "-j", long: "--javascript" }],
+  documentation: [
+    "The output is printed to the console.",
+    "Pass the -j/--javascript flag if the bytecode is embedded in a JavaScript module.",
+  ],
 };
 
 const commands = [compileCommand, vmCommand, runCommand, disCommand];
@@ -202,13 +205,26 @@ function run(args, fs) {
 }
 
 function dis(args, fs) {
-  const fileName = args[1];
-  if (!fileName || fileName === "--help") {
-    return makeUsageHelp(disCommand);
+  if (args.length === 1 || args[1] === "--help") {
+    return makeCommandHelp(disCommand);
   }
-  const binary = fs.readBinaryFile(fileName);
-  const program = loadBinary(binary);
-  return disassemble(program);
+  const [settings, settingsEnd] = parseSettings(1, args, disCommand);
+  let i = settingsEnd;
+  const fileName = args[i++];
+  if (!fileName) {
+    throw new UsageError(makeUsageHelp(disCommand));
+  }
+  if (settings.javascript) {
+    const code = fs.readTextFile(fileName);
+    const base64 = code.split(`"`)[1];
+    const binary = fromBase64(base64);
+    const program = loadBinary(binary);
+    return disassemble(program);
+  } else {
+    const binary = fs.readBinaryFile(fileName);
+    const program = loadBinary(binary);
+    return disassemble(program);
+  }
 }
 
 function parseSettings(startIndex, args, command) {
