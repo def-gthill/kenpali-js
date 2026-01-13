@@ -310,23 +310,12 @@ class Compiler {
     for (let i = 0; i < instructions.length; i++) {
       if (marks[i + 1] && "functionNumber" in marks[i + 1]) {
         const functionNumber = marks[i + 1].functionNumber;
-        if (this.trace) {
-          this.log(
-            `Injecting offset ${functionOffsets[functionNumber]} for function ${functionNumber}`
-          );
-        }
-        instructions[i + 1] = functionOffsets[functionNumber];
+        instructions[i + 1] = functionNumber;
       }
       if (marks[i + 1] && "functionName" in marks[i + 1]) {
         const functionName = marks[i + 1].functionName;
         const functionNumber = functionNumbersByName.get(functionName);
-        const functionOffset = functionOffsets[functionNumber];
-        if (this.trace) {
-          this.log(
-            `Injecting offset ${functionOffset} for function ${functionName}`
-          );
-        }
-        instructions[i + 1] = functionOffset;
+        instructions[i + 1] = functionNumber;
         diagnostics[i + 1].number = functionNumber;
       }
     }

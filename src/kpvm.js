@@ -659,11 +659,12 @@ export class Vm {
   }
 
   runFunction() {
-    const target = this.next();
+    const functionIndex = this.next();
     const diagnostic = this.getDiagnostic();
     if (this.trace) {
-      this.logInstruction(`FUNCTION ${target} (${diagnostic.name})`);
+      this.logInstruction(`FUNCTION ${functionIndex} (${diagnostic.name})`);
     }
+    const target = this.program.functions[functionIndex].offset;
     this.stack.push(
       new Function(diagnostic.name, this.program, target, {
         isPlatform: diagnostic.isPlatform,
