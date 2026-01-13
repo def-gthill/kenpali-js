@@ -248,6 +248,12 @@ opInfo[HAS_TYPE] = { name: "HAS_TYPE", args: 0 };
 export const VALIDATION_ERROR = 0x9f;
 opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: 0 };
 
+for (const op of opInfo) {
+  if (op && typeof op.args === "number") {
+    op.args = Array(op.args).fill(0);
+  }
+}
+
 export function disassemble(program) {
   return new Disassembler(program).disassemble();
 }

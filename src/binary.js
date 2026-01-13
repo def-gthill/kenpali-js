@@ -18,6 +18,7 @@ export function dumpBinary(program, { names = new Map() } = {}) {
 
 class BinaryDumper {
   constructor(program, { names }) {
+    this.version = 2;
     this.program = program;
     this.out = {
       constants: [],
@@ -27,7 +28,6 @@ class BinaryDumper {
       instructions: [],
     };
     this.constantIndices = new Map();
-    this.cursor = 0;
     this.nameMap = new Map(
       extractPlatformNamesAndValues(names).map(([name, value]) => [value, name])
     );
@@ -42,9 +42,7 @@ class BinaryDumper {
     }
     this.dumpDiagnostics();
     this.dumpFunctions();
-    while (this.cursor < this.program.instructions.length) {
-      this.dumpInstruction();
-    }
+    this.dumpInstructions();
     return this.makeBinary();
   }
 
@@ -62,21 +60,29 @@ class BinaryDumper {
     }
   }
 
-  dumpInstruction() {
-    const instructionType = this.next();
-    if (!opInfo[instructionType]) {
-      throw new Error(`Unknown instruction ${instructionType}`);
-    }
-    this.out.instructions.push(instructionType);
-    if (
-      instructionType === VALUE ||
-      instructionType === CALL_PLATFORM_FUNCTION
-    ) {
-      this.out.instructions.push(this.getConstantIndex(this.next()));
-    } else {
-      const instructionInfo = opInfo[instructionType];
-      for (let i = 0; i < instructionInfo.args; i++) {
-        this.out.instructions.push(this.next());
+  dumpInstructions() {
+    let cursor = 0;
+    while (cursor < this.program.instructions.length) {
+      const instructionType = this.program.instructions[cursor];
+      cursor += 1;
+      if (!opInfo[instructionType]) {
+        throw new Error(`Unknown instruction ${instructionType}`);
+      }
+      this.out.instructions.push(instructionType);
+      if (
+        instructionType === VALUE ||
+        instructionType === CALL_PLATFORM_FUNCTION
+      ) {
+        const constant = this.program.instructions[cursor];
+        cursor += 1;
+        this.out.instructions.push(this.getConstantIndex(constant));
+      } else {
+        const instructionInfo = opInfo[instructionType];
+        for (const _ of instructionInfo.args) {
+          const arg = this.program.instructions[cursor];
+          cursor += 1;
+          this.out.instructions.push(arg);
+        }
       }
     }
   }
@@ -92,10 +98,18 @@ class BinaryDumper {
     }
   }
 
-  next() {
-    const value = this.program.instructions[this.cursor];
-    this.cursor += 1;
-    return value;
+  getInstructionSectionLength() {
+    let cursor = 0;
+    let length = 0;
+    while (cursor < this.out.instructions.length) {
+      const instructionType = this.out.instructions[cursor];
+      cursor += 1;
+      length += 1;
+      const instructionInfo = opInfo[instructionType];
+      cursor += instructionInfo.args.length;
+      length += instructionInfo.args.length * 4;
+    }
+    return length;
   }
 
   makeBinary() {
@@ -152,7 +166,7 @@ class BinaryDumper {
       4 * functionBuffers.length + // Function offsets
       4 * functionBuffers.length + // Lengths of the functions
       functionBuffers.reduce((acc, [_, buffer]) => acc + buffer.byteLength, 0); // The functions themselves
-    const instructionSectionLength = 4 * this.out.instructions.length;
+    const instructionSectionLength = this.getInstructionSectionLength();
     const bufferLength =
       directoryLength +
       constantSectionLength +
@@ -164,7 +178,7 @@ class BinaryDumper {
     const view = new DataView(buffer);
     // Directory
     let offset = 0;
-    view.setUint16(offset, 1);
+    view.setUint16(offset, this.version);
     offset += 2;
     view.setUint32(offset, bufferLength - instructionSectionLength);
     offset += 4;
@@ -251,9 +265,19 @@ class BinaryDumper {
     }
     offset = functionOffset;
     // Instruction section
-    for (let i = 0; i < this.out.instructions.length; i++) {
-      view.setUint32(offset, this.out.instructions[i]);
-      offset += 4;
+    let cursor = 0;
+    while (cursor < this.out.instructions.length) {
+      const instructionType = this.out.instructions[cursor];
+      cursor += 1;
+      view.setUint8(offset, instructionType);
+      offset += 1;
+      const instructionInfo = opInfo[instructionType];
+      for (const _ of instructionInfo.args) {
+        const arg = this.out.instructions[cursor];
+        cursor += 1;
+        view.setUint32(offset, arg);
+        offset += 4;
+      }
     }
     return buffer;
   }
@@ -301,6 +325,8 @@ export function loadBinary(binary, { names = new Map() } = {}) {
   const version = view.getUint16(0);
   if (version === 1) {
     return new BinaryLoaderV1(binary, { names: allNames }).load();
+  } else if (version === 2) {
+    return new BinaryLoaderV2(binary, { names: allNames }).load();
   } else {
     throw new Error(`Binary version ${version} not supported`);
   }
@@ -346,7 +372,118 @@ class BinaryLoaderV1 {
         if (!opInfo[type]) {
           throw new Error(`Unknown instruction type ${type}`);
         }
-        for (let i = 0; i < opInfo[type].args; i++) {
+        for (const _ of opInfo[type].args) {
+          const arg = this.view.getUint32(cursor);
+          cursor += 4;
+          this.instructions.push(arg);
+        }
+      }
+    }
+  }
+
+  loadConstant(index) {
+    const constantSectionStart = this.view.getUint32(6);
+    const constantOffset = this.view.getUint32(
+      constantSectionStart + 4 + 4 * index
+    );
+    const type = this.view.getUint8(constantOffset);
+    switch (type) {
+      case IS_NULL:
+        return null;
+      case IS_BOOLEAN:
+        return this.view.getUint8(constantOffset + 1) === 1;
+      case IS_NUMBER:
+        return this.view.getFloat64(constantOffset + 1);
+      case IS_STRING:
+        const length = this.view.getUint32(constantOffset + 1);
+        return new TextDecoder().decode(
+          this.binary.slice(constantOffset + 5, constantOffset + 5 + length)
+        );
+      default:
+        throw new Error(`Unknown constant type ${type}`);
+    }
+  }
+
+  loadPlatformValues() {
+    const platformValueSectionStart = this.view.getUint32(10);
+    const numPlatformValues = this.view.getUint32(platformValueSectionStart);
+    for (let i = 0; i < numPlatformValues; i++) {
+      const index = this.view.getUint32(platformValueSectionStart + 4 + 4 * i);
+      const length = this.view.getUint32(index);
+      const buffer = this.binary.slice(index + 4, index + 4 + length);
+      const platformValue = new TextDecoder().decode(buffer);
+      this.platformValues.push(this.names.get(platformValue));
+    }
+  }
+
+  loadDiagnostics() {
+    const diagnosticSectionStart = this.view.getUint32(14);
+    const numDiagnostics = this.view.getUint32(diagnosticSectionStart);
+    for (let i = 0; i < numDiagnostics; i++) {
+      const index = this.view.getUint32(diagnosticSectionStart + 4 + 4 * i);
+      const instructionIndex = this.view.getUint32(index);
+      const length = this.view.getUint32(index + 4);
+      const buffer = this.binary.slice(index + 8, index + 8 + length);
+      const diagnostic = JSON.parse(new TextDecoder().decode(buffer));
+      this.diagnostics[instructionIndex] = diagnostic;
+    }
+  }
+
+  loadFunctions() {
+    const functionSectionStart = this.view.getUint32(18);
+    const numFunctions = this.view.getUint32(functionSectionStart);
+    for (let i = 0; i < numFunctions; i++) {
+      const index = this.view.getUint32(functionSectionStart + 4 + 4 * i);
+      const target = this.view.getUint32(index);
+      const length = this.view.getUint32(index + 4);
+      const buffer = this.binary.slice(index + 8, index + 8 + length);
+      const functionName = new TextDecoder().decode(buffer);
+      this.functions.push({ name: functionName, offset: target });
+    }
+  }
+}
+
+class BinaryLoaderV2 {
+  constructor(binary, { names }) {
+    this.binary = binary;
+    this.view = new DataView(binary);
+    this.names = new Map(extractPlatformNamesAndValues(names));
+    this.platformValues = [];
+    this.diagnostics = [];
+    this.functions = [];
+    this.instructions = [];
+  }
+
+  load() {
+    this.loadInstructions();
+    this.loadPlatformValues();
+    this.loadDiagnostics();
+    this.loadFunctions();
+    return {
+      instructions: this.instructions,
+      platformValues: this.platformValues,
+      diagnostics: this.diagnostics,
+      functions: this.functions,
+    };
+  }
+
+  loadInstructions() {
+    const instructionSectionStart = this.view.getUint32(2);
+    let cursor = instructionSectionStart;
+    while (cursor < this.binary.byteLength) {
+      const type = this.view.getUint8(cursor);
+      this.instructions.push(type);
+      cursor += 1;
+      if (type === VALUE || type === CALL_PLATFORM_FUNCTION) {
+        const index = this.view.getUint32(cursor);
+        cursor += 4;
+        const value = this.loadConstant(index);
+        this.instructions.push(value);
+      } else {
+        if (!opInfo[type]) {
+          throw new Error(`Unknown instruction type ${type}`);
+        }
+        for (const _ of opInfo[type].args) {
           const arg = this.view.getUint32(cursor);
           cursor += 4;
           this.instructions.push(arg);
