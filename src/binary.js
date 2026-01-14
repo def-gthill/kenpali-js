@@ -23,11 +23,11 @@ class BinaryDumper {
     this.version = 2;
     this.program = program;
     this.out = {
+      instructions: [],
       constants: [],
       platformValues: [],
       diagnostics: [],
       functions: [],
-      instructions: [],
     };
     this.nameMap = new Map(
       extractPlatformNamesAndValues(names).map(([name, value]) => [value, name])
@@ -35,35 +35,12 @@ class BinaryDumper {
   }
 
   dump() {
-    for (const value of this.program.platformValues) {
-      if (!this.nameMap.has(value)) {
-        throw new Error(`Unknown platform value ${displaySimple(value)}`);
-      }
-      this.out.platformValues.push(this.nameMap.get(value));
-    }
+    this.dumpInstructions();
     this.dumpConstants();
+    this.dumpPlatformValues();
     this.dumpDiagnostics();
     this.dumpFunctions();
-    this.dumpInstructions();
     return this.makeBinary();
-  }
-
-  dumpConstants() {
-    this.out.constants = this.program.constants || [];
-  }
-
-  dumpDiagnostics() {
-    for (let i = 0; i < this.program.diagnostics.length; i++) {
-      if (this.program.diagnostics[i] !== undefined) {
-        this.out.diagnostics.push([i, this.program.diagnostics[i]]);
-      }
-    }
-  }
-
-  dumpFunctions() {
-    for (const { name, offset } of this.program.functions) {
-      this.out.functions.push([offset, name]);
-    }
   }
 
   dumpInstructions() {
@@ -108,6 +85,33 @@ class BinaryDumper {
           }
         }
       }
+    }
+  }
+
+  dumpConstants() {
+    this.out.constants = this.program.constants || [];
+  }
+
+  dumpPlatformValues() {
+    for (const value of this.program.platformValues) {
+      if (!this.nameMap.has(value)) {
+        throw new Error(`Unknown platform value ${displaySimple(value)}`);
+      }
+      this.out.platformValues.push(this.nameMap.get(value));
+    }
+  }
+
+  dumpDiagnostics() {
+    for (let i = 0; i < this.program.diagnostics.length; i++) {
+      if (this.program.diagnostics[i] !== undefined) {
+        this.out.diagnostics.push([i, this.program.diagnostics[i]]);
+      }
+    }
+  }
+
+  dumpFunctions() {
+    for (const { name, offset } of this.program.functions) {
+      this.out.functions.push([offset, name]);
     }
   }
 
@@ -396,35 +400,26 @@ class BinaryLoaderV2 {
     this.binary = binary;
     this.view = new DataView(binary);
     this.names = new Map(extractPlatformNamesAndValues(names));
-    this.platformValues = [];
+    this.instructions = [];
     this.constants = [];
+    this.platformValues = [];
     this.diagnostics = [];
     this.functions = [];
-    this.instructions = [];
   }
 
   load() {
-    this.loadConstants();
     this.loadInstructions();
+    this.loadConstants();
     this.loadPlatformValues();
     this.loadDiagnostics();
     this.loadFunctions();
     return {
       instructions: this.instructions,
-      platformValues: this.platformValues,
       constants: this.constants,
+      platformValues: this.platformValues,
       diagnostics: this.diagnostics,
       functions: this.functions,
     };
-  }
-
-  loadConstants() {
-    const constantSectionStart = this.view.getUint32(6);
-    const numConstants = this.view.getUint32(constantSectionStart);
-    for (let i = 0; i < numConstants; i++) {
-      const constant = this.loadConstant(i);
-      this.constants.push(constant);
-    }
   }
 
   loadInstructions() {
@@ -469,6 +464,15 @@ class BinaryLoaderV2 {
           }
         }
       }
+    }
+  }
+
+  loadConstants() {
+    const constantSectionStart = this.view.getUint32(6);
+    const numConstants = this.view.getUint32(constantSectionStart);
+    for (let i = 0; i < numConstants; i++) {
+      const constant = this.loadConstant(i);
+      this.constants.push(constant);
     }
   }
 

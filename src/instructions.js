@@ -302,14 +302,14 @@ export function disassemble(program) {
 class Disassembler {
   constructor({
     instructions,
-    platformValues,
     constants,
+    platformValues,
     diagnostics,
     functions,
   }) {
     this.instructions = instructions;
-    this.platformValues = platformValues;
     this.constants = constants;
+    this.platformValues = platformValues;
     this.diagnostics = diagnostics;
     this.functions = functions;
     this.cursor = 0;
@@ -317,11 +317,22 @@ class Disassembler {
 
   disassemble() {
     const instructionStrings = [];
-    this.disassemblePlatformValues(instructionStrings);
     this.disassembleConstants(instructionStrings);
+    this.disassemblePlatformValues(instructionStrings);
     this.disassembleFunctions(instructionStrings);
     this.disassembleInstructions(instructionStrings);
     return instructionStrings.join("\n");
+  }
+
+  disassembleConstants(instructionStrings) {
+    instructionStrings.push("--- Constants ---");
+    if (this.constants.length === 0) {
+      instructionStrings.push("<none>");
+    } else {
+      for (let i = 0; i < this.constants.length; i++) {
+        instructionStrings.push(`${i} = ${displaySimple(this.constants[i])}`);
+      }
+    }
   }
 
   disassemblePlatformValues(instructionStrings) {
@@ -336,21 +347,11 @@ class Disassembler {
     }
   }
 
-  disassembleConstants(instructionStrings) {
-    instructionStrings.push("--- Constants ---");
-    if (this.constants.length === 0) {
-      instructionStrings.push("<none>");
-    } else {
-      for (let i = 0; i < this.constants.length; i++) {
-        instructionStrings.push(`${i} = ${displaySimple(this.constants[i])}`);
-      }
-    }
-  }
-
   disassembleFunctions(instructionStrings) {
     instructionStrings.push("--- Functions ---");
-    for (const { name, offset } of this.functions) {
-      instructionStrings.push(`Function ${name} at ${offset}`);
+    for (let i = 0; i < this.functions.length; i++) {
+      const { name, offset } = this.functions[i];
+      instructionStrings.push(`${i} = Function ${name} at ${offset}`);
     }
   }
 

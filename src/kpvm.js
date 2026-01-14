@@ -100,14 +100,16 @@ export class Vm {
   ) {
     const {
       instructions,
+      constants = [],
+      platformValues = [],
       diagnostics = [],
       functions = [],
-      constants = [],
     } = program;
     this.program = program;
     this.instructions = instructions;
-    this.diagnostics = diagnostics;
     this.constants = constants;
+    this.platformValues = platformValues;
+    this.diagnostics = diagnostics;
     this.functions = new Map(functions.map((f) => [f.name, f.offset]));
     this.methods = extractMethods(functions);
     this.trace = trace;
@@ -289,7 +291,7 @@ export class Vm {
     if (this.trace) {
       this.logInstruction(`PLATFORM_VALUE ${index}`);
     }
-    this.stack.push(this.program.platformValues[index]);
+    this.stack.push(this.platformValues[index]);
   }
 
   runValue() {

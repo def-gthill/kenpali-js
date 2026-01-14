@@ -137,10 +137,10 @@ class Compiler {
     this.activeScopes = [];
     this.finishedFunctions = [];
 
-    this.platformValues = [];
-    this.platformValueIndices = new Map();
     this.constants = [];
     this.constantIndices = new Map();
+    this.platformValues = [];
+    this.platformValueIndices = new Map();
   }
 
   compileMain(expression) {
@@ -335,8 +335,8 @@ class Compiler {
     }
     return {
       instructions,
-      platformValues: this.platformValues,
       constants: this.constants,
+      platformValues: this.platformValues,
       diagnostics,
       functions: functionTable,
     };
@@ -1244,6 +1244,22 @@ class Compiler {
     }
   }
 
+  loadPlatformValue(value) {
+    const index = this.getPlatformValueIndex(value);
+    this.addInstructionWithArgs(op.PLATFORM_VALUE, [index]);
+  }
+
+  getPlatformValueIndex(value) {
+    if (this.platformValueIndices.has(value)) {
+      return this.platformValueIndices.get(value);
+    } else {
+      const index = this.platformValues.length;
+      this.platformValues.push(value);
+      this.platformValueIndices.set(value, index);
+      return index;
+    }
+  }
+
   getConstantIndex(constant) {
     if (this.constantIndices.has(constant)) {
       return this.constantIndices.get(constant);
@@ -1252,20 +1268,6 @@ class Compiler {
       this.constants.push(constant);
       this.constantIndices.set(constant, index);
       return index;
-    }
-  }
-
-  loadPlatformValue(value) {
-    if (this.platformValueIndices.has(value)) {
-      this.addInstructionWithArgs(op.PLATFORM_VALUE, [
-        this.platformValueIndices.get(value),
-      ]);
-    } else {
-      this.platformValueIndices.set(value, this.platformValues.length);
-      this.addInstructionWithArgs(op.PLATFORM_VALUE, [
-        this.platformValues.length,
-      ]);
-      this.platformValues.push(value);
     }
   }
 
