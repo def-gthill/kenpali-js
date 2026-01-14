@@ -73,8 +73,8 @@ export default function kpcompile(
     const compiler = new Compiler(filteredLibrary, {
       trace,
     });
-    compiler.compileMain(expression);
     compiler.compileLibrary();
+    compiler.compileMain(expression);
     return compiler.finishProgram();
   } catch (error) {
     if (isError(error)) {
@@ -105,8 +105,8 @@ export function kpcompileModule(
     const compiler = new Compiler(filteredLibrary, {
       trace,
     });
-    compiler.compileModule(module);
     compiler.compileLibrary();
+    compiler.compileModule(module);
     return compiler.finishProgram();
   } catch (error) {
     if (isError(error)) {
@@ -136,6 +136,7 @@ class Compiler {
     this.activeFunctions = [];
     this.activeScopes = [];
     this.finishedFunctions = [];
+    this.functionNumbersByName = new Map();
 
     this.constants = [];
     this.constantIndices = new Map();
@@ -144,14 +145,14 @@ class Compiler {
   }
 
   compileMain(expression) {
-    this.beginFunction("$main");
+    this.beginFunction(this.createFunction("$main"));
     this.compileExpression(expression);
     this.activeFunctions.pop();
   }
 
   compileModule(module) {
     for (const [name, value] of module) {
-      this.beginFunction(`$${name}`);
+      this.beginFunction(this.createFunction(`$${name}`));
       this.compileExpression(value);
       this.activeFunctions.pop();
     }
@@ -182,19 +183,45 @@ class Compiler {
   }
 
   compileLibrary() {
+    // Create all the functions first so that earlier functions can reference later ones.
+    const functions = new Map();
     for (const [moduleName, module] of this.library) {
       this.currentModuleName = moduleName;
       for (const [name, value] of module) {
         const fullName = makeFullName(moduleName, name);
         if (isPlatformFunction(value)) {
-          this.compilePlatformFunction(fullName, value);
+          functions.set(fullName, this.createFunction(fullName));
           if (value.methods) {
             for (const method of value.methods) {
-              this.compileMethod(fullName, method);
+              const methodFullName = `${fullName}/${method.methodName}`;
+              functions.set(
+                methodFullName,
+                this.createFunction(methodFullName)
+              );
             }
           }
         } else if (value.type === "function") {
-          this.compileExpression(value, fullName);
+          functions.set(fullName, this.createFunction(fullName));
+        } else {
+          // Not a function, nothing to compile.
+        }
+      }
+    }
+    // Now compile the functions.
+    for (const [moduleName, module] of this.library) {
+      this.currentModuleName = moduleName;
+      for (const [name, value] of module) {
+        const fullName = makeFullName(moduleName, name);
+        if (isPlatformFunction(value)) {
+          this.compilePlatformFunction(functions.get(fullName), value);
+          if (value.methods) {
+            for (const method of value.methods) {
+              const methodFullName = `${fullName}/${method.methodName}`;
+              this.compileMethod(functions.get(methodFullName), method);
+            }
+          }
+        } else if (value.type === "function") {
+          this.compileFunction(value, fullName, functions.get(fullName));
         } else {
           // Not a function, nothing to compile.
         }
@@ -202,15 +229,15 @@ class Compiler {
     }
   }
 
-  compilePlatformFunction(name, platformFunction) {
+  compilePlatformFunction(f, platformFunction) {
     if (this.trace) {
-      this.log(`Compiling builtin ${name}`);
+      this.log(`Compiling platform function ${f.name}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(name);
+    this.beginFunction(f);
     const { posParamPattern, namedParamPattern } =
       getParamPatterns(platformFunction);
     if (posParamPattern.names.length > 0) {
@@ -235,7 +262,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstruction(op.PUSH_SCOPE, numDeclaredNames);
-    const nameConstantIndex = this.getConstantIndex(name);
+    const nameConstantIndex = this.getConstantIndex(f.name);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, nameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
@@ -246,16 +273,15 @@ class Compiler {
     this.activeFunctions.pop();
   }
 
-  compileMethod(constructorName, method) {
-    const fullName = `${constructorName}/${method.methodName}`;
+  compileMethod(f, method) {
     if (this.trace) {
-      this.log(`Compiling method ${fullName}`);
+      this.log(`Compiling method ${f.name}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(fullName);
+    this.beginFunction(f);
     const { posParamPattern, namedParamPattern } = getParamPatterns(method);
     if (posParamPattern.names.length > 0) {
       this.declareNames(posParamPattern);
@@ -284,7 +310,7 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
     this.addInstruction(op.PUSH_SCOPE, numDeclaredNames + 1);
-    const fullNameConstantIndex = this.getConstantIndex(fullName);
+    const fullNameConstantIndex = this.getConstantIndex(f.name);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullNameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
@@ -296,7 +322,6 @@ class Compiler {
   combineFunctions() {
     for (const finishedFunction of this.finishedFunctions) {
       finishedFunction.instructions.push(op.RETURN);
-      finishedFunction.marks.length = finishedFunction.instructions.length;
       finishedFunction.diagnostics.length =
         finishedFunction.instructions.length;
     }
@@ -317,22 +342,9 @@ class Compiler {
     const instructions = [].concat(
       ...this.finishedFunctions.map((f) => f.instructions)
     );
-    const marks = [].concat(...this.finishedFunctions.map((f) => f.marks));
     const diagnostics = [].concat(
       ...this.finishedFunctions.map((f) => f.diagnostics)
     );
-    for (let i = 0; i < instructions.length; i++) {
-      if (marks[i + 1] && "functionNumber" in marks[i + 1]) {
-        const functionNumber = marks[i + 1].functionNumber;
-        instructions[i + 1] = functionNumber;
-      }
-      if (marks[i + 1] && "functionName" in marks[i + 1]) {
-        const functionName = marks[i + 1].functionName;
-        const functionNumber = functionNumbersByName.get(functionName);
-        instructions[i + 1] = functionNumber;
-        diagnostics[i + 1].number = functionNumber;
-      }
-    }
     return {
       instructions,
       constants: this.constants,
@@ -372,13 +384,7 @@ class Compiler {
         this.compileBlock(expression);
         break;
       case "function":
-        const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
-        let functionName =
-          name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-        if (enclosingFunctionName) {
-          functionName = `${enclosingFunctionName}/${functionName}`;
-        }
-        this.compileFunction(expression, functionName);
+        this.compileFunction(expression, name);
         break;
       case "call":
         this.compileCall(expression);
@@ -461,8 +467,10 @@ class Compiler {
     if (expression.from) {
       if (libraryHas(this.library, expression.from, expression.name)) {
         const fullName = makeFullName(expression.from, expression.name);
-        this.addInstruction(op.FUNCTION, 0);
-        this.addMark({ functionName: fullName });
+        this.addInstruction(
+          op.FUNCTION,
+          this.functionNumbersByName.get(fullName)
+        );
         this.addDiagnostic({
           name: fullName,
           isPlatform: true,
@@ -547,8 +555,10 @@ class Compiler {
     if (value.type === "value") {
       this.loadValue(value.value);
     } else {
-      this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionName: fullName });
+      this.addInstruction(
+        op.FUNCTION,
+        this.functionNumbersByName.get(fullName)
+      );
       this.addDiagnostic({
         name: fullName,
         isPlatform: true,
@@ -747,15 +757,21 @@ class Compiler {
     }
   }
 
-  compileFunction(expression, name) {
+  compileFunction(expression, name, f = null) {
+    const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
+    let functionName =
+      name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
+    if (enclosingFunctionName) {
+      functionName = `${enclosingFunctionName}/${functionName}`;
+    }
     if (this.trace) {
-      this.logNodeStart(`Starting function ${name}`);
+      this.logNodeStart(`Starting function ${functionName}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(name);
+    this.beginFunction(f ?? this.createFunction(functionName));
     const paramPattern = arrayPattern(...(expression.posParams ?? []));
     const namedParamPattern = objectPattern(...(expression.namedParams ?? []));
     if (paramPattern.names.length > 0) {
@@ -787,10 +803,9 @@ class Compiler {
     if (this.activeFunctions.length > 0) {
       // This function is defined inside another function, so we need to
       // add it to the stack and deal with closures.
-      this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionNumber: finishedFunction.number });
+      this.addInstruction(op.FUNCTION, finishedFunction.number);
       this.addDiagnostic({
-        name,
+        name: functionName,
         number: finishedFunction.number,
         isPlatform: false,
       });
@@ -1216,13 +1231,19 @@ class Compiler {
     this.activeScopes.pop();
   }
 
-  beginFunction(name) {
-    if (this.trace) {
-      this.log(`Starting function ${this.finishedFunctions.length} (${name})`);
-    }
-    const f = new CompiledFunction(this.finishedFunctions.length, name);
-    this.activeFunctions.push(f);
+  createFunction(name) {
+    const number = this.finishedFunctions.length;
+    const f = new CompiledFunction(number, name);
     this.finishedFunctions.push(f);
+    this.functionNumbersByName.set(name, number);
+    return f;
+  }
+
+  beginFunction(f) {
+    if (this.trace) {
+      this.log(`Starting function ${f.number} (${f.name})`);
+    }
+    this.activeFunctions.push(f);
   }
 
   currentFunction() {
@@ -1309,14 +1330,6 @@ class Compiler {
     return this.currentFunction().instructions.length;
   }
 
-  addMark(mark) {
-    const f = this.currentFunction();
-    f.marks[f.instructions.length - 1] = {
-      ...f.marks[f.instructions.length - 1],
-      ...mark,
-    };
-  }
-
   addDiagnostic(diagnostic) {
     const f = this.currentFunction();
     f.diagnostics[f.instructions.length - 1] = {
@@ -1331,7 +1344,6 @@ class CompiledFunction {
     this.number = number;
     this.name = name;
     this.instructions = [op.BEGIN];
-    this.marks = [];
     this.diagnostics = [{ name, number }];
     this.upvalues = [];
     this.anonymousFunctionCount = 0;
