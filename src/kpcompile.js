@@ -2,6 +2,16 @@ import { getParamPatterns, loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import * as op from "./instructions.js";
 import {
+  ARG_NUMBER,
+  ARG_U16,
+  ARG_U32,
+  ARG_U8,
+  opInfo,
+  u16ToBytes,
+  u32ToBytes,
+  u8ToBytes,
+} from "./instructions.js";
+import {
   array,
   arrayPattern,
   object,
@@ -1220,18 +1230,6 @@ class Compiler {
     }
   }
 
-  addInstruction(...instruction) {
-    this.currentFunction().instructions.push(...instruction);
-  }
-
-  setInstruction(index, value) {
-    this.currentFunction().instructions[index] = value;
-  }
-
-  nextInstructionIndex() {
-    return this.currentFunction().instructions.length;
-  }
-
   loadValue(value) {
     if (isPlatformValue(value)) {
       this.loadPlatformValue(value);
@@ -1242,15 +1240,54 @@ class Compiler {
 
   loadPlatformValue(value) {
     if (this.platformValueIndices.has(value)) {
-      this.addInstruction(
-        op.PLATFORM_VALUE,
-        this.platformValueIndices.get(value)
-      );
+      this.addInstructionWithArgs(op.PLATFORM_VALUE, [
+        this.platformValueIndices.get(value),
+      ]);
     } else {
       this.platformValueIndices.set(value, this.platformValues.length);
-      this.addInstruction(op.PLATFORM_VALUE, this.platformValues.length);
+      this.addInstructionWithArgs(op.PLATFORM_VALUE, [
+        this.platformValues.length,
+      ]);
       this.platformValues.push(value);
     }
+  }
+
+  addInstruction(...instruction) {
+    this.currentFunction().instructions.push(...instruction);
+  }
+
+  addInstructionWithArgs(instruction, args) {
+    this.currentFunction().instructions.push(instruction);
+    const instructionInfo = opInfo[instruction];
+    if (args.length < instructionInfo.args.length) {
+      throw new Error(
+        `Not enough arguments for instruction ${instructionInfo.name}`
+      );
+    }
+    for (let i = 0; i < args.length; i++) {
+      switch (instructionInfo.args[i]) {
+        case ARG_NUMBER:
+          this.currentFunction().instructions.push(args[i]);
+          break;
+        case ARG_U8:
+          this.currentFunction().instructions.push(...u8ToBytes(args[i]));
+          break;
+        case ARG_U16:
+          this.currentFunction().instructions.push(...u16ToBytes(args[i]));
+          break;
+        case ARG_U32:
+          this.currentFunction().instructions.push(...u32ToBytes(args[i]));
+          break;
+      }
+    }
+  }
+
+  setInstruction(index, value) {
+    this.currentFunction().instructions[index] = value;
+  }
+
+  nextInstructionIndex() {
+    return this.currentFunction().instructions.length;
   }
 
   addMark(mark) {

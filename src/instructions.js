@@ -6,10 +6,14 @@ import { displaySimple } from "./values.js";
 // ----------------------------
 
 export const opInfo = [];
+export const ARG_NUMBER = 0;
+export const ARG_U8 = 1;
+export const ARG_U16 = 2;
+export const ARG_U32 = 3;
 
 // Load the platform value at the specified index and push it onto the stack.
 export const PLATFORM_VALUE = 0x00;
-opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: 1 };
+opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: [ARG_U32] };
 // Push the specified value onto the stack. The argument must be a Kenpali primitive value
 // (`null` or a Boolean, number, or string).
 export const VALUE = 0x01;
@@ -250,8 +254,42 @@ opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: 0 };
 
 for (const op of opInfo) {
   if (op && typeof op.args === "number") {
-    op.args = Array(op.args).fill(0);
+    op.args = Array(op.args).fill(ARG_NUMBER);
   }
+}
+
+export function u16FromBytes(bytes) {
+  return (bytes[0] << 8) | bytes[1];
+}
+
+export function u32FromBytes(bytes) {
+  return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+}
+
+const ONE_BYTE_SIZE = 2 ** 8;
+const MAX_U8_VALUE = ONE_BYTE_SIZE - 1;
+const MAX_U16_VALUE = ONE_BYTE_SIZE ** 2 - 1;
+const MAX_U32_VALUE = ONE_BYTE_SIZE ** 4 - 1;
+
+export function u8ToBytes(value) {
+  if (value < 0 || value > MAX_U8_VALUE) {
+    throw new Error(`Value ${value} is not a valid unsigned 8-bit integer`);
+  }
+  return [value];
+}
+
+export function u16ToBytes(value) {
+  if (value < 0 || value > MAX_U16_VALUE) {
+    throw new Error(`Value ${value} is not a valid unsigned 16-bit integer`);
+  }
+  return [value >> 8, value & 0xff];
+}
+
+export function u32ToBytes(value) {
+  if (value < 0 || value > MAX_U32_VALUE) {
+    throw new Error(`Value ${value} is not a valid unsigned 32-bit integer`);
+  }
+  return [value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
 export function disassemble(program) {
@@ -319,8 +357,21 @@ class Disassembler {
     }
     const instructionInfo = opInfo[instructionType];
     const args = [];
-    for (const _ of instructionInfo.args) {
-      args.push(this.next());
+    for (const arg of instructionInfo.args) {
+      switch (arg) {
+        case ARG_NUMBER:
+        case ARG_U8:
+          args.push(this.next());
+          break;
+        case ARG_U16:
+          args.push(u16FromBytes([this.next(), this.next()]));
+          break;
+        case ARG_U32:
+          args.push(
+            u32FromBytes([this.next(), this.next(), this.next(), this.next()])
+          );
+          break;
+      }
     }
     return `${instructionInfo.name} ${args.join(" ")}`;
   }

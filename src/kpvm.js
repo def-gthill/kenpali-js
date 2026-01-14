@@ -8,6 +8,7 @@ import {
   toObject,
 } from "./builtins.js";
 import * as op from "./instructions.js";
+import { u16FromBytes, u32FromBytes } from "./instructions.js";
 import kperror, {
   isError,
   KenpaliError,
@@ -278,7 +279,7 @@ export class Vm {
   }
 
   runPlatformValue() {
-    const index = this.next();
+    const index = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`PLATFORM_VALUE ${index}`);
     }
@@ -1208,6 +1209,18 @@ export class Vm {
         throw error;
       }
     }
+  }
+
+  readU8Arg() {
+    return this.next();
+  }
+
+  readU16Arg() {
+    return u16FromBytes([this.next(), this.next()]);
+  }
+
+  readU32Arg() {
+    return u32FromBytes([this.next(), this.next(), this.next(), this.next()]);
   }
 
   next() {

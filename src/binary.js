@@ -1,5 +1,9 @@
 import { loadBuiltins } from "./builtins.js";
 import {
+  ARG_NUMBER,
+  ARG_U16,
+  ARG_U32,
+  ARG_U8,
   CALL_PLATFORM_FUNCTION,
   IS_BOOLEAN,
   IS_NULL,
@@ -78,10 +82,37 @@ class BinaryDumper {
         this.out.instructions.push(this.getConstantIndex(constant));
       } else {
         const instructionInfo = opInfo[instructionType];
-        for (const _ of instructionInfo.args) {
-          const arg = this.program.instructions[cursor];
-          cursor += 1;
-          this.out.instructions.push(arg);
+        for (const argInfo of instructionInfo.args) {
+          switch (argInfo) {
+            case ARG_NUMBER: {
+              const arg = this.program.instructions[cursor];
+              cursor += 1;
+              this.out.instructions.push(arg);
+              break;
+            }
+            case ARG_U8: {
+              const arg = this.program.instructions[cursor];
+              cursor += 1;
+              this.out.instructions.push(arg);
+              break;
+            }
+            case ARG_U16: {
+              for (let i = 0; i < 2; i++) {
+                const arg = this.program.instructions[cursor];
+                cursor += 1;
+                this.out.instructions.push(arg);
+              }
+              break;
+            }
+            case ARG_U32: {
+              for (let i = 0; i < 4; i++) {
+                const arg = this.program.instructions[cursor];
+                cursor += 1;
+                this.out.instructions.push(arg);
+              }
+              break;
+            }
+          }
         }
       }
     }
@@ -106,8 +137,26 @@ class BinaryDumper {
       cursor += 1;
       length += 1;
       const instructionInfo = opInfo[instructionType];
-      cursor += instructionInfo.args.length;
-      length += instructionInfo.args.length * 4;
+      for (const argInfo of instructionInfo.args) {
+        switch (argInfo) {
+          case ARG_NUMBER:
+            cursor += 1;
+            length += 4;
+            break;
+          case ARG_U8:
+            cursor += 1;
+            length += 1;
+            break;
+          case ARG_U16:
+            cursor += 2;
+            length += 2;
+            break;
+          case ARG_U32:
+            cursor += 4;
+            length += 4;
+            break;
+        }
+      }
     }
     return length;
   }
@@ -272,11 +321,41 @@ class BinaryDumper {
       view.setUint8(offset, instructionType);
       offset += 1;
       const instructionInfo = opInfo[instructionType];
-      for (const _ of instructionInfo.args) {
-        const arg = this.out.instructions[cursor];
-        cursor += 1;
-        view.setUint32(offset, arg);
-        offset += 4;
+      for (const argInfo of instructionInfo.args) {
+        switch (argInfo) {
+          case ARG_NUMBER: {
+            const arg = this.out.instructions[cursor];
+            cursor += 1;
+            view.setUint32(offset, arg);
+            offset += 4;
+            break;
+          }
+          case ARG_U8: {
+            const arg = this.out.instructions[cursor];
+            cursor += 1;
+            view.setUint8(offset, arg);
+            offset += 1;
+            break;
+          }
+          case ARG_U16: {
+            for (let i = 0; i < 2; i++) {
+              const arg = this.out.instructions[cursor];
+              cursor += 1;
+              view.setUint8(offset + i, arg);
+            }
+            offset += 2;
+            break;
+          }
+          case ARG_U32: {
+            for (let i = 0; i < 4; i++) {
+              const arg = this.out.instructions[cursor];
+              cursor += 1;
+              view.setUint8(offset + i, arg);
+            }
+            offset += 4;
+            break;
+          }
+        }
       }
     }
     return buffer;
@@ -370,10 +449,37 @@ class BinaryLoaderV2 {
         if (!opInfo[type]) {
           throw new Error(`Unknown instruction type ${type}`);
         }
-        for (const _ of opInfo[type].args) {
-          const arg = this.view.getUint32(cursor);
-          cursor += 4;
-          this.instructions.push(arg);
+        for (const argInfo of opInfo[type].args) {
+          switch (argInfo) {
+            case ARG_NUMBER: {
+              const arg = this.view.getUint32(cursor);
+              cursor += 4;
+              this.instructions.push(arg);
+              break;
+            }
+            case ARG_U8: {
+              const arg = this.view.getUint8(cursor);
+              cursor += 1;
+              this.instructions.push(arg);
+              break;
+            }
+            case ARG_U16: {
+              for (let i = 0; i < 2; i++) {
+                const arg = this.view.getUint8(cursor);
+                cursor += 1;
+                this.instructions.push(arg);
+              }
+              break;
+            }
+            case ARG_U32: {
+              for (let i = 0; i < 4; i++) {
+                const arg = this.view.getUint8(cursor);
+                cursor += 1;
+                this.instructions.push(arg);
+              }
+              break;
+            }
+          }
         }
       }
     }

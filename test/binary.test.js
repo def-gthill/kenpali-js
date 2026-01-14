@@ -31,7 +31,7 @@ const testPrograms = [
     expectedResult: 3,
   },
   {
-    name: "Constructor and methods",
+    name: "Constructor and Methods",
     code: `foo = newVar("Hello"); foo.set("Goodbye"); [foo.get(), ", world!"] | join`,
     expectedResult: "Goodbye, world!",
   },
