@@ -4,13 +4,11 @@ import {
   ARG_U16,
   ARG_U32,
   ARG_U8,
-  CALL_PLATFORM_FUNCTION,
   IS_BOOLEAN,
   IS_NULL,
   IS_NUMBER,
   IS_STRING,
   opInfo,
-  VALUE,
 } from "./instructions.js";
 import { kpoMerge } from "./kpobject.js";
 import { displaySimple } from "./values.js";
@@ -31,7 +29,6 @@ class BinaryDumper {
       functions: [],
       instructions: [],
     };
-    this.constantIndices = new Map();
     this.nameMap = new Map(
       extractPlatformNamesAndValues(names).map(([name, value]) => [value, name])
     );
@@ -44,10 +41,15 @@ class BinaryDumper {
       }
       this.out.platformValues.push(this.nameMap.get(value));
     }
+    this.dumpConstants();
     this.dumpDiagnostics();
     this.dumpFunctions();
     this.dumpInstructions();
     return this.makeBinary();
+  }
+
+  dumpConstants() {
+    this.out.constants = this.program.constants || [];
   }
 
   dumpDiagnostics() {
@@ -73,61 +75,39 @@ class BinaryDumper {
         throw new Error(`Unknown instruction ${instructionType}`);
       }
       this.out.instructions.push(instructionType);
-      if (
-        instructionType === VALUE ||
-        instructionType === CALL_PLATFORM_FUNCTION
-      ) {
-        const constantIndex = this.program.instructions[cursor];
-        cursor += 1;
-        const constants = this.program.constants;
-        const constant = constants[constantIndex];
-        this.out.instructions.push(this.getConstantIndex(constant));
-      } else {
-        const instructionInfo = opInfo[instructionType];
-        for (const argInfo of instructionInfo.args) {
-          switch (argInfo) {
-            case ARG_NUMBER: {
+      const instructionInfo = opInfo[instructionType];
+      for (const argInfo of instructionInfo.args) {
+        switch (argInfo) {
+          case ARG_NUMBER: {
+            const arg = this.program.instructions[cursor];
+            cursor += 1;
+            this.out.instructions.push(arg);
+            break;
+          }
+          case ARG_U8: {
+            const arg = this.program.instructions[cursor];
+            cursor += 1;
+            this.out.instructions.push(arg);
+            break;
+          }
+          case ARG_U16: {
+            for (let i = 0; i < 2; i++) {
               const arg = this.program.instructions[cursor];
               cursor += 1;
               this.out.instructions.push(arg);
-              break;
             }
-            case ARG_U8: {
+            break;
+          }
+          case ARG_U32: {
+            for (let i = 0; i < 4; i++) {
               const arg = this.program.instructions[cursor];
               cursor += 1;
               this.out.instructions.push(arg);
-              break;
             }
-            case ARG_U16: {
-              for (let i = 0; i < 2; i++) {
-                const arg = this.program.instructions[cursor];
-                cursor += 1;
-                this.out.instructions.push(arg);
-              }
-              break;
-            }
-            case ARG_U32: {
-              for (let i = 0; i < 4; i++) {
-                const arg = this.program.instructions[cursor];
-                cursor += 1;
-                this.out.instructions.push(arg);
-              }
-              break;
-            }
+            break;
           }
         }
       }
-    }
-  }
-
-  getConstantIndex(constant) {
-    if (this.constantIndices.has(constant)) {
-      return this.constantIndices.get(constant);
-    } else {
-      const index = this.out.constants.length;
-      this.out.constants.push(constant);
-      this.constantIndices.set(constant, index);
-      return index;
     }
   }
 
@@ -418,13 +398,13 @@ class BinaryLoaderV2 {
     this.names = new Map(extractPlatformNamesAndValues(names));
     this.platformValues = [];
     this.constants = [];
-    this.constantIndices = new Map();
     this.diagnostics = [];
     this.functions = [];
     this.instructions = [];
   }
 
   load() {
+    this.loadConstants();
     this.loadInstructions();
     this.loadPlatformValues();
     this.loadDiagnostics();
@@ -438,6 +418,15 @@ class BinaryLoaderV2 {
     };
   }
 
+  loadConstants() {
+    const constantSectionStart = this.view.getUint32(6);
+    const numConstants = this.view.getUint32(constantSectionStart);
+    for (let i = 0; i < numConstants; i++) {
+      const constant = this.loadConstant(i);
+      this.constants.push(constant);
+    }
+  }
+
   loadInstructions() {
     const instructionSectionStart = this.view.getUint32(2);
     let cursor = instructionSectionStart;
@@ -445,46 +434,38 @@ class BinaryLoaderV2 {
       const type = this.view.getUint8(cursor);
       this.instructions.push(type);
       cursor += 1;
-      if (type === VALUE || type === CALL_PLATFORM_FUNCTION) {
-        const binaryConstantIndex = this.view.getUint32(cursor);
-        cursor += 4;
-        const constant = this.loadConstant(binaryConstantIndex);
-        const constantIndex = this.getConstantIndex(constant);
-        this.instructions.push(constantIndex);
-      } else {
-        if (!opInfo[type]) {
-          throw new Error(`Unknown instruction type ${type}`);
-        }
-        for (const argInfo of opInfo[type].args) {
-          switch (argInfo) {
-            case ARG_NUMBER: {
-              const arg = this.view.getUint32(cursor);
-              cursor += 4;
-              this.instructions.push(arg);
-              break;
-            }
-            case ARG_U8: {
+      if (!opInfo[type]) {
+        throw new Error(`Unknown instruction type ${type}`);
+      }
+      for (const argInfo of opInfo[type].args) {
+        switch (argInfo) {
+          case ARG_NUMBER: {
+            const arg = this.view.getUint32(cursor);
+            cursor += 4;
+            this.instructions.push(arg);
+            break;
+          }
+          case ARG_U8: {
+            const arg = this.view.getUint8(cursor);
+            cursor += 1;
+            this.instructions.push(arg);
+            break;
+          }
+          case ARG_U16: {
+            for (let i = 0; i < 2; i++) {
               const arg = this.view.getUint8(cursor);
               cursor += 1;
               this.instructions.push(arg);
-              break;
             }
-            case ARG_U16: {
-              for (let i = 0; i < 2; i++) {
-                const arg = this.view.getUint8(cursor);
-                cursor += 1;
-                this.instructions.push(arg);
-              }
-              break;
+            break;
+          }
+          case ARG_U32: {
+            for (let i = 0; i < 4; i++) {
+              const arg = this.view.getUint8(cursor);
+              cursor += 1;
+              this.instructions.push(arg);
             }
-            case ARG_U32: {
-              for (let i = 0; i < 4; i++) {
-                const arg = this.view.getUint8(cursor);
-                cursor += 1;
-                this.instructions.push(arg);
-              }
-              break;
-            }
+            break;
           }
         }
       }
@@ -511,17 +492,6 @@ class BinaryLoaderV2 {
         );
       default:
         throw new Error(`Unknown constant type ${type}`);
-    }
-  }
-
-  getConstantIndex(constant) {
-    if (this.constantIndices.has(constant)) {
-      return this.constantIndices.get(constant);
-    } else {
-      const index = this.constants.length;
-      this.constants.push(constant);
-      this.constantIndices.set(constant, index);
-      return index;
     }
   }
 
