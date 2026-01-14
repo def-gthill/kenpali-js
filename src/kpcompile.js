@@ -139,6 +139,8 @@ class Compiler {
 
     this.platformValues = [];
     this.platformValueIndices = new Map();
+    this.constants = [];
+    this.constantIndices = new Map();
   }
 
   compileMain(expression) {
@@ -233,7 +235,8 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstruction(op.PUSH_SCOPE, numDeclaredNames);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, name);
+    const nameConstantIndex = this.getConstantIndex(name);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, nameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
@@ -281,7 +284,8 @@ class Compiler {
     this.addInstruction(op.WRITE_LOCAL, 2);
     this.addDiagnostic({ name: "<self>" });
     this.addInstruction(op.PUSH_SCOPE, numDeclaredNames + 1);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullName);
+    const fullNameConstantIndex = this.getConstantIndex(fullName);
+    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullNameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
     this.addInstruction(op.WRITE_LOCAL, 0);
     this.addDiagnostic({ name: "<result>" });
@@ -332,6 +336,7 @@ class Compiler {
     return {
       instructions,
       platformValues: this.platformValues,
+      constants: this.constants,
       diagnostics,
       functions: functionTable,
     };
@@ -390,7 +395,7 @@ class Compiler {
   }
 
   compileLiteral(expression) {
-    this.addInstruction(op.VALUE, expression.value);
+    this.loadValue(expression.value);
   }
 
   compileArray(expression) {
@@ -893,7 +898,7 @@ class Compiler {
 
   validateTypeSchema(schema) {
     if (schema === anyProtocol) {
-      this.addInstruction(op.VALUE, true);
+      this.loadValue(true);
       return;
     }
     this.addInstruction(op.ALIAS);
@@ -1019,13 +1024,13 @@ class Compiler {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
     this.addInstruction(op.JUMP, 2);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateObjectSchema(schema) {
@@ -1061,11 +1066,11 @@ class Compiler {
     for (const [key, valueSchema] of shape) {
       if (isObject(valueSchema) && valueSchema.get("form") === "optional") {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         const jumpIndex = this.nextInstructionIndex();
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema.get("schema"));
         this.addInstruction(op.JUMP_IF_FALSE, 0);
@@ -1076,11 +1081,11 @@ class Compiler {
         );
       } else {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
         failJumpIndices.push(this.nextInstructionIndex());
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema);
         this.addInstruction(op.JUMP_IF_FALSE, 0);
@@ -1089,13 +1094,13 @@ class Compiler {
       this.addInstruction(op.DISCARD);
     }
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
     this.addInstruction(op.JUMP, 2);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateAny(...validators) {
@@ -1105,13 +1110,13 @@ class Compiler {
       this.addInstruction(op.JUMP_IF_TRUE, 0);
       jumpIndices.push(this.nextInstructionIndex());
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
     this.addInstruction(op.JUMP, 2);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
   }
 
   validateEach(...validators) {
@@ -1121,13 +1126,13 @@ class Compiler {
       this.addInstruction(op.JUMP_IF_FALSE, 0);
       jumpIndices.push(this.nextInstructionIndex());
     }
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
     this.addInstruction(op.JUMP, 2);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateAll(schema) {
@@ -1151,7 +1156,7 @@ class Compiler {
       this.nextInstructionIndex() - forwardLoopIndex
     );
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
     this.addInstruction(op.JUMP, 4);
     this.setInstruction(
       failJumpIndex - 1,
@@ -1159,7 +1164,7 @@ class Compiler {
     );
     this.addInstruction(op.DISCARD); // The value that failed
     this.addInstruction(op.DISCARD); // The working array
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   invalidSchema(schema) {
@@ -1170,7 +1175,7 @@ class Compiler {
     if (isObject(schema)) {
       this.addInstruction(op.EMPTY_OBJECT);
       for (const [key, value] of schema) {
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.pushSchema(value);
         this.addInstruction(op.OBJECT_PUSH);
       }
@@ -1234,7 +1239,19 @@ class Compiler {
     if (isPlatformValue(value)) {
       this.loadPlatformValue(value);
     } else {
-      this.addInstruction(op.VALUE, value);
+      const constantIndex = this.getConstantIndex(value);
+      this.addInstruction(op.VALUE, constantIndex);
+    }
+  }
+
+  getConstantIndex(constant) {
+    if (this.constantIndices.has(constant)) {
+      return this.constantIndices.get(constant);
+    } else {
+      const index = this.constants.length;
+      this.constants.push(constant);
+      this.constantIndices.set(constant, index);
+      return index;
     }
   }
 

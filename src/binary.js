@@ -77,8 +77,10 @@ class BinaryDumper {
         instructionType === VALUE ||
         instructionType === CALL_PLATFORM_FUNCTION
       ) {
-        const constant = this.program.instructions[cursor];
+        const constantIndex = this.program.instructions[cursor];
         cursor += 1;
+        const constants = this.program.constants;
+        const constant = constants[constantIndex];
         this.out.instructions.push(this.getConstantIndex(constant));
       } else {
         const instructionInfo = opInfo[instructionType];
@@ -415,6 +417,8 @@ class BinaryLoaderV2 {
     this.view = new DataView(binary);
     this.names = new Map(extractPlatformNamesAndValues(names));
     this.platformValues = [];
+    this.constants = [];
+    this.constantIndices = new Map();
     this.diagnostics = [];
     this.functions = [];
     this.instructions = [];
@@ -428,6 +432,7 @@ class BinaryLoaderV2 {
     return {
       instructions: this.instructions,
       platformValues: this.platformValues,
+      constants: this.constants,
       diagnostics: this.diagnostics,
       functions: this.functions,
     };
@@ -441,10 +446,11 @@ class BinaryLoaderV2 {
       this.instructions.push(type);
       cursor += 1;
       if (type === VALUE || type === CALL_PLATFORM_FUNCTION) {
-        const index = this.view.getUint32(cursor);
+        const binaryConstantIndex = this.view.getUint32(cursor);
         cursor += 4;
-        const value = this.loadConstant(index);
-        this.instructions.push(value);
+        const constant = this.loadConstant(binaryConstantIndex);
+        const constantIndex = this.getConstantIndex(constant);
+        this.instructions.push(constantIndex);
       } else {
         if (!opInfo[type]) {
           throw new Error(`Unknown instruction type ${type}`);
@@ -505,6 +511,17 @@ class BinaryLoaderV2 {
         );
       default:
         throw new Error(`Unknown constant type ${type}`);
+    }
+  }
+
+  getConstantIndex(constant) {
+    if (this.constantIndices.has(constant)) {
+      return this.constantIndices.get(constant);
+    } else {
+      const index = this.constants.length;
+      this.constants.push(constant);
+      this.constantIndices.set(constant, index);
+      return index;
     }
   }
 

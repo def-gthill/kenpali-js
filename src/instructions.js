@@ -14,10 +14,10 @@ export const ARG_U32 = 3;
 // Load the platform value at the specified index and push it onto the stack.
 export const PLATFORM_VALUE = 0x00;
 opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: [ARG_U32] };
-// Push the specified value onto the stack. The argument must be a Kenpali primitive value
-// (`null` or a Boolean, number, or string).
+// Push the value at the specified index into the constants array onto the stack.
+// The constant must be a Kenpali primitive value (`null` or a Boolean, number, or string).
 export const VALUE = 0x01;
-opInfo[VALUE] = { name: "VALUE", args: 1 };
+opInfo[VALUE] = { name: "VALUE", args: [ARG_NUMBER] };
 // Create an alias of the top of the stack, and push it onto the stack.
 export const ALIAS = 0x02;
 opInfo[ALIAS] = { name: "ALIAS", args: 0 };
@@ -173,11 +173,14 @@ opInfo[READ_UPVALUE] = { name: "READ_UPVALUE", args: 1 };
 // in the frame.
 export const RETURN = 0x46;
 opInfo[RETURN] = { name: "RETURN", args: 0 };
-// Call a function defined using `platformFunction` or `platformClass`, with the specified
-// name. The arguments are pre-bound and occupy as many slots at the top of the stack as
-// there are parameters defined for the function.
+// Call a function defined using `platformFunction` or `platformClass`, with the name
+// specified as an index into the constants array. The arguments are pre-bound and occupy
+// as many slots at the top of the stack as there are parameters defined for the function.
 export const CALL_PLATFORM_FUNCTION = 0x47;
-opInfo[CALL_PLATFORM_FUNCTION] = { name: "CALL_PLATFORM_FUNCTION", args: 1 };
+opInfo[CALL_PLATFORM_FUNCTION] = {
+  name: "CALL_PLATFORM_FUNCTION",
+  args: [ARG_NUMBER],
+};
 // Pop the specified constructor function off the stack, and push its `self` value onto the stack.
 export const SELF = 0x48;
 opInfo[SELF] = { name: "SELF", args: 0 };
@@ -297,9 +300,16 @@ export function disassemble(program) {
 }
 
 class Disassembler {
-  constructor({ instructions, platformValues, diagnostics, functions }) {
+  constructor({
+    instructions,
+    platformValues,
+    constants,
+    diagnostics,
+    functions,
+  }) {
     this.instructions = instructions;
     this.platformValues = platformValues;
+    this.constants = constants;
     this.diagnostics = diagnostics;
     this.functions = functions;
     this.cursor = 0;
@@ -308,6 +318,7 @@ class Disassembler {
   disassemble() {
     const instructionStrings = [];
     this.disassemblePlatformValues(instructionStrings);
+    this.disassembleConstants(instructionStrings);
     this.disassembleFunctions(instructionStrings);
     this.disassembleInstructions(instructionStrings);
     return instructionStrings.join("\n");
@@ -322,6 +333,17 @@ class Disassembler {
       instructionStrings.push(
         `${i} = ${displaySimple(this.platformValues[i])}`
       );
+    }
+  }
+
+  disassembleConstants(instructionStrings) {
+    instructionStrings.push("--- Constants ---");
+    if (this.constants.length === 0) {
+      instructionStrings.push("<none>");
+    } else {
+      for (let i = 0; i < this.constants.length; i++) {
+        instructionStrings.push(`${i} = ${displaySimple(this.constants[i])}`);
+      }
     }
   }
 

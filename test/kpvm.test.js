@@ -5,7 +5,10 @@ import { Vm } from "../src/kpvm.js";
 import { assertIsError, assertThrows } from "./assertions.js";
 
 test("The VALUE instruction pushes its argument onto the stack", (t) => {
-  const vm = new Vm({ instructions: [op.VALUE, 42, op.VALUE, 97, op.RETURN] });
+  const vm = new Vm({
+    instructions: [op.VALUE, 0, op.VALUE, 1, op.RETURN],
+    constants: [42, 97],
+  });
 
   vm.run();
 
@@ -13,7 +16,10 @@ test("The VALUE instruction pushes its argument onto the stack", (t) => {
 });
 
 test("The ALIAS instruction pushes another reference to the top of the stack", (t) => {
-  const vm = new Vm({ instructions: [op.VALUE, 42, op.ALIAS, op.RETURN] });
+  const vm = new Vm({
+    instructions: [op.VALUE, 0, op.ALIAS, op.RETURN],
+    constants: [42],
+  });
 
   vm.run();
 
@@ -22,7 +28,8 @@ test("The ALIAS instruction pushes another reference to the top of the stack", (
 
 test("The DISCARD instruction throws away the top of the stack", (t) => {
   const vm = new Vm({
-    instructions: [op.VALUE, 42, op.VALUE, 97, op.DISCARD, op.RETURN],
+    instructions: [op.VALUE, 0, op.VALUE, 1, op.DISCARD, op.RETURN],
+    constants: [42, 97],
   });
 
   vm.run();
@@ -32,7 +39,8 @@ test("The DISCARD instruction throws away the top of the stack", (t) => {
 
 test("The RESERVE instruction reserves space on the stack without putting any values there", (t) => {
   const vm = new Vm({
-    instructions: [op.VALUE, 42, op.RESERVE, 2, op.VALUE, 97, op.RETURN],
+    instructions: [op.VALUE, 0, op.RESERVE, 2, op.VALUE, 1, op.RETURN],
+    constants: [42, 97],
   });
 
   vm.run();
@@ -43,13 +51,14 @@ test("The RESERVE instruction reserves space on the stack without putting any va
 test("The WRITE_LOCAL instruction moves the top of the stack to the specified local slot", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 97],
-      ...[op.VALUE, 73],
-      ...[op.VALUE, 216],
+      ...[op.VALUE, 0],
+      ...[op.VALUE, 1],
+      ...[op.VALUE, 2],
+      ...[op.VALUE, 3],
       ...[op.WRITE_LOCAL, 1],
       op.RETURN,
     ],
+    constants: [42, 97, 73, 216],
   });
 
   vm.run();
@@ -60,12 +69,13 @@ test("The WRITE_LOCAL instruction moves the top of the stack to the specified lo
 test("The READ_LOCAL 0 instruction aliases the specified local slot to the top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 216],
-      ...[op.VALUE, 73],
+      ...[op.VALUE, 0],
+      ...[op.VALUE, 1],
+      ...[op.VALUE, 2],
       ...[op.READ_LOCAL, 0, 1],
       op.RETURN,
     ],
+    constants: [42, 216, 73],
   });
 
   vm.run();
@@ -76,13 +86,14 @@ test("The READ_LOCAL 0 instruction aliases the specified local slot to the top o
 test("The PUSH_SCOPE 0 instruction adds a new stack frame with slot 0 at the top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 216],
+      ...[op.VALUE, 0],
+      ...[op.VALUE, 1],
       ...[op.PUSH_SCOPE, 0],
-      ...[op.VALUE, 73],
+      ...[op.VALUE, 2],
       ...[op.READ_LOCAL, 0, 0],
       op.RETURN,
     ],
+    constants: [42, 216, 73],
   });
 
   vm.run();
@@ -93,13 +104,14 @@ test("The PUSH_SCOPE 0 instruction adds a new stack frame with slot 0 at the top
 test("With a positive argument, PUSH_SCOPE puts slot 0 below the current top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 216],
+      ...[op.VALUE, 0],
+      ...[op.VALUE, 1],
       ...[op.PUSH_SCOPE, 1],
-      ...[op.VALUE, 73],
+      ...[op.VALUE, 2],
       ...[op.READ_LOCAL, 0, 0],
       op.RETURN,
     ],
+    constants: [42, 216, 73],
   });
 
   vm.run();
@@ -112,11 +124,12 @@ test("With a positive argument, PUSH_SCOPE puts slot 0 below the current top of 
 test("The THROW instruction throws the value on the top of the stack", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.VALUE, kperror("bad")],
+      ...[op.VALUE, 0],
       ...[op.THROW],
-      ...[op.VALUE, 42],
+      ...[op.VALUE, 1],
       op.RETURN,
     ],
+    constants: [kperror("bad"), 42],
   });
 
   assertThrows(t, () => vm.run(), "bad");
@@ -127,12 +140,13 @@ test("The CATCH instruction causes the next error to jump to the specified offse
   const vm = new Vm({
     instructions: [
       ...[op.CATCH, 5],
-      ...[op.VALUE, kperror("bad")],
+      ...[op.VALUE, 0],
       ...[op.THROW],
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 73],
+      ...[op.VALUE, 1],
+      ...[op.VALUE, 2],
       op.RETURN,
     ],
+    constants: [kperror("bad"), 42, 73],
   });
 
   vm.run();
@@ -147,12 +161,13 @@ test("The UNCATCH instruction cancels the last CATCH", (t) => {
     instructions: [
       ...[op.CATCH, 6],
       ...[op.UNCATCH],
-      ...[op.VALUE, kperror("bad")],
+      ...[op.VALUE, 0],
       ...[op.THROW],
-      ...[op.VALUE, 42],
-      ...[op.VALUE, 73],
+      ...[op.VALUE, 1],
+      ...[op.VALUE, 2],
       op.RETURN,
     ],
+    constants: [kperror("bad"), 42, 73],
   });
 
   assertThrows(t, () => vm.run(), "bad");

@@ -98,10 +98,16 @@ export class Vm {
       debugLog = console.error,
     } = {}
   ) {
-    const { instructions, diagnostics = [], functions = [] } = program;
+    const {
+      instructions,
+      diagnostics = [],
+      functions = [],
+      constants = [],
+    } = program;
     this.program = program;
     this.instructions = instructions;
     this.diagnostics = diagnostics;
+    this.constants = constants;
     this.functions = new Map(functions.map((f) => [f.name, f.offset]));
     this.methods = extractMethods(functions);
     this.trace = trace;
@@ -287,9 +293,12 @@ export class Vm {
   }
 
   runValue() {
-    const value = this.next();
+    const constantIndex = this.next();
+    const value = this.constants[constantIndex];
     if (this.trace) {
-      this.logInstruction(`VALUE ${display(value, kpcallbackInNewSession)}`);
+      this.logInstruction(
+        `VALUE ${constantIndex} (${display(value, kpcallbackInNewSession)})`
+      );
     }
     this.stack.push(value);
   }
@@ -804,9 +813,12 @@ export class Vm {
   }
 
   runCallPlatformFunction() {
-    const calleeName = this.next();
+    const constantIndex = this.next();
+    const calleeName = this.constants[constantIndex];
     if (this.trace) {
-      this.logInstruction(`CALL_PLATFORM_FUNCTION ${calleeName}`);
+      this.logInstruction(
+        `CALL_PLATFORM_FUNCTION ${constantIndex} (${calleeName})`
+      );
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
