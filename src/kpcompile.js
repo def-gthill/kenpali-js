@@ -466,15 +466,13 @@ class Compiler {
   resolveInModule(expression) {
     if (expression.from) {
       if (libraryHas(this.library, expression.from, expression.name)) {
-        const fullName = makeFullName(expression.from, expression.name);
-        this.addInstruction(
-          op.FUNCTION,
-          this.functionNumbersByName.get(fullName)
+        const value = libraryGet(
+          this.library,
+          expression.from,
+          expression.name
         );
-        this.addDiagnostic({
-          name: fullName,
-          isPlatform: true,
-        });
+        const fullName = makeFullName(expression.from, expression.name);
+        this.loadLibraryValue(value, fullName);
         return true;
       } else {
         throw kperror(
@@ -551,7 +549,11 @@ class Compiler {
     } else {
       return false;
     }
+    this.loadLibraryValue(value, fullName);
+    return true;
+  }
 
+  loadLibraryValue(value, fullName) {
     if (value.type === "value") {
       this.loadValue(value.value);
     } else {
@@ -564,7 +566,6 @@ class Compiler {
         isPlatform: true,
       });
     }
-    return true;
   }
 
   compileBlock(expression) {
@@ -1297,7 +1298,7 @@ class Compiler {
   }
 
   addInstructionWithArgs(instruction, args) {
-    this.currentFunction().instructions.push(instruction);
+    const instructions = this.currentFunction().instructions;
     const instructionInfo = opInfo[instruction];
     if (args.length < instructionInfo.args.length) {
       throw new Error(
@@ -1307,16 +1308,32 @@ class Compiler {
     for (let i = 0; i < args.length; i++) {
       switch (instructionInfo.args[i]) {
         case ARG_NUMBER:
-          this.currentFunction().instructions.push(args[i]);
+          instructions.push(instruction);
+          instructions.push(args[i]);
           break;
         case ARG_U8:
-          this.currentFunction().instructions.push(...u8ToBytes(args[i]));
+          if (args[i] > op.MAX_U8_VALUE) {
+            instructions.push(op.WIDE);
+            instructions.push(instruction);
+            instructions.push(...u32ToBytes(args[i]));
+          } else {
+            instructions.push(instruction);
+            instructions.push(...u8ToBytes(args[i]));
+          }
           break;
         case ARG_U16:
-          this.currentFunction().instructions.push(...u16ToBytes(args[i]));
+          if (args[i] > op.MAX_U16_VALUE) {
+            instructions.push(op.WIDE);
+            instructions.push(instruction);
+            instructions.push(...u32ToBytes(args[i]));
+          } else {
+            instructions.push(instruction);
+            instructions.push(...u16ToBytes(args[i]));
+          }
           break;
         case ARG_U32:
-          this.currentFunction().instructions.push(...u32ToBytes(args[i]));
+          instructions.push(instruction);
+          instructions.push(...u32ToBytes(args[i]));
           break;
       }
     }

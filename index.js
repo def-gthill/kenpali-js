@@ -1,4 +1,4 @@
-import { platformClass, platformFunction } from "./src/builtins.js";
+import { constant, platformClass, platformFunction } from "./src/builtins.js";
 import {
   display,
   kpcall,
@@ -110,6 +110,7 @@ export {
   booleanClass,
   classClass,
   collectionProtocol,
+  constant,
   display,
   displayProtocol,
   jsEither as either,

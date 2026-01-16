@@ -13,7 +13,7 @@ export const ARG_U32 = 3;
 
 // Load the platform value at the specified index and push it onto the stack.
 export const PLATFORM_VALUE = 0x00;
-opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: [ARG_U32] };
+opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: [ARG_U8] };
 // Push the value at the specified index into the constants array onto the stack.
 // The constant must be a Kenpali primitive value (`null` or a Boolean, number, or string).
 export const VALUE = 0x01;
@@ -44,6 +44,9 @@ opInfo[POP_SCOPE] = { name: "POP_SCOPE", args: 0 };
 // READ_RELATIVE 0 is the same as ALIAS.
 export const READ_RELATIVE = 0x09;
 opInfo[READ_RELATIVE] = { name: "READ_RELATIVE", args: 1 };
+// Make the next instruction operate on wide (32-bit) arguments.
+export const WIDE = 0x0f;
+opInfo[WIDE] = { name: "WIDE", args: [] };
 
 // ----------------------------
 // -- ARRAY OPERATIONS --------
@@ -270,9 +273,9 @@ export function u32FromBytes(bytes) {
 }
 
 const ONE_BYTE_SIZE = 2 ** 8;
-const MAX_U8_VALUE = ONE_BYTE_SIZE - 1;
-const MAX_U16_VALUE = ONE_BYTE_SIZE ** 2 - 1;
-const MAX_U32_VALUE = ONE_BYTE_SIZE ** 4 - 1;
+export const MAX_U8_VALUE = ONE_BYTE_SIZE - 1;
+export const MAX_U16_VALUE = ONE_BYTE_SIZE ** 2 - 1;
+export const MAX_U32_VALUE = ONE_BYTE_SIZE ** 4 - 1;
 
 export function u8ToBytes(value) {
   if (value < 0 || value > MAX_U8_VALUE) {
@@ -313,6 +316,7 @@ class Disassembler {
     this.diagnostics = diagnostics;
     this.functions = functions;
     this.cursor = 0;
+    this.wide = false;
   }
 
   disassemble() {
@@ -375,25 +379,38 @@ class Disassembler {
 
   disassembleInstruction() {
     const instructionType = this.next();
+    if (instructionType === WIDE) {
+      this.wide = true;
+      return "WIDE";
+    }
     if (!opInfo[instructionType]) {
       return `!! UNKNOWN INSTRUCTION ${instructionType}`;
     }
     const instructionInfo = opInfo[instructionType];
     const args = [];
-    for (const arg of instructionInfo.args) {
-      switch (arg) {
-        case ARG_NUMBER:
-        case ARG_U8:
-          args.push(this.next());
-          break;
-        case ARG_U16:
-          args.push(u16FromBytes([this.next(), this.next()]));
-          break;
-        case ARG_U32:
-          args.push(
-            u32FromBytes([this.next(), this.next(), this.next(), this.next()])
-          );
-          break;
+    if (this.wide) {
+      for (const _ of instructionInfo.args) {
+        args.push(
+          u32FromBytes([this.next(), this.next(), this.next(), this.next()])
+        );
+      }
+      this.wide = false;
+    } else {
+      for (const arg of instructionInfo.args) {
+        switch (arg) {
+          case ARG_NUMBER:
+          case ARG_U8:
+            args.push(this.next());
+            break;
+          case ARG_U16:
+            args.push(u16FromBytes([this.next(), this.next()]));
+            break;
+          case ARG_U32:
+            args.push(
+              u32FromBytes([this.next(), this.next(), this.next(), this.next()])
+            );
+            break;
+        }
       }
     }
     return `${instructionInfo.name} ${args.join(" ")}`;

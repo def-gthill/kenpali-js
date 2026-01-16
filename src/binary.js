@@ -9,12 +9,21 @@ import {
   IS_NUMBER,
   IS_STRING,
   opInfo,
+  WIDE,
 } from "./instructions.js";
-import { kpoMerge } from "./kpobject.js";
 import { displaySimple } from "./values.js";
 
-export function dumpBinary(program, { names = new Map() } = {}) {
-  const allNames = kpoMerge(loadBuiltins(), names);
+export function dumpBinary(
+  program,
+  { names = new Map(), modules = new Map() } = {}
+) {
+  const flatModules = new Map();
+  for (const [moduleName, module] of modules) {
+    for (const [name, value] of module) {
+      flatModules.set(`${moduleName}/${name}`, value);
+    }
+  }
+  const allNames = new Map([...loadBuiltins(), ...names, ...flatModules]);
   return new BinaryDumper(program, { names: allNames }).dump();
 }
 
@@ -45,6 +54,7 @@ class BinaryDumper {
 
   dumpInstructions() {
     let cursor = 0;
+    let wide = false;
     while (cursor < this.program.instructions.length) {
       const instructionType = this.program.instructions[cursor];
       cursor += 1;
@@ -52,7 +62,22 @@ class BinaryDumper {
         throw new Error(`Unknown instruction ${instructionType}`);
       }
       this.out.instructions.push(instructionType);
+      if (instructionType === WIDE) {
+        wide = true;
+        continue;
+      }
       const instructionInfo = opInfo[instructionType];
+      if (wide) {
+        for (const _ of instructionInfo.args) {
+          for (let i = 0; i < 4; i++) {
+            const arg = this.program.instructions[cursor];
+            cursor += 1;
+            this.out.instructions.push(arg);
+          }
+        }
+        wide = false;
+        continue;
+      }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
           case ARG_NUMBER: {
@@ -118,11 +143,24 @@ class BinaryDumper {
   getInstructionSectionLength() {
     let cursor = 0;
     let length = 0;
+    let wide = false;
     while (cursor < this.out.instructions.length) {
       const instructionType = this.out.instructions[cursor];
       cursor += 1;
       length += 1;
+      if (instructionType === WIDE) {
+        wide = true;
+        continue;
+      }
       const instructionInfo = opInfo[instructionType];
+      if (wide) {
+        for (const _ of instructionInfo.args) {
+          cursor += 4;
+          length += 4;
+        }
+        wide = false;
+        continue;
+      }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
           case ARG_NUMBER:
@@ -301,12 +339,29 @@ class BinaryDumper {
     offset = functionOffset;
     // Instruction section
     let cursor = 0;
+    let wide = false;
     while (cursor < this.out.instructions.length) {
       const instructionType = this.out.instructions[cursor];
       cursor += 1;
       view.setUint8(offset, instructionType);
       offset += 1;
+      if (instructionType === WIDE) {
+        wide = true;
+        continue;
+      }
       const instructionInfo = opInfo[instructionType];
+      if (wide) {
+        for (const _ of instructionInfo.args) {
+          for (let i = 0; i < 4; i++) {
+            const arg = this.out.instructions[cursor];
+            cursor += 1;
+            view.setUint8(offset + i, arg);
+          }
+          offset += 4;
+        }
+        wide = false;
+        continue;
+      }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
           case ARG_NUMBER: {
@@ -384,8 +439,17 @@ class BinaryDumper {
   }
 }
 
-export function loadBinary(binary, { names = new Map() } = {}) {
-  const allNames = kpoMerge(loadBuiltins(), names);
+export function loadBinary(
+  binary,
+  { names = new Map(), modules = new Map() } = {}
+) {
+  const flatModules = new Map();
+  for (const [moduleName, module] of modules) {
+    for (const [name, value] of module) {
+      flatModules.set(`${moduleName}/${name}`, value);
+    }
+  }
+  const allNames = new Map([...loadBuiltins(), ...names, ...flatModules]);
   const view = new DataView(binary);
   const version = view.getUint16(0);
   if (version === 2) {
@@ -425,12 +489,28 @@ class BinaryLoaderV2 {
   loadInstructions() {
     const instructionSectionStart = this.view.getUint32(2);
     let cursor = instructionSectionStart;
+    let wide = false;
     while (cursor < this.binary.byteLength) {
       const type = this.view.getUint8(cursor);
-      this.instructions.push(type);
       cursor += 1;
       if (!opInfo[type]) {
         throw new Error(`Unknown instruction type ${type}`);
+      }
+      this.instructions.push(type);
+      if (type === WIDE) {
+        wide = true;
+        continue;
+      }
+      if (wide) {
+        for (const _ of opInfo[type].args) {
+          for (let i = 0; i < 4; i++) {
+            const arg = this.view.getUint8(cursor);
+            cursor += 1;
+            this.instructions.push(arg);
+          }
+        }
+        wide = false;
+        continue;
       }
       for (const argInfo of opInfo[type].args) {
         switch (argInfo) {

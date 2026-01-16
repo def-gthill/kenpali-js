@@ -137,6 +137,7 @@ export class Vm {
     this.instructionTable[op.PUSH_SCOPE] = this.runPushScope;
     this.instructionTable[op.POP_SCOPE] = this.runPopScope;
     this.instructionTable[op.READ_RELATIVE] = this.runReadRelative;
+    this.instructionTable[op.WIDE] = this.runWide;
     this.instructionTable[op.EMPTY_ARRAY] = this.runEmptyArray;
     this.instructionTable[op.ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[op.ARRAY_EXTEND] = this.runArrayExtend;
@@ -192,6 +193,15 @@ export class Vm {
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
         this.instructionTable[i] = this.instructionTable[i].bind(this);
+      }
+    }
+
+    this.wideInstructionTable = [];
+    this.wideInstructionTable[op.PLATFORM_VALUE] = this.runPlatformValueWide;
+
+    for (let i = 0; i < this.wideInstructionTable.length; i++) {
+      if (this.wideInstructionTable[i]) {
+        this.wideInstructionTable[i] = this.wideInstructionTable[i].bind(this);
       }
     }
   }
@@ -287,6 +297,14 @@ export class Vm {
   }
 
   runPlatformValue() {
+    const index = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(`PLATFORM_VALUE ${index}`);
+    }
+    this.stack.push(this.platformValues[index]);
+  }
+
+  runPlatformValueWide() {
     const index = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`PLATFORM_VALUE ${index}`);
@@ -385,6 +403,17 @@ export class Vm {
     }
     const value = this.stack.at(-1 - stepsOut);
     this.stack.push(value);
+  }
+
+  runWide() {
+    if (this.trace) {
+      this.logInstruction("WIDE");
+    }
+    const instructionType = this.next();
+    if (!this.wideInstructionTable[instructionType]) {
+      throw new Error(`Instruction ${instructionType} has no wide version`);
+    }
+    this.wideInstructionTable[instructionType]();
   }
 
   runEmptyArray() {

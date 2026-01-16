@@ -841,4 +841,9 @@ export function platformClass(
   }
 ): PlatformClassDef;
 
+export function constant(
+  name: string,
+  value: KpValue
+): [string, { type: "value"; value: KpValue }];
+
 //#endregion
