@@ -679,7 +679,9 @@ class Compiler {
           ]);
         }
         existingRest = element.name;
-        this.addInstruction(op.ARRAY_CUT, pattern.names.length - i - 1);
+        this.addInstructionWithArgs(op.ARRAY_CUT, [
+          pattern.names.length - i - 1,
+        ]);
         this.addInstruction(op.ARRAY_REVERSE);
         this.assignNames(element.name, { isArgumentPattern });
       } else if (typeof element == "object" && element.type === "optional") {

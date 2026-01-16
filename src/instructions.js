@@ -54,36 +54,36 @@ opInfo[WIDE] = { name: "WIDE", args: [] };
 
 // Create an empty array and push it onto the stack.
 export const EMPTY_ARRAY = 0x10;
-opInfo[EMPTY_ARRAY] = { name: "EMPTY_ARRAY", args: 0 };
+opInfo[EMPTY_ARRAY] = { name: "EMPTY_ARRAY", args: [] };
 // Pop the value at the top of the stack and push it onto the array now at the top of the stack.
 export const ARRAY_PUSH = 0x11;
-opInfo[ARRAY_PUSH] = { name: "ARRAY_PUSH", args: 0 };
+opInfo[ARRAY_PUSH] = { name: "ARRAY_PUSH", args: [] };
 // Pop the sequence at the top of the stack and push all its values onto the array now at the top,
 // preserving their order.
 export const ARRAY_EXTEND = 0x12;
-opInfo[ARRAY_EXTEND] = { name: "ARRAY_EXTEND", args: 0 };
+opInfo[ARRAY_EXTEND] = { name: "ARRAY_EXTEND", args: [] };
 // Reverse the order of the values in the array now at the top of the stack.
 export const ARRAY_REVERSE = 0x13;
-opInfo[ARRAY_REVERSE] = { name: "ARRAY_REVERSE", args: 0 };
+opInfo[ARRAY_REVERSE] = { name: "ARRAY_REVERSE", args: [] };
 // Pop the last value from the array at the top of the stack and push it onto the stack.
 export const ARRAY_POP = 0x14;
-opInfo[ARRAY_POP] = { name: "ARRAY_POP", args: 0 };
+opInfo[ARRAY_POP] = { name: "ARRAY_POP", args: [] };
 // Pop the top value from the stack to use as the default value.
 // Then, if there are elements in the array at the top of the stack, pop the last value and
 // push it onto the stack. Otherwise, push the default value back onto the stack.
 export const ARRAY_POP_OR_DEFAULT = 0x15;
-opInfo[ARRAY_POP_OR_DEFAULT] = { name: "ARRAY_POP_OR_DEFAULT", args: 0 };
+opInfo[ARRAY_POP_OR_DEFAULT] = { name: "ARRAY_POP_OR_DEFAULT", args: [] };
 // Pop the sequence at the top of the stack, split it at the specified position, and push both
 // parts onto the stack. After this instruction, the second value from the top of the stack
 // is an array whose length is the specified position.
 export const ARRAY_CUT = 0x16;
-opInfo[ARRAY_CUT] = { name: "ARRAY_CUT", args: 1 };
+opInfo[ARRAY_CUT] = { name: "ARRAY_CUT", args: [ARG_U8] };
 // Replace the array at the top of the stack with a copy of it, breaking any alias relationships.
 export const ARRAY_COPY = 0x17;
-opInfo[ARRAY_COPY] = { name: "ARRAY_COPY", args: 0 };
+opInfo[ARRAY_COPY] = { name: "ARRAY_COPY", args: [] };
 // Pop the array at the top of the stack and push a boolean indicating whether it is empty.
 export const ARRAY_IS_EMPTY = 0x18;
-opInfo[ARRAY_IS_EMPTY] = { name: "ARRAY_IS_EMPTY", args: 0 };
+opInfo[ARRAY_IS_EMPTY] = { name: "ARRAY_IS_EMPTY", args: [] };
 
 // ----------------------------
 // -- OBJECT OPERATIONS -------
@@ -91,38 +91,38 @@ opInfo[ARRAY_IS_EMPTY] = { name: "ARRAY_IS_EMPTY", args: 0 };
 
 // Create an empty object and push it onto the stack.
 export const EMPTY_OBJECT = 0x20;
-opInfo[EMPTY_OBJECT] = { name: "EMPTY_OBJECT", args: 0 };
+opInfo[EMPTY_OBJECT] = { name: "EMPTY_OBJECT", args: [] };
 // Pop the top two values from the stack and add them as a key-value pair to the object
 // now at the top of the stack. The key is the value that was originally at the top of the stack.
 export const OBJECT_PUSH = 0x21;
-opInfo[OBJECT_PUSH] = { name: "OBJECT_PUSH", args: 0 };
+opInfo[OBJECT_PUSH] = { name: "OBJECT_PUSH", args: [] };
 // Pop the object at the top of the stack and add all its key-value pairs to the object
 // now at the top of the stack. The key-value pairs from the popped object take precedence
 // over any existing key-value pairs in the object at the top of the stack.
 export const OBJECT_MERGE = 0x22;
-opInfo[OBJECT_MERGE] = { name: "OBJECT_MERGE", args: 0 };
+opInfo[OBJECT_MERGE] = { name: "OBJECT_MERGE", args: [] };
 // Pop the top value from the stack to use as the key, remove the corresponding value
 // from the object now at the top of the stack, and push it onto the stack.
 export const OBJECT_POP = 0x23;
-opInfo[OBJECT_POP] = { name: "OBJECT_POP", args: 0 };
+opInfo[OBJECT_POP] = { name: "OBJECT_POP", args: [] };
 // Pop the top value from the stack to use as the default value, then the new top value
 // to use as the key. Then, if the object has a value for the key, remove it from the object
 // and push it onto the stack. Otherwise, push the default value back onto the stack.
 export const OBJECT_POP_OR_DEFAULT = 0x24;
-opInfo[OBJECT_POP_OR_DEFAULT] = { name: "OBJECT_POP_OR_DEFAULT", args: 0 };
+opInfo[OBJECT_POP_OR_DEFAULT] = { name: "OBJECT_POP_OR_DEFAULT", args: [] };
 // Replace the object at the top of the stack with a copy of it, breaking any alias relationships.
 export const OBJECT_COPY = 0x25;
-opInfo[OBJECT_COPY] = { name: "OBJECT_COPY", args: 0 };
+opInfo[OBJECT_COPY] = { name: "OBJECT_COPY", args: [] };
 // Pop the object at the top of the stack and push an array of all its keys.
 export const OBJECT_KEYS = 0x26;
-opInfo[OBJECT_KEYS] = { name: "OBJECT_KEYS", args: 0 };
+opInfo[OBJECT_KEYS] = { name: "OBJECT_KEYS", args: [] };
 // Pop the object at the top of the stack and push an array of all its values.
 export const OBJECT_VALUES = 0x27;
-opInfo[OBJECT_VALUES] = { name: "OBJECT_VALUES", args: 0 };
+opInfo[OBJECT_VALUES] = { name: "OBJECT_VALUES", args: [] };
 // Pop the top value from the stack to use as the key, then pop the object at the top of the stack.
 // Push a boolean indicating whether the object has a value for the key.
 export const OBJECT_HAS = 0x28;
-opInfo[OBJECT_HAS] = { name: "OBJECT_HAS", args: 0 };
+opInfo[OBJECT_HAS] = { name: "OBJECT_HAS", args: [] };
 
 // ----------------------------
 // -- JUMPS -------------------

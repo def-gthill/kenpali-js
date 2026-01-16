@@ -7,6 +7,7 @@ import {
   platformFunction,
 } from "../index.js";
 import { dumpBinary, fromBase64, loadBinary, toBase64 } from "../src/binary.js";
+import { disassemble } from "../src/instructions.js";
 
 const testPrograms = [
   {
@@ -87,6 +88,11 @@ const testPrograms = [
     ]),
     expectedResult: bigArrayOf((i) => i),
   },
+  {
+    name: "Many Array Destructures with Rest",
+    code: `[*rest, ${bigArrayOf((i) => `x${i}`).join(", ")}] = [${bigArrayOf((i) => i).join(", ")}, 256, 257]; rest`,
+    expectedResult: [0, 1],
+  },
 ];
 
 function bigArrayOf(f) {
@@ -95,7 +101,7 @@ function bigArrayOf(f) {
     .map((_, i) => f(i));
 }
 
-const only = [];
+const only = ["Many Array Destructures with Rest"];
 
 for (const testProgram of testPrograms) {
   if (only.length > 0 && !only.includes(testProgram.name)) {
@@ -114,6 +120,7 @@ for (const testProgram of testPrograms) {
   }
   test(`Round-tripping ${testProgram.name} from binary produces the same binary`, (t) => {
     const program = compile();
+    console.log(disassemble(program));
     const originalBinary = toBinary(program);
     const reloadedProgram = fromBinary(originalBinary);
     const roundTrippedBinary = toBinary(reloadedProgram);

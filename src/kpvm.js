@@ -203,6 +203,7 @@ export class Vm {
     this.wideInstructionTable[op.WRITE_LOCAL] = this.runWriteLocalWide;
     this.wideInstructionTable[op.READ_LOCAL] = this.runReadLocalWide;
     this.wideInstructionTable[op.PUSH_SCOPE] = this.runPushScopeWide;
+    this.wideInstructionTable[op.ARRAY_CUT] = this.runArrayCutWide;
 
     for (let i = 0; i < this.wideInstructionTable.length; i++) {
       if (this.wideInstructionTable[i]) {
@@ -578,7 +579,30 @@ export class Vm {
   }
 
   runArrayCut() {
-    const position = this.next();
+    const position = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(`ARRAY_CUT ${position}`);
+    }
+    const sequence = this.stack.pop();
+    if (position === 0) {
+      this.stack.push([]);
+      this.stack.push(sequence);
+    } else {
+      let array;
+      if (isArray(sequence)) {
+        array = sequence;
+      } else {
+        this.pushCallFrame("$cutStream");
+        array = toArray(sequence, this.kpcallback.bind(this)).reverse();
+        this.popCallFrame();
+      }
+      this.stack.push(array.slice(0, position));
+      this.stack.push(array.slice(position));
+    }
+  }
+
+  runArrayCutWide() {
+    const position = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`ARRAY_CUT ${position}`);
     }
