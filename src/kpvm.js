@@ -198,6 +198,7 @@ export class Vm {
 
     this.wideInstructionTable = [];
     this.wideInstructionTable[op.PLATFORM_VALUE] = this.runPlatformValueWide;
+    this.wideInstructionTable[op.VALUE] = this.runValueWide;
 
     for (let i = 0; i < this.wideInstructionTable.length; i++) {
       if (this.wideInstructionTable[i]) {
@@ -313,7 +314,18 @@ export class Vm {
   }
 
   runValue() {
-    const constantIndex = this.next();
+    const constantIndex = this.readU8Arg();
+    const value = this.constants[constantIndex];
+    if (this.trace) {
+      this.logInstruction(
+        `VALUE ${constantIndex} (${display(value, kpcallbackInNewSession)})`
+      );
+    }
+    this.stack.push(value);
+  }
+
+  runValueWide() {
+    const constantIndex = this.readU32Arg();
     const value = this.constants[constantIndex];
     if (this.trace) {
       this.logInstruction(

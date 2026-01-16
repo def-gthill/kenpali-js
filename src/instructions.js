@@ -17,7 +17,7 @@ opInfo[PLATFORM_VALUE] = { name: "PLATFORM_VALUE", args: [ARG_U8] };
 // Push the value at the specified index into the constants array onto the stack.
 // The constant must be a Kenpali primitive value (`null` or a Boolean, number, or string).
 export const VALUE = 0x01;
-opInfo[VALUE] = { name: "VALUE", args: [ARG_NUMBER] };
+opInfo[VALUE] = { name: "VALUE", args: [ARG_U8] };
 // Create an alias of the top of the stack, and push it onto the stack.
 export const ALIAS = 0x02;
 opInfo[ALIAS] = { name: "ALIAS", args: 0 };

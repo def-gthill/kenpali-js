@@ -1262,7 +1262,7 @@ class Compiler {
       this.loadPlatformValue(value);
     } else {
       const constantIndex = this.getConstantIndex(value);
-      this.addInstruction(op.VALUE, constantIndex);
+      this.addInstructionWithArgs(op.VALUE, [constantIndex]);
     }
   }
 

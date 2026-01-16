@@ -64,6 +64,16 @@ const testPrograms = [
       .fill(0)
       .map((_, i) => i),
   },
+  {
+    name: "Wide constants",
+    code: `[${Array(257)
+      .fill(0)
+      .map((_, i) => `${i}`)
+      .join(", ")}]`,
+    expectedResult: Array(257)
+      .fill(0)
+      .map((_, i) => i),
+  },
 ];
 
 const only = [];
