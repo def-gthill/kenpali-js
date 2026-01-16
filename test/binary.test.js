@@ -45,36 +45,55 @@ const testPrograms = [
     expectedResult: [1, 2, 3],
   },
   {
-    name: "Wide Platform Values",
-    code: `[${Array(257)
-      .fill(0)
-      .map((_, i) => `m/n${i}()`)
-      .join(", ")}]`,
+    name: "Many Platform Values",
+    code: `[${bigArrayOf((i) => `m/n${i}()`).join(", ")}]`,
     modules: new Map([
       [
         "m",
-        kpmodule(
-          Array(257)
-            .fill(0)
-            .map((_, i) => platformFunction(`n${i}`, {}, () => i))
-        ),
+        kpmodule(bigArrayOf((i) => platformFunction(`n${i}`, {}, () => i))),
       ],
     ]),
-    expectedResult: Array(257)
-      .fill(0)
-      .map((_, i) => i),
+    expectedResult: bigArrayOf((i) => i),
   },
   {
-    name: "Wide constants",
-    code: `[${Array(257)
-      .fill(0)
-      .map((_, i) => `${i}`)
-      .join(", ")}]`,
-    expectedResult: Array(257)
-      .fill(0)
-      .map((_, i) => i),
+    name: "Many Constants",
+    code: `[${bigArrayOf((i) => `${i}`).join(", ")}]`,
+    expectedResult: bigArrayOf((i) => i),
+  },
+  {
+    name: "Many Variables",
+    code: [
+      ...bigArrayOf((i) => `x${i} = ${i}`),
+      `[${bigArrayOf((i) => `x${i}`).join(", ")}]`,
+    ].join("; "),
+    expectedResult: bigArrayOf((i) => i),
+  },
+  {
+    name: "Many Platform Function Parameters",
+    code: `m/foo(${bigArrayOf((i) => `${i}`).join(", ")})`,
+    modules: new Map([
+      [
+        "m",
+        kpmodule([
+          platformFunction(
+            "foo",
+            {
+              posParams: bigArrayOf((i) => `x${i}`),
+            },
+            (args) => args
+          ),
+        ]),
+      ],
+    ]),
+    expectedResult: bigArrayOf((i) => i),
   },
 ];
+
+function bigArrayOf(f) {
+  return Array(257)
+    .fill(0)
+    .map((_, i) => f(i));
+}
 
 const only = [];
 

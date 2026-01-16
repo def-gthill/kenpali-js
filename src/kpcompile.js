@@ -249,23 +249,23 @@ class Compiler {
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
     if (posParamPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
     this.loadPlatformValue(platformFunction);
-    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [2]);
     this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH_SCOPE, numDeclaredNames);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames]);
     const nameConstantIndex = this.getConstantIndex(f.name);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, nameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.addInstruction(op.DISCARD); // The positional arguments handoff
     // (The named arguments slot already got trampled by the result)
@@ -292,28 +292,28 @@ class Compiler {
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
     if (posParamPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
     this.loadPlatformValue(method);
-    this.addInstruction(op.WRITE_LOCAL, 1);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [1]);
     this.addDiagnostic({ name: "<method>" });
-    this.addInstruction(op.READ_LOCAL, 0, 0);
+    this.addInstructionWithArgs(op.READ_LOCAL, [0, 0]);
     this.addDiagnostic({ name: "<boundMethod>" });
     this.addInstruction(op.SELF);
-    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [2]);
     this.addDiagnostic({ name: "<self>" });
-    this.addInstruction(op.PUSH_SCOPE, numDeclaredNames + 1);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames + 1]);
     const fullNameConstantIndex = this.getConstantIndex(f.name);
     this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullNameConstantIndex);
     this.addInstruction(op.POP_SCOPE);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.popScope();
     this.activeFunctions.pop();
@@ -517,7 +517,7 @@ class Compiler {
               );
             }
           }
-          this.addInstruction(op.READ_LOCAL, numLayers, slot);
+          this.addInstructionWithArgs(op.READ_LOCAL, [numLayers, slot]);
         }
         this.addDiagnostic({ name: expression.name });
         return true;
@@ -571,10 +571,10 @@ class Compiler {
   compileBlock(expression) {
     this.reserveSlots(1); // For the result
     this.pushScope();
-    this.addInstruction(op.PUSH_SCOPE, 0);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [0]);
     this.defineNames(expression.defs);
     this.compileExpression(expression.result);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
     this.addInstruction(op.POP_SCOPE);
@@ -641,7 +641,9 @@ class Compiler {
         this.addInstruction(op.DISCARD);
         break;
       case "name":
-        this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern.name));
+        this.addInstructionWithArgs(op.WRITE_LOCAL, [
+          activeScope.getSlot(pattern.name),
+        ]);
         this.addDiagnostic({ name: pattern.name });
         break;
       case "arrayPattern":
@@ -783,17 +785,17 @@ class Compiler {
     }
     this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames() - 2);
     if (paramPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(paramPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
     this.compileExpression(expression.body);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
     this.popScope();
@@ -834,7 +836,7 @@ class Compiler {
     this.compileExpression(expression.callee);
     this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
-    this.addInstruction(op.PUSH_SCOPE, 2);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [2]);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
     if (this.trace) {
@@ -983,10 +985,10 @@ class Compiler {
   validateCondition(condition) {
     this.loadPlatformValue(condition);
     this.addInstruction(op.EMPTY_ARRAY);
-    this.addInstruction(op.READ_RELATIVE, 2);
+    this.addInstructionWithArgs(op.READ_RELATIVE, [2]);
     this.addInstruction(op.ARRAY_PUSH);
     this.addInstruction(op.EMPTY_OBJECT);
-    this.addInstruction(op.PUSH_SCOPE, 2);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [2]);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
   }
@@ -1253,7 +1255,7 @@ class Compiler {
 
   reserveSlots(numSlots) {
     if (numSlots > 0) {
-      this.addInstruction(op.RESERVE, numSlots);
+      this.addInstructionWithArgs(op.RESERVE, [numSlots]);
     }
   }
 
@@ -1305,34 +1307,38 @@ class Compiler {
         `Not enough arguments for instruction ${instructionInfo.name}`
       );
     }
+    let wide = false;
+    for (let i = 0; i < args.length; i++) {
+      const argType = instructionInfo.args[i];
+      if (
+        (argType === ARG_U8 && args[i] > op.MAX_U8_VALUE) ||
+        (argType === ARG_U16 && args[i] > op.MAX_U16_VALUE)
+      ) {
+        wide = true;
+        break;
+      }
+    }
+    if (wide) {
+      instructions.push(op.WIDE);
+      instructions.push(instruction);
+      for (let i = 0; i < args.length; i++) {
+        instructions.push(...u32ToBytes(args[i]));
+      }
+      return;
+    }
+    instructions.push(instruction);
     for (let i = 0; i < args.length; i++) {
       switch (instructionInfo.args[i]) {
         case ARG_NUMBER:
-          instructions.push(instruction);
           instructions.push(args[i]);
           break;
         case ARG_U8:
-          if (args[i] > op.MAX_U8_VALUE) {
-            instructions.push(op.WIDE);
-            instructions.push(instruction);
-            instructions.push(...u32ToBytes(args[i]));
-          } else {
-            instructions.push(instruction);
-            instructions.push(...u8ToBytes(args[i]));
-          }
+          instructions.push(...u8ToBytes(args[i]));
           break;
         case ARG_U16:
-          if (args[i] > op.MAX_U16_VALUE) {
-            instructions.push(op.WIDE);
-            instructions.push(instruction);
-            instructions.push(...u32ToBytes(args[i]));
-          } else {
-            instructions.push(instruction);
-            instructions.push(...u16ToBytes(args[i]));
-          }
+          instructions.push(...u16ToBytes(args[i]));
           break;
         case ARG_U32:
-          instructions.push(instruction);
           instructions.push(...u32ToBytes(args[i]));
           break;
       }

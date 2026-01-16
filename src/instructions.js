@@ -20,30 +20,30 @@ export const VALUE = 0x01;
 opInfo[VALUE] = { name: "VALUE", args: [ARG_U8] };
 // Create an alias of the top of the stack, and push it onto the stack.
 export const ALIAS = 0x02;
-opInfo[ALIAS] = { name: "ALIAS", args: 0 };
+opInfo[ALIAS] = { name: "ALIAS", args: [] };
 // Pop the top of the stack and throw it away.
 export const DISCARD = 0x03;
-opInfo[DISCARD] = { name: "DISCARD", args: 0 };
+opInfo[DISCARD] = { name: "DISCARD", args: [] };
 // Reserve the specified number of empty slots at the top of the stack.
 export const RESERVE = 0x04;
-opInfo[RESERVE] = { name: "RESERVE", args: 1 };
+opInfo[RESERVE] = { name: "RESERVE", args: [ARG_U8] };
 // Write the value at the top of the stack to the local variable at the specified index.
 export const WRITE_LOCAL = 0x05;
-opInfo[WRITE_LOCAL] = { name: "WRITE_LOCAL", args: 1 };
+opInfo[WRITE_LOCAL] = { name: "WRITE_LOCAL", args: [ARG_U8] };
 // Read the value from the local variable at the specified index and push it onto the stack.
 export const READ_LOCAL = 0x06;
-opInfo[READ_LOCAL] = { name: "READ_LOCAL", args: 2 };
+opInfo[READ_LOCAL] = { name: "READ_LOCAL", args: [ARG_U8, ARG_U8] };
 // Push a new scope frame onto the scope stack, whose first slot is the specified number of steps
 // down the stack.
 export const PUSH_SCOPE = 0x07;
-opInfo[PUSH_SCOPE] = { name: "PUSH_SCOPE", args: 1 };
+opInfo[PUSH_SCOPE] = { name: "PUSH_SCOPE", args: [ARG_U8] };
 // Pop the top scope frame from the scope stack.
 export const POP_SCOPE = 0x08;
 opInfo[POP_SCOPE] = { name: "POP_SCOPE", args: 0 };
 // Read the value from the specified number of steps down the stack, and push it onto the stack.
 // READ_RELATIVE 0 is the same as ALIAS.
 export const READ_RELATIVE = 0x09;
-opInfo[READ_RELATIVE] = { name: "READ_RELATIVE", args: 1 };
+opInfo[READ_RELATIVE] = { name: "READ_RELATIVE", args: [ARG_U8] };
 // Make the next instruction operate on wide (32-bit) arguments.
 export const WIDE = 0x0f;
 opInfo[WIDE] = { name: "WIDE", args: [] };

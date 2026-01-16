@@ -199,6 +199,10 @@ export class Vm {
     this.wideInstructionTable = [];
     this.wideInstructionTable[op.PLATFORM_VALUE] = this.runPlatformValueWide;
     this.wideInstructionTable[op.VALUE] = this.runValueWide;
+    this.wideInstructionTable[op.RESERVE] = this.runReserveWide;
+    this.wideInstructionTable[op.WRITE_LOCAL] = this.runWriteLocalWide;
+    this.wideInstructionTable[op.READ_LOCAL] = this.runReadLocalWide;
+    this.wideInstructionTable[op.PUSH_SCOPE] = this.runPushScopeWide;
 
     for (let i = 0; i < this.wideInstructionTable.length; i++) {
       if (this.wideInstructionTable[i]) {
@@ -350,7 +354,17 @@ export class Vm {
   }
 
   runReserve() {
-    const numSlots = this.next();
+    const numSlots = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(`RESERVE ${numSlots}`);
+    }
+    for (let i = 0; i < numSlots; i++) {
+      this.stack.push(undefined);
+    }
+  }
+
+  runReserveWide() {
+    const numSlots = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`RESERVE ${numSlots}`);
     }
@@ -360,7 +374,19 @@ export class Vm {
   }
 
   runWriteLocal() {
-    const localIndex = this.next();
+    const localIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const absoluteIndex = this.scopeFrames.at(-1).stackIndex + localIndex;
+    const value = this.stack.pop();
+    this.stack[absoluteIndex] = value;
+  }
+
+  runWriteLocalWide() {
+    const localIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
@@ -372,8 +398,28 @@ export class Vm {
   }
 
   runReadLocal() {
-    const stepsOut = this.next();
-    const localIndex = this.next();
+    const stepsOut = this.readU8Arg();
+    const localIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const absoluteIndex =
+      this.scopeFrames.at(-1 - stepsOut).stackIndex + localIndex;
+    const value = this.stack[absoluteIndex];
+    if (value === undefined) {
+      this.throw_(
+        kperror("nameUsedBeforeAssignment", ["name", this.getDiagnostic().name])
+      );
+      return;
+    }
+    this.stack.push(value);
+  }
+
+  runReadLocalWide() {
+    const stepsOut = this.readU32Arg();
+    const localIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
@@ -393,6 +439,15 @@ export class Vm {
 
   runPushScope() {
     const offset = this.next();
+    const stackIndex = this.stack.length - 1 - offset;
+    if (this.trace) {
+      this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
+    }
+    this.scopeFrames.push(new ScopeFrame(stackIndex));
+  }
+
+  runPushScopeWide() {
+    const offset = this.readU32Arg();
     const stackIndex = this.stack.length - 1 - offset;
     if (this.trace) {
       this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
