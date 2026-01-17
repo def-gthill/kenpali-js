@@ -6,7 +6,6 @@ import { displaySimple } from "./values.js";
 // ----------------------------
 
 export const opInfo = [];
-export const ARG_NUMBER = 0;
 export const ARG_U8 = 1;
 export const ARG_U16 = 2;
 export const ARG_U32 = 3;
@@ -39,7 +38,7 @@ export const PUSH_SCOPE = 0x07;
 opInfo[PUSH_SCOPE] = { name: "PUSH_SCOPE", args: [ARG_U8] };
 // Pop the top scope frame from the scope stack.
 export const POP_SCOPE = 0x08;
-opInfo[POP_SCOPE] = { name: "POP_SCOPE", args: 0 };
+opInfo[POP_SCOPE] = { name: "POP_SCOPE", args: [] };
 // Read the value from the specified number of steps down the stack, and push it onto the stack.
 // READ_RELATIVE 0 is the same as ALIAS.
 export const READ_RELATIVE = 0x09;
@@ -130,18 +129,18 @@ opInfo[OBJECT_HAS] = { name: "OBJECT_HAS", args: [] };
 
 // Move the cursor forward by the specified number of steps.
 export const JUMP = 0x30;
-opInfo[JUMP] = { name: "JUMP", args: 1 };
+opInfo[JUMP] = { name: "JUMP", args: [ARG_U8] };
 // Pop the value at the top of the stack and move the cursor forward by the specified number of steps
 // if the value is `true`.
 export const JUMP_IF_TRUE = 0x31;
-opInfo[JUMP_IF_TRUE] = { name: "JUMP_IF_TRUE", args: 1 };
+opInfo[JUMP_IF_TRUE] = { name: "JUMP_IF_TRUE", args: [ARG_U32] };
 // Pop the value at the top of the stack and move the cursor forward by the specified number of steps
 // if the value is `false`.
 export const JUMP_IF_FALSE = 0x32;
-opInfo[JUMP_IF_FALSE] = { name: "JUMP_IF_FALSE", args: 1 };
+opInfo[JUMP_IF_FALSE] = { name: "JUMP_IF_FALSE", args: [ARG_U32] };
 // Move the cursor backward by the specified number of steps.
 export const JUMP_BACK = 0x33;
-opInfo[JUMP_BACK] = { name: "JUMP_BACK", args: 1 };
+opInfo[JUMP_BACK] = { name: "JUMP_BACK", args: [ARG_U32] };
 
 // ----------------------------
 // -- FUNCTIONS ---------------
@@ -149,44 +148,44 @@ opInfo[JUMP_BACK] = { name: "JUMP_BACK", args: 1 };
 
 // Do nothing. This simply marks the beginning of a function.
 export const BEGIN = 0x40;
-opInfo[BEGIN] = { name: "BEGIN", args: 0 };
+opInfo[BEGIN] = { name: "BEGIN", args: [] };
 // Push the function at the specified index in the function table onto the stack.
 export const FUNCTION = 0x41;
-opInfo[FUNCTION] = { name: "FUNCTION", args: 1 };
+opInfo[FUNCTION] = { name: "FUNCTION", args: [ARG_U8] };
 // Prepare an upvalue for the variable the specified number of scope frames out,
 // starting at 1, at the specified index. If the number of steps is 0, instead
 // prepare a chained upvalue referring to the specified variable in the enclosing
 // function's closure.
 export const CLOSURE = 0x42;
-opInfo[CLOSURE] = { name: "CLOSURE", args: 2 };
+opInfo[CLOSURE] = { name: "CLOSURE", args: [ARG_U8, ARG_U8] };
 // Call a function. The function is expected to be third from the top of the stack,
 // with the array of positional arguments immediately above it and the object of named arguments
 // above that. If the function is a natural function, this instruction just pushes a call frame
 // and jumps to the start of the function; otherwise, it manages the entire lifecycle of the
 // call, ending with the function's result at the top of the stack.
 export const CALL = 0x43;
-opInfo[CALL] = { name: "CALL", args: 0 };
+opInfo[CALL] = { name: "CALL", args: [] };
 // Capture the value at the top of the stack into the corresponding upvalue.
 export const CAPTURE = 0x44;
-opInfo[CAPTURE] = { name: "CAPTURE", args: 0 };
+opInfo[CAPTURE] = { name: "CAPTURE", args: [] };
 // Read the value from the upvalue at the specified index and push it onto the stack.
 export const READ_UPVALUE = 0x45;
-opInfo[READ_UPVALUE] = { name: "READ_UPVALUE", args: 1 };
-// Pops the current call frame and moves the cursor to the return instruction indicated
+opInfo[READ_UPVALUE] = { name: "READ_UPVALUE", args: [ARG_U8] };
+// Pop the current call frame and move the cursor to the return instruction indicated
 // in the frame.
 export const RETURN = 0x46;
-opInfo[RETURN] = { name: "RETURN", args: 0 };
+opInfo[RETURN] = { name: "RETURN", args: [] };
 // Call a function defined using `platformFunction` or `platformClass`, with the name
 // specified as an index into the constants array. The arguments are pre-bound and occupy
 // as many slots at the top of the stack as there are parameters defined for the function.
 export const CALL_PLATFORM_FUNCTION = 0x47;
 opInfo[CALL_PLATFORM_FUNCTION] = {
   name: "CALL_PLATFORM_FUNCTION",
-  args: [ARG_NUMBER],
+  args: [ARG_U8],
 };
 // Pop the specified constructor function off the stack, and push its `self` value onto the stack.
 export const SELF = 0x48;
-opInfo[SELF] = { name: "SELF", args: 0 };
+opInfo[SELF] = { name: "SELF", args: [] };
 
 // ----------------------------
 // -- CORE IMPLEMENTATION -----
@@ -195,11 +194,11 @@ opInfo[SELF] = { name: "SELF", args: 0 };
 // Pop the top two values from the stack, use the top value as an index into the second-from-top value,
 // and push the result onto the stack.
 export const INDEX = 0x50;
-opInfo[INDEX] = { name: "INDEX", args: 0 };
+opInfo[INDEX] = { name: "INDEX", args: [] };
 // Pop the top two values from the stack, and push a boolean indicating whether they are equal,
 // as per the core `equals` function.
 export const EQUALS = 0x51;
-opInfo[EQUALS] = { name: "EQUALS", args: 0 };
+opInfo[EQUALS] = { name: "EQUALS", args: [] };
 
 // ----------------------------
 // -- VALIDATION AND ERRORS ---
@@ -207,62 +206,78 @@ opInfo[EQUALS] = { name: "EQUALS", args: 0 };
 
 // Pop the error value at the top of the stack and throw it.
 export const THROW = 0x80;
-opInfo[THROW] = { name: "THROW", args: 0 };
+opInfo[THROW] = { name: "THROW", args: [] };
 // Push a recovery handler onto the recovery stack, targeting the specified number of
 // steps forward from the current cursor.
 export const CATCH = 0x81;
-opInfo[CATCH] = { name: "CATCH", args: 1 };
+opInfo[CATCH] = { name: "CATCH", args: [ARG_U32] };
 // Pop the top recovery handler from the recovery stack.
 export const UNCATCH = 0x82;
-opInfo[UNCATCH] = { name: "UNCATCH", args: 0 };
+opInfo[UNCATCH] = { name: "UNCATCH", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is `null`.
 export const IS_NULL = 0x83;
-opInfo[IS_NULL] = { name: "IS_NULL", args: 0 };
+opInfo[IS_NULL] = { name: "IS_NULL", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a boolean.
 export const IS_BOOLEAN = 0x84;
-opInfo[IS_BOOLEAN] = { name: "IS_BOOLEAN", args: 0 };
+opInfo[IS_BOOLEAN] = { name: "IS_BOOLEAN", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a number.
 export const IS_NUMBER = 0x85;
-opInfo[IS_NUMBER] = { name: "IS_NUMBER", args: 0 };
+opInfo[IS_NUMBER] = { name: "IS_NUMBER", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a string.
 export const IS_STRING = 0x86;
-opInfo[IS_STRING] = { name: "IS_STRING", args: 0 };
+opInfo[IS_STRING] = { name: "IS_STRING", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is an array.
 export const IS_ARRAY = 0x87;
-opInfo[IS_ARRAY] = { name: "IS_ARRAY", args: 0 };
+opInfo[IS_ARRAY] = { name: "IS_ARRAY", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a stream.
 export const IS_STREAM = 0x88;
-opInfo[IS_STREAM] = { name: "IS_STREAM", args: 0 };
+opInfo[IS_STREAM] = { name: "IS_STREAM", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is an object.
 export const IS_OBJECT = 0x89;
-opInfo[IS_OBJECT] = { name: "IS_OBJECT", args: 0 };
+opInfo[IS_OBJECT] = { name: "IS_OBJECT", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a function.
 export const IS_FUNCTION = 0x8a;
-opInfo[IS_FUNCTION] = { name: "IS_FUNCTION", args: 0 };
+opInfo[IS_FUNCTION] = { name: "IS_FUNCTION", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is an error.
 export const IS_ERROR = 0x8b;
-opInfo[IS_ERROR] = { name: "IS_ERROR", args: 0 };
+opInfo[IS_ERROR] = { name: "IS_ERROR", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a class.
 export const IS_CLASS = 0x8c;
-opInfo[IS_CLASS] = { name: "IS_CLASS", args: 0 };
+opInfo[IS_CLASS] = { name: "IS_CLASS", args: [] };
 // Pop the value at the top of the stack and push a boolean indicating whether it is a protocol.
 export const IS_PROTOCOL = 0x8d;
-opInfo[IS_PROTOCOL] = { name: "IS_PROTOCOL", args: 0 };
+opInfo[IS_PROTOCOL] = { name: "IS_PROTOCOL", args: [] };
 // Pop the top two values from the stack. The top value must be a type value.
 // Push a boolean indicating whether the second-from-top value belongs to the type.
 export const HAS_TYPE = 0x8e;
-opInfo[HAS_TYPE] = { name: "HAS_TYPE", args: 0 };
+opInfo[HAS_TYPE] = { name: "HAS_TYPE", args: [] };
 // Pop the top value from the stack to use as a validation schema. The value now at the top
 // of the stack is the value that failed validation. Push an error value onto the stack
 // indicating why the validation failed.
 export const VALIDATION_ERROR = 0x9f;
-opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: 0 };
+opInfo[VALIDATION_ERROR] = { name: "VALIDATION_ERROR", args: [] };
 
-for (const op of opInfo) {
-  if (op && typeof op.args === "number") {
-    op.args = Array(op.args).fill(ARG_NUMBER);
-  }
-}
+// ----------------------------
+// -- WIDE INSTRUCTIONS -------
+// ----------------------------
+// Most "wide" instructions are only needed if there's a very large *local structure* in the program,
+// e.g. a giant function that declares hundreds of local names.
+// But a few are needed because the *program itself* is very large. For example, if a program
+// contains hundreds of constants, then each *new* constant requires another wide VALUE instruction.
+// If these instructions had to use the WIDE (0x0f) instruction, then eventually the compiled program
+// would become *larger* than if VALUE always took a 32-bit argument.
+// So instead, we provide dedicated wide versions of these instructions.
+export const PLATFORM_VALUE_WIDE = 0xf0;
+opInfo[PLATFORM_VALUE_WIDE] = { name: "PLATFORM_VALUE_WIDE", args: [ARG_U32] };
+export const VALUE_WIDE = 0xf1;
+opInfo[VALUE_WIDE] = { name: "VALUE_WIDE", args: [ARG_U32] };
+export const FUNCTION_WIDE = 0xf2;
+opInfo[FUNCTION_WIDE] = { name: "FUNCTION_WIDE", args: [ARG_U32] };
+export const CALL_PLATFORM_FUNCTION_WIDE = 0xf3;
+opInfo[CALL_PLATFORM_FUNCTION_WIDE] = {
+  name: "CALL_PLATFORM_FUNCTION_WIDE",
+  args: [ARG_U32],
+};
 
 export function u16FromBytes(bytes) {
   return (bytes[0] << 8) | bytes[1];
@@ -398,7 +413,6 @@ class Disassembler {
     } else {
       for (const arg of instructionInfo.args) {
         switch (arg) {
-          case ARG_NUMBER:
           case ARG_U8:
             args.push(this.next());
             break;

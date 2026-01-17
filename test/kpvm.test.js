@@ -139,7 +139,7 @@ test("The THROW instruction throws the value on the top of the stack", (t) => {
 test("The CATCH instruction causes the next error to jump to the specified offset", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.CATCH, 5],
+      ...[op.CATCH, 0, 0, 0, 5],
       ...[op.VALUE, 0],
       ...[op.THROW],
       ...[op.VALUE, 1],
@@ -159,7 +159,7 @@ test("The CATCH instruction causes the next error to jump to the specified offse
 test("The UNCATCH instruction cancels the last CATCH", (t) => {
   const vm = new Vm({
     instructions: [
-      ...[op.CATCH, 6],
+      ...[op.CATCH, 0, 0, 0, 6],
       ...[op.UNCATCH],
       ...[op.VALUE, 0],
       ...[op.THROW],

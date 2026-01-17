@@ -530,7 +530,6 @@ class PipelineTransformer extends SugaredTreeTransformer {
   }
 
   transformTightPipeline(pipeline) {
-    console.log(pipeline);
     return this.transformTightPipelineSteps(pipeline.start, pipeline.steps);
   }
 

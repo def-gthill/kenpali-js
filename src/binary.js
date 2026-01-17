@@ -1,6 +1,5 @@
 import { loadBuiltins } from "./builtins.js";
 import {
-  ARG_NUMBER,
   ARG_U16,
   ARG_U32,
   ARG_U8,
@@ -80,12 +79,6 @@ class BinaryDumper {
       }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
-          case ARG_NUMBER: {
-            const arg = this.program.instructions[cursor];
-            cursor += 1;
-            this.out.instructions.push(arg);
-            break;
-          }
           case ARG_U8: {
             const arg = this.program.instructions[cursor];
             cursor += 1;
@@ -163,10 +156,6 @@ class BinaryDumper {
       }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
-          case ARG_NUMBER:
-            cursor += 1;
-            length += 4;
-            break;
           case ARG_U8:
             cursor += 1;
             length += 1;
@@ -364,13 +353,6 @@ class BinaryDumper {
       }
       for (const argInfo of instructionInfo.args) {
         switch (argInfo) {
-          case ARG_NUMBER: {
-            const arg = this.out.instructions[cursor];
-            cursor += 1;
-            view.setUint32(offset, arg);
-            offset += 4;
-            break;
-          }
           case ARG_U8: {
             const arg = this.out.instructions[cursor];
             cursor += 1;
@@ -514,12 +496,6 @@ class BinaryLoaderV2 {
       }
       for (const argInfo of opInfo[type].args) {
         switch (argInfo) {
-          case ARG_NUMBER: {
-            const arg = this.view.getUint32(cursor);
-            cursor += 4;
-            this.instructions.push(arg);
-            break;
-          }
           case ARG_U8: {
             const arg = this.view.getUint8(cursor);
             cursor += 1;

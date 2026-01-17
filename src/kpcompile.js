@@ -2,7 +2,6 @@ import { getParamPatterns, loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import * as op from "./instructions.js";
 import {
-  ARG_NUMBER,
   ARG_U16,
   ARG_U32,
   ARG_U8,
@@ -263,7 +262,11 @@ class Compiler {
     this.addDiagnostic({ name: "<builtin>" });
     this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames]);
     const nameConstantIndex = this.getConstantIndex(f.name);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, nameConstantIndex);
+    this.addInstructionWithArgs(
+      op.CALL_PLATFORM_FUNCTION,
+      [nameConstantIndex],
+      op.CALL_PLATFORM_FUNCTION_WIDE
+    );
     this.addInstruction(op.POP_SCOPE);
     this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
@@ -311,7 +314,11 @@ class Compiler {
     this.addDiagnostic({ name: "<self>" });
     this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames + 1]);
     const fullNameConstantIndex = this.getConstantIndex(f.name);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullNameConstantIndex);
+    this.addInstructionWithArgs(
+      op.CALL_PLATFORM_FUNCTION,
+      [fullNameConstantIndex],
+      op.CALL_PLATFORM_FUNCTION_WIDE
+    );
     this.addInstruction(op.POP_SCOPE);
     this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
@@ -505,7 +512,7 @@ class Compiler {
               functionsTraversed[i].functionStackIndex
             ].upvalue(0, upvalueIndex);
           }
-          this.addInstruction(op.READ_UPVALUE, upvalueIndex);
+          this.addInstructionWithArgs(op.READ_UPVALUE, [upvalueIndex]);
           scope.setNeedsClosing(slot);
         } else {
           if (this.trace) {
@@ -557,9 +564,10 @@ class Compiler {
     if (value.type === "value") {
       this.loadValue(value.value);
     } else {
-      this.addInstruction(
+      this.addInstructionWithArgs(
         op.FUNCTION,
-        this.functionNumbersByName.get(fullName)
+        [this.functionNumbersByName.get(fullName)],
+        op.FUNCTION_WIDE
       );
       this.addDiagnostic({
         name: fullName,
@@ -808,14 +816,21 @@ class Compiler {
     if (this.activeFunctions.length > 0) {
       // This function is defined inside another function, so we need to
       // add it to the stack and deal with closures.
-      this.addInstruction(op.FUNCTION, finishedFunction.number);
+      this.addInstructionWithArgs(
+        op.FUNCTION,
+        [finishedFunction.number],
+        op.FUNCTION_WIDE
+      );
       this.addDiagnostic({
         name: functionName,
         number: finishedFunction.number,
         isPlatform: false,
       });
       for (const upvalue of finishedFunction.upvalues) {
-        this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
+        this.addInstructionWithArgs(op.CLOSURE, [
+          upvalue.numLayers,
+          upvalue.slot,
+        ]);
       }
     }
   }
@@ -874,7 +889,7 @@ class Compiler {
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
     const kpSchema = deepToKpobject(schema);
     this.validateRecursive(kpSchema);
-    this.addInstruction(op.JUMP_IF_TRUE, 0);
+    this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
     const jumpIndex = this.nextInstructionIndex();
     this.pushSchema(kpSchema);
     this.addInstruction(op.VALIDATION_ERROR);
@@ -1024,7 +1039,7 @@ class Compiler {
     for (const element of shape) {
       this.addInstruction(op.ALIAS);
       this.addInstruction(op.ARRAY_IS_EMPTY);
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
       let subschema;
       if (isObject(element) && element.get("form") === "optional") {
         subschema = element.get("schema");
@@ -1035,7 +1050,7 @@ class Compiler {
       }
       this.addInstruction(op.ARRAY_POP);
       this.validateRecursive(subschema);
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
       failJumpIndices.push(this.nextInstructionIndex());
       this.addInstruction(op.DISCARD);
     }
@@ -1045,7 +1060,7 @@ class Compiler {
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
     this.loadValue(true);
-    this.addInstruction(op.JUMP, 2);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
@@ -1088,12 +1103,12 @@ class Compiler {
         this.addInstruction(op.ALIAS);
         this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         const jumpIndex = this.nextInstructionIndex();
         this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema.get("schema"));
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
         this.setInstruction(
           jumpIndex - 1,
@@ -1103,19 +1118,19 @@ class Compiler {
         this.addInstruction(op.ALIAS);
         this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
         this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
       }
       this.addInstruction(op.DISCARD);
     }
     this.addInstruction(op.DISCARD);
     this.loadValue(true);
-    this.addInstruction(op.JUMP, 2);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
@@ -1127,11 +1142,11 @@ class Compiler {
     const jumpIndices = [];
     for (const validator of validators) {
       validator();
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
       jumpIndices.push(this.nextInstructionIndex());
     }
     this.loadValue(false);
-    this.addInstruction(op.JUMP, 2);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
@@ -1143,11 +1158,11 @@ class Compiler {
     const jumpIndices = [];
     for (const validator of validators) {
       validator();
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
       jumpIndices.push(this.nextInstructionIndex());
     }
     this.loadValue(true);
-    this.addInstruction(op.JUMP, 2);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
@@ -1159,25 +1174,23 @@ class Compiler {
     const backwardLoopIndex = this.nextInstructionIndex();
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_IS_EMPTY);
-    this.addInstruction(op.JUMP_IF_TRUE, 0);
+    this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
     const forwardLoopIndex = this.nextInstructionIndex();
     this.addInstruction(op.ARRAY_POP);
     this.validateRecursive(schema);
-    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
     const failJumpIndex = this.nextInstructionIndex();
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.JUMP_BACK, 0);
-    this.setInstruction(
-      this.nextInstructionIndex() - 1,
-      this.nextInstructionIndex() - backwardLoopIndex
-    );
+    this.addInstructionWithArgs(op.JUMP_BACK, [
+      this.nextInstructionIndex() - backwardLoopIndex + 5,
+    ]);
     this.setInstruction(
       forwardLoopIndex - 1,
       this.nextInstructionIndex() - forwardLoopIndex
     );
     this.addInstruction(op.DISCARD);
     this.loadValue(true);
-    this.addInstruction(op.JUMP, 4);
+    this.addInstructionWithArgs(op.JUMP, [4]);
     this.setInstruction(
       failJumpIndex - 1,
       this.nextInstructionIndex() - failJumpIndex
@@ -1266,13 +1279,17 @@ class Compiler {
       this.loadPlatformValue(value);
     } else {
       const constantIndex = this.getConstantIndex(value);
-      this.addInstructionWithArgs(op.VALUE, [constantIndex]);
+      this.addInstructionWithArgs(op.VALUE, [constantIndex], op.VALUE_WIDE);
     }
   }
 
   loadPlatformValue(value) {
     const index = this.getPlatformValueIndex(value);
-    this.addInstructionWithArgs(op.PLATFORM_VALUE, [index]);
+    this.addInstructionWithArgs(
+      op.PLATFORM_VALUE,
+      [index],
+      op.PLATFORM_VALUE_WIDE
+    );
   }
 
   getPlatformValueIndex(value) {
@@ -1301,7 +1318,7 @@ class Compiler {
     this.currentFunction().instructions.push(...instruction);
   }
 
-  addInstructionWithArgs(instruction, args) {
+  addInstructionWithArgs(instruction, args, wideInstruction = null) {
     const instructions = this.currentFunction().instructions;
     const instructionInfo = opInfo[instruction];
     if (args.length < instructionInfo.args.length) {
@@ -1321,28 +1338,29 @@ class Compiler {
       }
     }
     if (wide) {
-      instructions.push(op.WIDE);
-      instructions.push(instruction);
+      if (wideInstruction) {
+        instructions.push(wideInstruction);
+      } else {
+        instructions.push(op.WIDE);
+        instructions.push(instruction);
+      }
       for (let i = 0; i < args.length; i++) {
         instructions.push(...u32ToBytes(args[i]));
       }
-      return;
-    }
-    instructions.push(instruction);
-    for (let i = 0; i < args.length; i++) {
-      switch (instructionInfo.args[i]) {
-        case ARG_NUMBER:
-          instructions.push(args[i]);
-          break;
-        case ARG_U8:
-          instructions.push(...u8ToBytes(args[i]));
-          break;
-        case ARG_U16:
-          instructions.push(...u16ToBytes(args[i]));
-          break;
-        case ARG_U32:
-          instructions.push(...u32ToBytes(args[i]));
-          break;
+    } else {
+      instructions.push(instruction);
+      for (let i = 0; i < args.length; i++) {
+        switch (instructionInfo.args[i]) {
+          case ARG_U8:
+            instructions.push(...u8ToBytes(args[i]));
+            break;
+          case ARG_U16:
+            instructions.push(...u16ToBytes(args[i]));
+            break;
+          case ARG_U32:
+            instructions.push(...u32ToBytes(args[i]));
+            break;
+        }
       }
     }
   }

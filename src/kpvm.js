@@ -189,6 +189,11 @@ export class Vm {
     this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
     this.instructionTable[op.HAS_TYPE] = this.runHasType;
     this.instructionTable[op.VALIDATION_ERROR] = this.runValidationError;
+    this.instructionTable[op.PLATFORM_VALUE_WIDE] = this.runPlatformValueWide;
+    this.instructionTable[op.VALUE_WIDE] = this.runValueWide;
+    this.instructionTable[op.FUNCTION_WIDE] = this.runFunctionWide;
+    this.instructionTable[op.CALL_PLATFORM_FUNCTION_WIDE] =
+      this.runCallPlatformFunctionWide;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
@@ -204,6 +209,11 @@ export class Vm {
     this.wideInstructionTable[op.READ_LOCAL] = this.runReadLocalWide;
     this.wideInstructionTable[op.PUSH_SCOPE] = this.runPushScopeWide;
     this.wideInstructionTable[op.ARRAY_CUT] = this.runArrayCutWide;
+    this.wideInstructionTable[op.FUNCTION] = this.runFunctionWide;
+    this.wideInstructionTable[op.CLOSURE] = this.runClosureWide;
+    this.wideInstructionTable[op.READ_UPVALUE] = this.runReadUpvalueWide;
+    this.wideInstructionTable[op.CALL_PLATFORM_FUNCTION] =
+      this.runCallPlatformFunctionWide;
 
     for (let i = 0; i < this.wideInstructionTable.length; i++) {
       if (this.wideInstructionTable[i]) {
@@ -755,7 +765,7 @@ export class Vm {
   }
 
   runJumpIfTrue() {
-    const distance = this.next();
+    const distance = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`JUMP_IF_TRUE ${distance}`);
     }
@@ -766,7 +776,7 @@ export class Vm {
   }
 
   runJumpIfFalse() {
-    const distance = this.next();
+    const distance = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`JUMP_IF_FALSE ${distance}`);
     }
@@ -777,7 +787,7 @@ export class Vm {
   }
 
   runJumpBack() {
-    const distance = this.next();
+    const distance = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`JUMP_BACK ${distance}`);
     }
@@ -791,7 +801,21 @@ export class Vm {
   }
 
   runFunction() {
-    const functionIndex = this.next();
+    const functionIndex = this.readU8Arg();
+    const diagnostic = this.getDiagnostic();
+    if (this.trace) {
+      this.logInstruction(`FUNCTION ${functionIndex} (${diagnostic.name})`);
+    }
+    const target = this.program.functions[functionIndex].offset;
+    this.stack.push(
+      new Function(diagnostic.name, this.program, target, {
+        isPlatform: diagnostic.isPlatform,
+      })
+    );
+  }
+
+  runFunctionWide() {
+    const functionIndex = this.readU32Arg();
     const diagnostic = this.getDiagnostic();
     if (this.trace) {
       this.logInstruction(`FUNCTION ${functionIndex} (${diagnostic.name})`);
@@ -805,8 +829,33 @@ export class Vm {
   }
 
   runClosure() {
-    const stepsOut = this.next();
-    const index = this.next();
+    const stepsOut = this.readU8Arg();
+    const index = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
+    }
+    const f = this.stack.at(-1);
+    let upvalue;
+    if (stepsOut === 0) {
+      const enclosingFunction = this.stack[this.callFrames.at(-1).stackIndex];
+      const ref = enclosingFunction.closure[index];
+      upvalue = new Upvalue(ref);
+    } else {
+      const absoluteIndex = this.scopeFrames.at(-stepsOut).stackIndex + index;
+
+      if (this.openUpvalues[absoluteIndex]) {
+        upvalue = this.openUpvalues[absoluteIndex];
+      } else {
+        upvalue = new Upvalue(absoluteIndex);
+        this.openUpvalues[absoluteIndex] = upvalue;
+      }
+    }
+    f.closure.push(upvalue);
+  }
+
+  runClosureWide() {
+    const stepsOut = this.readU32Arg();
+    const index = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
     }
@@ -891,7 +940,37 @@ export class Vm {
   }
 
   runReadUpvalue() {
-    const upvalueIndex = this.next();
+    const upvalueIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const f = this.stack[this.callFrames.at(-1).stackIndex];
+    let upvalue = f.closure[upvalueIndex];
+    while (typeof upvalue.ref === "object") {
+      upvalue = upvalue.ref;
+    }
+    let value;
+    if ("value" in upvalue) {
+      value = upvalue.value;
+    } else {
+      value = this.stack[upvalue.ref];
+      if (value === undefined) {
+        this.throw_(
+          kperror("nameUsedBeforeAssignment", [
+            "name",
+            this.getDiagnostic().name,
+          ])
+        );
+        return;
+      }
+    }
+    this.stack.push(value);
+  }
+
+  runReadUpvalueWide() {
+    const upvalueIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
@@ -935,7 +1014,42 @@ export class Vm {
   }
 
   runCallPlatformFunction() {
-    const constantIndex = this.next();
+    const constantIndex = this.readU8Arg();
+    const calleeName = this.constants[constantIndex];
+    if (this.trace) {
+      this.logInstruction(
+        `CALL_PLATFORM_FUNCTION ${constantIndex} (${calleeName})`
+      );
+    }
+    const frameIndex = this.scopeFrames.at(-1).stackIndex;
+    const callee = this.stack[frameIndex];
+    this.pushCallFrame(calleeName, { isCompiledPlatformFunction: true });
+    const args = this.stack.slice(frameIndex + 1);
+    this.stack.length = frameIndex;
+    const kpcallback = this.kpcallback.bind(this);
+    const getMethod = this.getMethod.bind(this, calleeName);
+    try {
+      const result = callee(args, {
+        kpcallback,
+        debugLog: this.debugLog,
+        getMethod,
+      });
+      this.stack.push(result);
+      this.popCallFrame();
+      if (this.trace) {
+        console.log(`Return to ${this.cursor}`);
+      }
+    } catch (error) {
+      if (isError(error)) {
+        this.throw_(error);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  runCallPlatformFunctionWide() {
+    const constantIndex = this.readU32Arg();
     const calleeName = this.constants[constantIndex];
     if (this.trace) {
       this.logInstruction(
@@ -1202,7 +1316,7 @@ export class Vm {
   }
 
   runCatch() {
-    const recoveryOffset = this.next();
+    const recoveryOffset = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`CATCH ${recoveryOffset}`);
     }
