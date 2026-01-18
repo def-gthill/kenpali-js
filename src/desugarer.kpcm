@@ -24,7 +24,7 @@ splitMixedListsTransform = (node) => (
         params.type | eq("mixedParamList"),
         then: $ (
           [posParams, namedParams] = splitParamList(params.params);
-          {type: node.type, params: {type: "paramList", posParams: posParams, namedParams: namedParams}, body: node.body}
+          {**node, params: {type: "paramList", posParams: posParams, namedParams: namedParams}}
         ),
         else: $ node,
       )

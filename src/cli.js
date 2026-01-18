@@ -7,6 +7,9 @@ import { display, kpcall } from "./interop.js";
 import kpcompile, { kpcompileModule } from "./kpcompile.js";
 import kpeval from "./kpeval.js";
 import kpparse, { kpparseModule } from "./kpparse.js";
+import kpparseBootstrap, {
+  kpparseModuleBootstrap,
+} from "./kpparseBootstrap.js";
 import kpvm from "./kpvm.js";
 
 const usage = "Usage: kp <command> [options...] <file> [arguments...]";
@@ -18,6 +21,7 @@ const compileCommand = {
     { type: "flag", short: "-t", long: "--trace" },
     { type: "flag", short: "-m", long: "--module" },
     { type: "flag", short: "-j", long: "--javascript" },
+    { type: "multi", short: "-s", long: "--selfhost" },
     { type: "multi", short: "-u", long: "--use" },
   ],
   documentation: [
@@ -57,6 +61,7 @@ const runCommand = {
   options: [
     { type: "flag", short: "-t", long: "--trace" },
     { type: "flag", short: "-m", long: "--module" },
+    { type: "multi", short: "-s", long: "--selfhost" },
     { type: "multi", short: "-u", long: "--use" },
   ],
   documentation: [
@@ -122,9 +127,21 @@ function compile(args, fs) {
     ) + (settings.javascript ? ".js" : "");
   const code = fs.readTextFile(fileName);
   const modules = loadModules(fs, settings.use);
-  const program = settings.module
-    ? kpcompileModule(kpparseModule(code), { modules, trace: settings.trace })
-    : kpcompile(kpparse(code), { modules, trace: settings.trace });
+  let program;
+  if (settings.module) {
+    const ast = settings.selfhost.includes("parser")
+      ? kpparseModuleBootstrap(code)
+      : kpparseModule(code);
+    program = kpcompileModule(ast, {
+      modules,
+      trace: settings.trace,
+    });
+  } else {
+    const ast = settings.selfhost.includes("parser")
+      ? kpparseBootstrap(code)
+      : kpparse(code);
+    program = kpcompile(ast, { modules, trace: settings.trace });
+  }
   const binary = dumpBinary(program);
   if (settings.javascript) {
     fs.writeTextFile(
@@ -186,14 +203,19 @@ function run(args, fs) {
     if (!name) {
       throw new UsageError(makeUsageHelp(runCommand));
     }
-    const module = kpparseModule(code);
+    const module = settings.selfhost.includes("parser")
+      ? kpparseModuleBootstrap(code)
+      : kpparseModule(code);
     const definition = module.find(([n]) => n === name);
     if (!definition) {
       throw new UsageError(`Name "${name}" not found in module "${fileName}"`);
     }
     result = kpeval(definition[1], { modules });
   } else {
-    result = kpeval(kpparse(code), { modules, trace: settings.trace });
+    const ast = settings.selfhost.includes("parser")
+      ? kpparseBootstrap(code)
+      : kpparse(code);
+    result = kpeval(ast, { modules, trace: settings.trace });
   }
   const fArgs = args.slice(i);
   if (fArgs.length > 0) {

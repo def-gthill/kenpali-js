@@ -47,7 +47,7 @@ import {
 
 export function kpcompileJson(
   json,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
 ) {
   const expression = JSON.parse(json);
   return kpcompile(expression, { names, modules, trace });
@@ -55,7 +55,7 @@ export function kpcompileJson(
 
 export default function kpcompile(
   expression,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const library = new Map([...loadCore(), ...builtins]);
@@ -65,7 +65,7 @@ export default function kpcompile(
   ]).filter();
   if (trace && filteredLibrary.size > 0) {
     console.log(
-      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`,
     );
   }
   try {
@@ -86,18 +86,18 @@ export default function kpcompile(
 
 export function kpcompileModule(
   module,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
 ) {
   const builtins = kpoMerge(loadBuiltins(), names, module);
   const library = new Map([...loadCore(), ...builtins]);
   const fullLibrary = addModulesToLibrary(library, modules);
   const filteredLibrary = new LibraryFilter(
     fullLibrary,
-    module.map(([name, value]) => ["<entry>", name, value])
+    module.map(([name, value]) => ["<entry>", name, value]),
   ).filter();
   if (trace && filteredLibrary.size > 0) {
     console.log(
-      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`,
     );
   }
   try {
@@ -195,7 +195,7 @@ class Compiler {
               const methodFullName = `${fullName}/${method.methodName}`;
               functions.set(
                 methodFullName,
-                this.createFunction(methodFullName)
+                this.createFunction(methodFullName),
               );
             }
           }
@@ -265,7 +265,7 @@ class Compiler {
     this.addInstructionWithArgs(
       op.CALL_PLATFORM_FUNCTION,
       [nameConstantIndex],
-      op.CALL_PLATFORM_FUNCTION_WIDE
+      op.CALL_PLATFORM_FUNCTION_WIDE,
     );
     this.addInstruction(op.POP_SCOPE);
     this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
@@ -317,7 +317,7 @@ class Compiler {
     this.addInstructionWithArgs(
       op.CALL_PLATFORM_FUNCTION,
       [fullNameConstantIndex],
-      op.CALL_PLATFORM_FUNCTION_WIDE
+      op.CALL_PLATFORM_FUNCTION_WIDE,
     );
     this.addInstruction(op.POP_SCOPE);
     this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
@@ -347,10 +347,10 @@ class Compiler {
     }
 
     const instructions = [].concat(
-      ...this.finishedFunctions.map((f) => f.instructions)
+      ...this.finishedFunctions.map((f) => f.instructions),
     );
     const diagnostics = [].concat(
-      ...this.finishedFunctions.map((f) => f.diagnostics)
+      ...this.finishedFunctions.map((f) => f.diagnostics),
     );
     return {
       instructions,
@@ -403,7 +403,7 @@ class Compiler {
         this.compileValue(expression);
         break;
       default:
-        throw kperror("notAnExpression", ["value", expression]);
+        throw kperror("notAnExpression", ["value", deepToKpobject(expression)]);
     }
   }
 
@@ -476,7 +476,7 @@ class Compiler {
         const value = libraryGet(
           this.library,
           expression.from,
-          expression.name
+          expression.name,
         );
         const fullName = makeFullName(expression.from, expression.name);
         this.loadLibraryValue(value, fullName);
@@ -485,7 +485,7 @@ class Compiler {
         throw kperror(
           "nameNotDefined",
           ["name", expression.name],
-          ["from", expression.from]
+          ["from", expression.from],
         );
       }
     } else {
@@ -520,7 +520,7 @@ class Compiler {
               this.log(`Resolved "${expression.name}" in current scope`);
             } else {
               this.log(
-                `Resolved "${expression.name}" in scope ${numLayers} out`
+                `Resolved "${expression.name}" in scope ${numLayers} out`,
               );
             }
           }
@@ -567,7 +567,7 @@ class Compiler {
       this.addInstructionWithArgs(
         op.FUNCTION,
         [this.functionNumbersByName.get(fullName)],
-        op.FUNCTION_WIDE
+        op.FUNCTION_WIDE,
       );
       this.addDiagnostic({
         name: fullName,
@@ -682,7 +682,7 @@ class Compiler {
           throw kperror("overlappingRestPatterns", [
             "names",
             [existingRest, element.name].map((x) =>
-              this.toNamePatternString(x)
+              this.toNamePatternString(x),
             ),
           ]);
         }
@@ -758,7 +758,7 @@ class Compiler {
         const entryStrings = pattern.entries.map((entry) =>
           Array.isArray(entry)
             ? `${entry[0]}: ${this.toNamePatternString(entry[1])}`
-            : this.toNamePatternString(entry)
+            : this.toNamePatternString(entry),
         );
         return `{${entryStrings.join(", ")}}`;
       case "checked":
@@ -819,7 +819,7 @@ class Compiler {
       this.addInstructionWithArgs(
         op.FUNCTION,
         [finishedFunction.number],
-        op.FUNCTION_WIDE
+        op.FUNCTION_WIDE,
       );
       this.addDiagnostic({
         name: functionName,
@@ -980,7 +980,7 @@ class Compiler {
         this.addInstruction(op.ALIAS);
         this.loadValue(option);
         this.addInstruction(op.EQUALS);
-      })
+      }),
     );
   }
 
@@ -988,14 +988,14 @@ class Compiler {
     this.validateAny(
       ...schema.get("options").map((option) => () => {
         this.validateRecursive(option);
-      })
+      }),
     );
   }
 
   validateConditionSchema(schema) {
     this.validateEach(
       () => this.validateRecursive(schema.get("schema")),
-      () => this.validateCondition(schema.get("condition"))
+      () => this.validateCondition(schema.get("condition")),
     );
   }
 
@@ -1013,7 +1013,7 @@ class Compiler {
   validateArraySchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(arrayClass),
-      () => this.validateArrayElements(schema.get("elements"))
+      () => this.validateArrayElements(schema.get("elements")),
     );
   }
 
@@ -1026,7 +1026,7 @@ class Compiler {
   validateTupleSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(arrayClass),
-      () => this.validateTupleShape(schema.get("shape"))
+      () => this.validateTupleShape(schema.get("shape")),
     );
   }
 
@@ -1071,7 +1071,7 @@ class Compiler {
   validateObjectSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(objectClass),
-      () => this.validateObjectValues(schema.get("values"))
+      () => this.validateObjectValues(schema.get("values")),
     );
   }
 
@@ -1090,7 +1090,7 @@ class Compiler {
   validateRecordSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(objectClass),
-      () => this.validateRecordShape(schema.get("shape"))
+      () => this.validateRecordShape(schema.get("shape")),
     );
   }
 
@@ -1112,7 +1112,7 @@ class Compiler {
         failJumpIndices.push(this.nextInstructionIndex());
         this.setInstruction(
           jumpIndex - 1,
-          this.nextInstructionIndex() - jumpIndex
+          this.nextInstructionIndex() - jumpIndex,
         );
       } else {
         this.addInstruction(op.ALIAS);
@@ -1186,14 +1186,14 @@ class Compiler {
     ]);
     this.setInstruction(
       forwardLoopIndex - 1,
-      this.nextInstructionIndex() - forwardLoopIndex
+      this.nextInstructionIndex() - forwardLoopIndex,
     );
     this.addInstruction(op.DISCARD);
     this.loadValue(true);
     this.addInstructionWithArgs(op.JUMP, [4]);
     this.setInstruction(
       failJumpIndex - 1,
-      this.nextInstructionIndex() - failJumpIndex
+      this.nextInstructionIndex() - failJumpIndex,
     );
     this.addInstruction(op.DISCARD); // The value that failed
     this.addInstruction(op.DISCARD); // The working array
@@ -1233,12 +1233,12 @@ class Compiler {
         this.logNodeStart(`Starting scope, reserving ${reservedSlots}`);
       } else {
         this.logNodeStart(
-          `Starting scope for function ${functionStackIndex}, reserving ${reservedSlots}`
+          `Starting scope for function ${functionStackIndex}, reserving ${reservedSlots}`,
         );
       }
     }
     this.activeScopes.push(
-      new CompiledScope({ firstSlot: reservedSlots, functionStackIndex })
+      new CompiledScope({ firstSlot: reservedSlots, functionStackIndex }),
     );
   }
 
@@ -1288,7 +1288,7 @@ class Compiler {
     this.addInstructionWithArgs(
       op.PLATFORM_VALUE,
       [index],
-      op.PLATFORM_VALUE_WIDE
+      op.PLATFORM_VALUE_WIDE,
     );
   }
 
@@ -1323,7 +1323,7 @@ class Compiler {
     const instructionInfo = opInfo[instruction];
     if (args.length < instructionInfo.args.length) {
       throw new Error(
-        `Not enough arguments for instruction ${instructionInfo.name}`
+        `Not enough arguments for instruction ${instructionInfo.name}`,
       );
     }
     let wide = false;
@@ -1399,7 +1399,7 @@ class CompiledFunction {
 
   upvalue(numLayers, slot) {
     const existing = this.upvalues.findIndex(
-      (uv) => uv.numLayers === numLayers && uv.slot === slot
+      (uv) => uv.numLayers === numLayers && uv.slot === slot,
     );
     if (existing >= 0) {
       return existing;
@@ -1535,7 +1535,7 @@ class LibraryFilter extends TreeTransformer {
       this.transformExpression(expression);
     }
     const grey = new Set(
-      this.rootExpressions.map((_, i) => this.allExpressions.length - i - 1)
+      this.rootExpressions.map((_, i) => this.allExpressions.length - i - 1),
     );
     const black = new Set();
     while (grey.size > 0) {
@@ -1551,7 +1551,7 @@ class LibraryFilter extends TreeTransformer {
       }
     }
     return unflattenLibrary(
-      this.libraryExpressions.filter((_, i) => black.has(i))
+      this.libraryExpressions.filter((_, i) => black.has(i)),
     );
   }
 
@@ -1572,7 +1572,7 @@ class LibraryFilter extends TreeTransformer {
     if (expression.from) {
       if (this.hasInLibrary(expression.from, expression.name)) {
         this.currentUsage.add(
-          this.getLibraryIndex(expression.from, expression.name)
+          this.getLibraryIndex(expression.from, expression.name),
         );
       }
       return;
@@ -1587,7 +1587,7 @@ class LibraryFilter extends TreeTransformer {
     if (this.currentModuleName !== "<main>") {
       if (this.hasInLibrary(this.currentModuleName, expression.name)) {
         this.currentUsage.add(
-          this.getLibraryIndex(this.currentModuleName, expression.name)
+          this.getLibraryIndex(this.currentModuleName, expression.name),
         );
         return;
       }

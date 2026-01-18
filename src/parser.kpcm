@@ -15,6 +15,43 @@ parse = (code, trace: = false) => (
   )
 );
 
+parseModule = (code, trace: = false) => (
+  errorToLineColumn(
+    code,
+    $ (
+      tracer = getTracer(trace);
+      tokens = lexer/lex(code);
+      [statements, tails] = parseStatement(tokens, tracer:)
+      | build(([_, tokens]) => (
+        parseStatement(tokens.next().next(), tracer:)
+      ))
+      | continueIf(([_, tokens]) => (
+        tokens.next() | firstType | eq("SEMICOLON")
+        | and($ tokens.next().next() | firstType | eq("EOF") | not)
+      ))
+      | unzip;
+      tail = tails | last;
+      if(
+        tail.next().next() | firstType | eq("EOF"),
+        then: $ statements | transform(statementToModuleDef) | toArray,
+        else: $ errorAtToken("unparsedInput", tail.next().next().value()),
+      )
+    )
+  )
+);
+
+statementToModuleDef = (statement) => (
+  if(
+    statement.type | eq("optional") | not,
+    then: $ errorAtNode("expressionAsModuleDef", statement),
+  );
+  if(
+    statement.name.type | eq("name") | not,
+    then: $ errorAtNode("patternAsModuleDefName", statement.name),
+  );
+  [statement.name, statement.defaultValue | validateExpression | desugarer/desugar]
+);
+
 errorToLineColumn = (code, f) => (
   try(
     f,
@@ -574,6 +611,10 @@ errorAtNode = (type, node, **properties) => (
 
 errorAtTokenOLD = (type, token, **properties) => (
   errorOLD(type, line: token.line, column: token.column, **properties)
+);
+
+errorAtToken = (type, token, **properties) => (
+  error(type, start: token.start, end: token.end, **properties, token:)
 );
 
 error = (type, start:, end:, **properties) => (

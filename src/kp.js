@@ -3,7 +3,6 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import { main, UsageError } from "./cli.js";
-import { display } from "./interop.js";
 import { KenpaliError } from "./kperror.js";
 
 try {
@@ -18,7 +17,7 @@ try {
   );
 } catch (error) {
   if (error instanceof KenpaliError) {
-    console.error(display(error.error));
+    console.error(error.message);
   } else if (error instanceof UsageError) {
     console.error(error.message);
   } else {

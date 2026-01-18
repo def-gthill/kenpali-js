@@ -6,6 +6,7 @@ import { name } from "./kpast.js";
 import { KenpaliError, kptry } from "./kperror.js";
 import kpeval from "./kpeval.js";
 import kpmodule from "./kpmodule.js";
+import { deepToJsObject } from "./kpobject.js";
 import { kpparseModule } from "./kpparse.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,18 +17,7 @@ export default function kpparseBootstrap(code, options = {}) {
   if (!parse) {
     kptry(
       () => {
-        const parserModule = loadModule("parser");
-        const astModule = loadModule("ast");
-        const lexerModule = loadModule("lexer");
-        const desugarerModule = loadModule("desugarer");
-        parse = kpeval(name("parse", "parser"), {
-          modules: new Map([
-            ["parser", parserModule],
-            ["ast", astModule],
-            ["lexer", lexerModule],
-            ["desugarer", desugarerModule],
-          ]),
-        });
+        parse = kpeval(name("parse", "parser"), loadParser());
       },
       (error) => {
         parse = new KenpaliError(
@@ -42,7 +32,72 @@ export default function kpparseBootstrap(code, options = {}) {
   if (parse instanceof KenpaliError) {
     throw parse;
   }
-  return kpcall(parse, [code], options);
+  return deepToJsObject(
+    kptry(
+      () => {
+        return kpcall(parse, [code], options);
+      },
+      (error) => {
+        throw new KenpaliError(
+          error,
+          kpcallbackInNewSession,
+          "Error parsing code"
+        );
+      }
+    )
+  );
+}
+
+let parseModule = null;
+
+export function kpparseModuleBootstrap(code, options = {}) {
+  if (!parseModule) {
+    kptry(
+      () => {
+        parseModule = kpeval(name("parseModule", "parser"), loadParser());
+      },
+      (error) => {
+        parseModule = new KenpaliError(
+          error,
+          kpcallbackInNewSession,
+          "Error compiling parser"
+        );
+        throw parseModule;
+      }
+    );
+  }
+  if (parseModule instanceof KenpaliError) {
+    throw parseModule;
+  }
+  return deepToJsObject(
+    kptry(
+      () => {
+        return kpcall(parseModule, [code], options);
+      },
+      (error) => {
+        throw new KenpaliError(
+          error,
+          kpcallbackInNewSession,
+          "Error parsing module"
+        );
+      }
+    )
+  );
+}
+
+function loadParser() {
+  const parserModule = loadModule("parser");
+  const astModule = loadModule("ast");
+  const lexerModule = loadModule("lexer");
+  const desugarerModule = loadModule("desugarer");
+  return {
+    modules: new Map([
+      ["parser", parserModule],
+      ["ast", astModule],
+      ["lexer", lexerModule],
+      ["desugarer", desugarerModule],
+    ]),
+  };
 }
 
 function loadModule(name) {
