@@ -1,0 +1,498 @@
+lex = (code) => (
+  lexTokens(code, {index: 1, line: 1, lineStart: 0})
+);
+
+lexTokens = (code, state) => (
+  if(
+    state.index | gt(code | length),
+    then: $ newStream(
+      value: $ makeToken("EOF", "", state) @ 1,
+      next: emptyStream,
+    ),
+    else: $ (
+      [token, newState] = lexToken(code, state);
+      if(
+        token | isNull,
+        then: $ lexTokens(code, newState),
+        else: $ newStream(
+          value: $ token,
+          next: $ lexTokens(code, newState),
+        ),
+      )
+    ),
+  )
+);
+
+lexToken = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  char = code @ index;
+  nextChar = code | at(index | up, default: $ null);
+  [token, newState] = char | switch(
+    ["\"", $ lexString(code, state)],
+    ["`", $ lexRawString(code, state)],
+    [| eq("/") | and($ nextChar | eq("/")), $ lexComment(code, state)],
+    [| eqOneOf(" ", "\t"), $ lexWhitespace(code, state)],
+    [| eq("\r") | and($ nextChar | eq("\n")), $ [null, {index: index | add(2), line: line | up, lineStart: index | add(2)}]],
+    ["\n", $ [null, {index: index | up, line: line | up, lineStart: index | up}]],
+    ["\r", $ [null, {index: index | up, line: line | up, lineStart: index | up}]],
+    ["-", $ lexNumber(code, state)],
+    [| isBetween("0", "9"), $ lexNumber(code, state)],
+    [| isBetween("A", "Z"), $ lexName(code, state)],
+    [| isBetween("a", "z"), $ lexName(code, state)],
+    else: $ lexOperator(code, state),
+  );
+  [token, newState]
+);
+
+lexString = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  quoteStart = index | up;
+  [text, contentEnd] = gatherStringContent(code, quoteStart);
+  value = getStringValue(text, quoteStart, 1, line, lineStart, "", false);
+  if(
+    contentEnd | ge(code | length),
+    then: $ error("unclosedStringLiteral", start: index, end: contentEnd, value: ["\"", value] | join),
+    else: $ (
+      finalText = ["\"", text, "\""] | join;
+      makeToken("LITERAL", finalText, state, value:)
+    ),
+  )
+);
+
+gatherStringContent = (code, index) => (
+  endIndex = index
+  | build(up)
+  | withPreviousRunning(
+    start: false,
+    next: (index, state: isEscaped) => (
+      isEscaped | not | and($ code @ index | eq("\\"))
+    )
+  )
+  | while(([isEscaped, index]) => (
+    index | le(code | length) | and(
+      $ isEscaped | or(
+        $ code @ index | eq("\"") | not
+      )
+    )
+  ))
+  | last @ 2;
+  [code | slice(from: index, to: endIndex), endIndex]
+);
+
+getStringValue = (content, start, index, line, lineStart, value, escaped) => (
+  if(
+    index | gt(content | length),
+    then: $ value,
+    else: $ (
+      char = content @ index;
+      if(
+        escaped,
+        then: $ (
+          if(
+            char | eq("u") | and($ content @ (index | up) | eq("{")),
+            then: $ lexUnicodeEscape(content, start, index, value),
+            else: $ (
+              escapedChar = char | switch(
+                ["\"", $ "\""],
+                ["\\", $ "\\"],
+                ["\/", $ "\/"],
+                ["b", $ "\b"],
+                ["f", $ "\f"],
+                ["n", $ "\n"],
+                ["r", $ "\r"],
+                ["t", $ "\t"],
+                else: $ error(
+                  "invalidEscapeSequence",
+                  start: start | add(index) | sub(2),
+                  end: start | add(index) | down,
+                  value: content | slice(from: index | down, to: index),
+                ),
+              );
+              newValue = [value, escapedChar] | join;
+              getStringValue(content, start, index | up, line, lineStart, newValue, false)
+            ),
+          )
+        ),
+        else: $ (
+          char | switch(
+            ["\\", $ getStringValue(content, start, index | up, line, lineStart, value, true)],
+            ["\"", $ value],
+            else: $ (
+              newValue = [value, char] | join;
+              getStringValue(content, start, index | up, line, lineStart, newValue, false)
+            ),
+          )
+        ),
+      )
+    ),
+  )
+);
+
+lexUnicodeEscape = (content, start, index, value) => (
+  braceStart = index | add(2);
+  [hex, hexEnd] = lexHexDigits(content, braceStart, "");
+  if(
+    content | at(hexEnd, default: $ null) | eq("}"),
+    then: $ (
+      braceEnd = hexEnd | up;
+      codePoint = parseHex(hex);
+      char = codePointToString(codePoint);
+      finalValue = [value, char] | join;
+      finalValue
+    ),
+    else: $ error(
+      "unclosedUnicodeEscapeSequence",
+      start: start | add(index) | sub(2),
+      end: start | add(hexEnd) | sub(2),
+      value: content | slice(from: index | down, to: hexEnd | down),
+    ),
+  )
+);
+
+lexHexDigits = (code, index, hex) => (
+  if(
+    index | gt(code | length),
+    then: $ [hex, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | ge("0") | and($ char | le("9")) | or($ char | ge("a") | and($ char | le("f")) | or($ char | ge("A") | and($ char | le("F")))),
+        then: $ lexHexDigits(code, index | up, [hex, char] | join),
+        else: $ [hex, index],
+      )
+    ),
+  )
+);
+
+parseHex = (hex) => (
+  parseHexDigits(hex, 1, 0)
+);
+
+parseHexDigits = (hex, index, value) => (
+  if(
+    index | gt(hex | length),
+    then: $ value,
+    else: $ (
+      char = hex @ index;
+      charCode = char | toCodePoints | first;
+      digit = char | switch(
+        [| isBetween("0", "9"), $ charCode | sub("0" | toCodePoints | first)],
+        [| isBetween("a", "f"), $ charCode | sub("a" | toCodePoints | first) | add(10)],
+        [| isBetween("A", "F"), $ charCode | sub("A" | toCodePoints | first) | add(10)],
+        else: $ 0,
+      );
+      parseHexDigits(hex, index | up, value | mul(16) | add(digit))
+    ),
+  )
+);
+
+codePointToString = (codePoint) => (
+  [codePoint] | fromCodePoints
+);
+
+lexRawString = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  backtickStart = index | up;
+  [text, contentEnd] = lexRawStringContent(code, backtickStart, "`");
+  if(
+    contentEnd | gt(code | length),
+    then: $ error("unclosedStringLiteral", start: index, end: contentEnd | down, value: text),
+    else: $ (
+      finalText = [text, "`"] | join;
+      value = finalText | slice(from: 2, to: -2);
+      makeToken("LITERAL", finalText, state, value:)
+    ),
+  )
+);
+
+lexRawStringContent = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ if(
+      code @ index | eq("`"),
+      then: $ [text, index],
+      else: $ lexRawStringContent(code, index | up, [text, code @ index] | join),
+    ),
+  )
+);
+
+lexComment = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  commentStart = index | add(2);
+  newState = lexCommentContent(code, commentStart, line, lineStart);
+  [null, newState]
+);
+
+lexCommentContent = (code, index, line, lineStart) => (
+  if(
+    index | gt(code | length),
+    then: $ {index: index, line: line, lineStart: lineStart},
+    else: $ (
+      char = code @ index;
+      if(
+        char | eq("\r") | and($ code @ (index | up) | eq("\n")),
+        then: $ {index: index | add(2), line: line | up, lineStart: index | add(2)},
+        else: $ if(
+          char | eq("\n") | or($ char | eq("\r")),
+          then: $ {index: index | up, line: line | up, lineStart: index | up},
+          else: $ lexCommentContent(code, index | up, line, lineStart),
+        ),
+      )
+    ),
+  )
+);
+
+lexWhitespace = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  [endIndex] = lexWhitespaceContent(code, index);
+  [null, {index: endIndex, line: line, lineStart: lineStart}]
+);
+
+lexWhitespaceContent = (code, index) => (
+  if(
+    index | gt(code | length),
+    then: $ [index],
+    else: $ if(
+      code @ index | eq(" ") | or($ code @ index | eq("\t")),
+      then: $ lexWhitespaceContent(code, index | up),
+      else: $ [index],
+    ),
+  )
+);
+
+lexNumber = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  startIndex = index;
+  negative = code @ index | eq("-");
+  [numberStart, initialText] = if(
+    negative,
+    then: $ [index | up, "-"],
+    else: $ [index, ""],
+  );
+  [textAfterInt, intEnd] = lexInteger(code, numberStart, initialText);
+  [textAfterDecimal, decimalEnd] = lexDecimalPart(code, intEnd, textAfterInt);
+  [finalText, exponentEnd] = lexExponentPart(code, decimalEnd, textAfterDecimal);
+  value = parseNumber(finalText);
+  makeToken("LITERAL", finalText, state, value:)
+);
+
+lexInteger = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | eq("0"),
+        then: $ [[text, "0"] | join, index | up],
+        else: $ if(
+          char | ge("1") | and($ char | le("9")),
+          then: $ lexIntegerDigits(code, index | up, [text, char] | join),
+          else: $ [text, index],
+        ),
+      )
+    ),
+  )
+);
+
+lexIntegerDigits = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | ge("0") | and($ char | le("9")),
+        then: $ lexIntegerDigits(code, index | up, [text, char] | join),
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+lexDecimalPart = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ if(
+      code @ index | eq("."),
+      then: $ (
+        textWithDot = [text, "."] | join;
+        dotEnd = index | up;
+        lexDecimalDigits(code, dotEnd, textWithDot)
+      ),
+      else: $ [text, index],
+    ),
+  )
+);
+
+lexDecimalDigits = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | ge("0") | and($ char | le("9")),
+        then: $ lexDecimalDigits(code, index | up, [text, char] | join),
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+lexExponentPart = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | eq("e") | or($ char | eq("E")),
+        then: $ (
+          textWithE = [text, char] | join;
+          eEnd = index | up;
+          [textAfterSign, signEnd] = lexExponentSign(code, eEnd, textWithE);
+          lexExponentDigits(code, signEnd, textAfterSign)
+        ),
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+lexExponentSign = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | eq("+") | or($ char | eq("-")),
+        then: $ [[text, char] | join, index | up],
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+lexExponentDigits = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | ge("0") | and($ char | le("9")),
+        then: $ lexExponentDigits(code, index | up, [text, char] | join),
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+parseNumber = (text) => (
+  text | toNumber
+);
+
+lexName = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  startIndex = index;
+  [text, nameEnd] = lexNameContent(code, index, "");
+  [kind, value] = text | switch(
+    ["null", $ ["LITERAL", null]],
+    ["false", $ ["LITERAL", false]],
+    ["true", $ ["LITERAL", true]],
+    else: $ ["NAME", null],
+  );
+  makeToken(kind, text, state, value:)
+);
+
+lexNameContent = (code, index, text) => (
+  if(
+    index | gt(code | length),
+    then: $ [text, index],
+    else: $ (
+      char = code @ index;
+      if(
+        char | ge("A") | and($ char | le("Z")) | or($ char | ge("a") | and($ char | le("z")) | or($ char | ge("0") | and($ char | le("9")))),
+        then: $ lexNameContent(code, index | up, [text, char] | join),
+        else: $ [text, index],
+      )
+    ),
+  )
+);
+
+lexOperator = (code, state) => (
+  {index:, line:, lineStart:} = state;
+  nextChar = code | at(index | up, default: $ null);
+  [token, newState] = code @ index | switch(
+    ["(", $ makeToken("OPEN_PAREN", "(", state)],
+    [")", $ makeToken("CLOSE_PAREN", ")", state)],
+    ["[", $ makeToken("OPEN_BRACKET", "[", state)],
+    ["]", $ makeToken("CLOSE_BRACKET", "]", state)],
+    ["{", $ makeToken("OPEN_BRACE", "{", state)],
+    ["}", $ makeToken("CLOSE_BRACE", "}", state)],
+    [",", $ makeToken("COMMA", ",", state)],
+    [";", $ makeToken("SEMICOLON", ";", state)],
+    [":", $ makeToken("COLON", ":", state)],
+    ["=", $ (
+      if(
+        nextChar | eq(">"),
+        then: $ makeToken("ARROW", "=>", state),
+        else: $ makeToken("EQUALS", "=", state),
+      )
+    )],
+    ["|", $ (
+      if(
+        nextChar | eq("."),
+        then: $ makeToken("PIPE_DOT", "|.", state),
+        else: $ makeToken("PIPE", "|", state),
+      )
+    )],
+    ["@", $ makeToken("AT", "@", state)],
+    [".", $ makeToken("DOT", ".", state)],
+    ["$", $ makeToken("DOLLAR", "$", state)],
+    ["*", $ (
+      if(
+        nextChar | eq("*"),
+        then: $ makeToken("DOUBLE_STAR", "**", state),
+        else: $ makeToken("STAR", "*", state),
+      )
+    )],
+    ["_", $ makeToken("UNDERSCORE", "_", state)],
+    ["/", $ makeToken("SLASH", "/", state)],
+    else: $ error(
+      "invalidCharacter",
+      start: state.index,
+      end: state.index,
+      character: code @ state.index,
+    ),
+  );
+  [token, newState]
+);
+
+makeToken = (type, text, state, value: = null) => (
+  endIndex = state.index | add(text | length);
+  token = {
+    type:,
+    value:,
+    text:,
+    start: state.index,
+    end: endIndex | down,
+  };
+  [token, {**state, index: endIndex}]
+);
+
+errorAt = (type, code, state, **properties) => (
+  errorOLD(type, line: state.line, column: state.index | sub(state.lineStart), **properties)
+);
+
+errorOLD = (type, line:, column:, **properties) => (
+  throw(newError(type, line:, column:, **properties))
+);
+
+error = (type, start:, end:, **properties) => (
+  throw(newError(type, start:, end:, **properties))
+);

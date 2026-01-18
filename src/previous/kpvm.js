@@ -2,11 +2,13 @@ import {
   indexArray,
   indexInstance,
   indexMapping,
+  indexSequenceInstance,
   indexString,
   toArray,
   toObject,
 } from "./builtins.js";
 import * as op from "./instructions.js";
+import { u16FromBytes, u32FromBytes } from "./instructions.js";
 import kperror, {
   isError,
   KenpaliError,
@@ -25,6 +27,7 @@ import {
   display,
   equals,
   functionName,
+  hasType,
   instanceProtocol,
   isArray,
   isBoolean,
@@ -38,7 +41,6 @@ import {
   isProtocol,
   isSequence,
   isString,
-  isType,
   numberClass,
   objectClass,
   sequenceProtocol,
@@ -48,6 +50,7 @@ import {
 export default function kpvm(
   program,
   {
+    entrypoint = "main",
     trace = false,
     timeLimitSeconds = 0,
     stepLimit = 0,
@@ -59,7 +62,7 @@ export default function kpvm(
     timeLimitSeconds,
     stepLimit,
     debugLog,
-  }).run();
+  }).run(entrypoint);
 }
 
 export function kpvmCall(
@@ -95,9 +98,17 @@ export class Vm {
       debugLog = console.error,
     } = {}
   ) {
-    const { instructions, diagnostics = [], functions = [] } = program;
+    const {
+      instructions,
+      constants = [],
+      platformValues = [],
+      diagnostics = [],
+      functions = [],
+    } = program;
     this.program = program;
     this.instructions = instructions;
+    this.constants = constants;
+    this.platformValues = platformValues;
     this.diagnostics = diagnostics;
     this.functions = new Map(functions.map((f) => [f.name, f.offset]));
     this.methods = extractMethods(functions);
@@ -116,6 +127,7 @@ export class Vm {
     this.openUpvalues = [];
 
     this.instructionTable = [];
+    this.instructionTable[op.PLATFORM_VALUE] = this.runPlatformValue;
     this.instructionTable[op.VALUE] = this.runValue;
     this.instructionTable[op.ALIAS] = this.runAlias;
     this.instructionTable[op.DISCARD] = this.runDiscard;
@@ -125,6 +137,7 @@ export class Vm {
     this.instructionTable[op.PUSH_SCOPE] = this.runPushScope;
     this.instructionTable[op.POP_SCOPE] = this.runPopScope;
     this.instructionTable[op.READ_RELATIVE] = this.runReadRelative;
+    this.instructionTable[op.WIDE] = this.runWide;
     this.instructionTable[op.EMPTY_ARRAY] = this.runEmptyArray;
     this.instructionTable[op.ARRAY_PUSH] = this.runArrayPush;
     this.instructionTable[op.ARRAY_EXTEND] = this.runArrayExtend;
@@ -147,6 +160,7 @@ export class Vm {
     this.instructionTable[op.JUMP] = this.runJump;
     this.instructionTable[op.JUMP_IF_TRUE] = this.runJumpIfTrue;
     this.instructionTable[op.JUMP_IF_FALSE] = this.runJumpIfFalse;
+    this.instructionTable[op.JUMP_BACK] = this.runJumpBack;
     this.instructionTable[op.BEGIN] = this.runBegin;
     this.instructionTable[op.FUNCTION] = this.runFunction;
     this.instructionTable[op.CLOSURE] = this.runClosure;
@@ -173,14 +187,37 @@ export class Vm {
     this.instructionTable[op.IS_ERROR] = this.runIsError;
     this.instructionTable[op.IS_CLASS] = this.runIsClass;
     this.instructionTable[op.IS_PROTOCOL] = this.runIsProtocol;
-    this.instructionTable[op.IS_SEQUENCE] = this.runIsSequence;
-    this.instructionTable[op.IS_TYPE] = this.runIsType;
-    this.instructionTable[op.IS_INSTANCE] = this.runIsInstance;
-    this.instructionTable[op.ERROR_IF_INVALID] = this.runErrorIfInvalid;
+    this.instructionTable[op.HAS_TYPE] = this.runHasType;
+    this.instructionTable[op.VALIDATION_ERROR] = this.runValidationError;
+    this.instructionTable[op.PLATFORM_VALUE_WIDE] = this.runPlatformValueWide;
+    this.instructionTable[op.VALUE_WIDE] = this.runValueWide;
+    this.instructionTable[op.FUNCTION_WIDE] = this.runFunctionWide;
+    this.instructionTable[op.CALL_PLATFORM_FUNCTION_WIDE] =
+      this.runCallPlatformFunctionWide;
 
     for (let i = 0; i < this.instructionTable.length; i++) {
       if (this.instructionTable[i]) {
         this.instructionTable[i] = this.instructionTable[i].bind(this);
+      }
+    }
+
+    this.wideInstructionTable = [];
+    this.wideInstructionTable[op.PLATFORM_VALUE] = this.runPlatformValueWide;
+    this.wideInstructionTable[op.VALUE] = this.runValueWide;
+    this.wideInstructionTable[op.RESERVE] = this.runReserveWide;
+    this.wideInstructionTable[op.WRITE_LOCAL] = this.runWriteLocalWide;
+    this.wideInstructionTable[op.READ_LOCAL] = this.runReadLocalWide;
+    this.wideInstructionTable[op.PUSH_SCOPE] = this.runPushScopeWide;
+    this.wideInstructionTable[op.ARRAY_CUT] = this.runArrayCutWide;
+    this.wideInstructionTable[op.FUNCTION] = this.runFunctionWide;
+    this.wideInstructionTable[op.CLOSURE] = this.runClosureWide;
+    this.wideInstructionTable[op.READ_UPVALUE] = this.runReadUpvalueWide;
+    this.wideInstructionTable[op.CALL_PLATFORM_FUNCTION] =
+      this.runCallPlatformFunctionWide;
+
+    for (let i = 0; i < this.wideInstructionTable.length; i++) {
+      if (this.wideInstructionTable[i]) {
+        this.wideInstructionTable[i] = this.wideInstructionTable[i].bind(this);
       }
     }
   }
@@ -201,7 +238,7 @@ export class Vm {
       console.log(`Callback invoked at ${target}`);
     }
     this.cursor = target;
-    const result = this.run();
+    const result = this.start();
     if (this.trace) {
       console.log(
         `Returning ${display(result, kpcallbackInNewSession)} from callback`
@@ -212,7 +249,17 @@ export class Vm {
     return result;
   }
 
-  run() {
+  run(entrypoint = null) {
+    this.cursor =
+      entrypoint === null ? 0 : this.functions.get(`$${entrypoint}`);
+    if (this.cursor === undefined) {
+      throw new Error(`Entrypoint "${entrypoint}" not found in program`);
+    }
+    this.instructionStart = this.cursor;
+    return this.start();
+  }
+
+  start() {
     while (this.cursor >= 0) {
       this.stepNumber += 1;
       if (this.stepLimit > 0 && this.stepNumber >= this.stepLimit) {
@@ -265,10 +312,40 @@ export class Vm {
     console.log(`${this.instructionStart} ${message}`);
   }
 
-  runValue() {
-    const value = this.next();
+  runPlatformValue() {
+    const index = this.readU8Arg();
     if (this.trace) {
-      this.logInstruction(`VALUE ${display(value, kpcallbackInNewSession)}`);
+      this.logInstruction(`PLATFORM_VALUE ${index}`);
+    }
+    this.stack.push(this.platformValues[index]);
+  }
+
+  runPlatformValueWide() {
+    const index = this.readU32Arg();
+    if (this.trace) {
+      this.logInstruction(`PLATFORM_VALUE ${index}`);
+    }
+    this.stack.push(this.platformValues[index]);
+  }
+
+  runValue() {
+    const constantIndex = this.readU8Arg();
+    const value = this.constants[constantIndex];
+    if (this.trace) {
+      this.logInstruction(
+        `VALUE ${constantIndex} (${display(value, kpcallbackInNewSession)})`
+      );
+    }
+    this.stack.push(value);
+  }
+
+  runValueWide() {
+    const constantIndex = this.readU32Arg();
+    const value = this.constants[constantIndex];
+    if (this.trace) {
+      this.logInstruction(
+        `VALUE ${constantIndex} (${display(value, kpcallbackInNewSession)})`
+      );
     }
     this.stack.push(value);
   }
@@ -288,7 +365,17 @@ export class Vm {
   }
 
   runReserve() {
-    const numSlots = this.next();
+    const numSlots = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(`RESERVE ${numSlots}`);
+    }
+    for (let i = 0; i < numSlots; i++) {
+      this.stack.push(undefined);
+    }
+  }
+
+  runReserveWide() {
+    const numSlots = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`RESERVE ${numSlots}`);
     }
@@ -298,7 +385,19 @@ export class Vm {
   }
 
   runWriteLocal() {
-    const localIndex = this.next();
+    const localIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const absoluteIndex = this.scopeFrames.at(-1).stackIndex + localIndex;
+    const value = this.stack.pop();
+    this.stack[absoluteIndex] = value;
+  }
+
+  runWriteLocalWide() {
+    const localIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `WRITE_LOCAL ${localIndex} (${this.getDiagnostic().name})`
@@ -310,8 +409,28 @@ export class Vm {
   }
 
   runReadLocal() {
-    const stepsOut = this.next();
-    const localIndex = this.next();
+    const stepsOut = this.readU8Arg();
+    const localIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const absoluteIndex =
+      this.scopeFrames.at(-1 - stepsOut).stackIndex + localIndex;
+    const value = this.stack[absoluteIndex];
+    if (value === undefined) {
+      this.throw_(
+        kperror("nameUsedBeforeAssignment", ["name", this.getDiagnostic().name])
+      );
+      return;
+    }
+    this.stack.push(value);
+  }
+
+  runReadLocalWide() {
+    const stepsOut = this.readU32Arg();
+    const localIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `READ_LOCAL ${stepsOut} ${localIndex} (${this.getDiagnostic().name})`
@@ -331,7 +450,16 @@ export class Vm {
 
   runPushScope() {
     const offset = this.next();
-    const stackIndex = this.stack.length - 1 + offset;
+    const stackIndex = this.stack.length - 1 - offset;
+    if (this.trace) {
+      this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
+    }
+    this.scopeFrames.push(new ScopeFrame(stackIndex));
+  }
+
+  runPushScopeWide() {
+    const offset = this.readU32Arg();
+    const stackIndex = this.stack.length - 1 - offset;
     if (this.trace) {
       this.logInstruction(`PUSH_SCOPE ${offset} (at ${stackIndex})`);
     }
@@ -353,6 +481,17 @@ export class Vm {
     }
     const value = this.stack.at(-1 - stepsOut);
     this.stack.push(value);
+  }
+
+  runWide() {
+    if (this.trace) {
+      this.logInstruction("WIDE");
+    }
+    const instructionType = this.next();
+    if (!this.wideInstructionTable[instructionType]) {
+      throw new Error(`Instruction ${instructionType} has no wide version`);
+    }
+    this.wideInstructionTable[instructionType]();
   }
 
   runEmptyArray() {
@@ -380,7 +519,7 @@ export class Vm {
       array = sequence;
     } else {
       this.pushCallFrame("$extendStream");
-      array = toArray(sequence);
+      array = toArray(sequence, this.kpcallback.bind(this));
       this.popCallFrame();
     }
     this.stack.at(-1).push(...array);
@@ -400,11 +539,14 @@ export class Vm {
       this.logInstruction("ARRAY_POP");
     }
     const array = this.stack.at(-1);
+    let source;
     let value;
     if (isArray(array)) {
+      source = this.stack.at(-2);
       value = array.pop();
     } else {
       const stream = this.stack.pop();
+      source = stream;
       if (!stream.properties.isEmpty()) {
         this.pushCallFrame("$popStream");
         value = stream.properties.value();
@@ -413,7 +555,6 @@ export class Vm {
       }
     }
     if (value === undefined) {
-      const source = this.stack.at(-2);
       const diagnostic = this.getDiagnostic();
       if (diagnostic) {
         if (diagnostic.isArgument) {
@@ -448,7 +589,7 @@ export class Vm {
   }
 
   runArrayCut() {
-    const position = this.next();
+    const position = this.readU8Arg();
     if (this.trace) {
       this.logInstruction(`ARRAY_CUT ${position}`);
     }
@@ -462,7 +603,30 @@ export class Vm {
         array = sequence;
       } else {
         this.pushCallFrame("$cutStream");
-        array = toArray(sequence).reverse();
+        array = toArray(sequence, this.kpcallback.bind(this)).reverse();
+        this.popCallFrame();
+      }
+      this.stack.push(array.slice(0, position));
+      this.stack.push(array.slice(position));
+    }
+  }
+
+  runArrayCutWide() {
+    const position = this.readU32Arg();
+    if (this.trace) {
+      this.logInstruction(`ARRAY_CUT ${position}`);
+    }
+    const sequence = this.stack.pop();
+    if (position === 0) {
+      this.stack.push([]);
+      this.stack.push(sequence);
+    } else {
+      let array;
+      if (isArray(sequence)) {
+        array = sequence;
+      } else {
+        this.pushCallFrame("$cutStream");
+        array = toArray(sequence, this.kpcallback.bind(this)).reverse();
         this.popCallFrame();
       }
       this.stack.push(array.slice(0, position));
@@ -601,7 +765,7 @@ export class Vm {
   }
 
   runJumpIfTrue() {
-    const distance = this.next();
+    const distance = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`JUMP_IF_TRUE ${distance}`);
     }
@@ -612,7 +776,7 @@ export class Vm {
   }
 
   runJumpIfFalse() {
-    const distance = this.next();
+    const distance = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`JUMP_IF_FALSE ${distance}`);
     }
@@ -622,6 +786,14 @@ export class Vm {
     }
   }
 
+  runJumpBack() {
+    const distance = this.readU32Arg();
+    if (this.trace) {
+      this.logInstruction(`JUMP_BACK ${distance}`);
+    }
+    this.cursor -= distance;
+  }
+
   runBegin() {
     if (this.trace) {
       this.logInstruction("BEGIN");
@@ -629,11 +801,26 @@ export class Vm {
   }
 
   runFunction() {
-    const target = this.next();
+    const functionIndex = this.readU8Arg();
     const diagnostic = this.getDiagnostic();
     if (this.trace) {
-      this.logInstruction(`FUNCTION ${target} (${diagnostic.name})`);
+      this.logInstruction(`FUNCTION ${functionIndex} (${diagnostic.name})`);
     }
+    const target = this.program.functions[functionIndex].offset;
+    this.stack.push(
+      new Function(diagnostic.name, this.program, target, {
+        isPlatform: diagnostic.isPlatform,
+      })
+    );
+  }
+
+  runFunctionWide() {
+    const functionIndex = this.readU32Arg();
+    const diagnostic = this.getDiagnostic();
+    if (this.trace) {
+      this.logInstruction(`FUNCTION ${functionIndex} (${diagnostic.name})`);
+    }
+    const target = this.program.functions[functionIndex].offset;
     this.stack.push(
       new Function(diagnostic.name, this.program, target, {
         isPlatform: diagnostic.isPlatform,
@@ -642,20 +829,44 @@ export class Vm {
   }
 
   runClosure() {
-    const stepsOut = this.next();
-    const index = this.next();
+    const stepsOut = this.readU8Arg();
+    const index = this.readU8Arg();
     if (this.trace) {
       this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
     }
     const f = this.stack.at(-1);
     let upvalue;
-    if (stepsOut === -1) {
+    if (stepsOut === 0) {
       const enclosingFunction = this.stack[this.callFrames.at(-1).stackIndex];
       const ref = enclosingFunction.closure[index];
       upvalue = new Upvalue(ref);
     } else {
-      const absoluteIndex =
-        this.scopeFrames.at(-1 - stepsOut).stackIndex + index;
+      const absoluteIndex = this.scopeFrames.at(-stepsOut).stackIndex + index;
+
+      if (this.openUpvalues[absoluteIndex]) {
+        upvalue = this.openUpvalues[absoluteIndex];
+      } else {
+        upvalue = new Upvalue(absoluteIndex);
+        this.openUpvalues[absoluteIndex] = upvalue;
+      }
+    }
+    f.closure.push(upvalue);
+  }
+
+  runClosureWide() {
+    const stepsOut = this.readU32Arg();
+    const index = this.readU32Arg();
+    if (this.trace) {
+      this.logInstruction(`CLOSURE ${stepsOut} ${index}`);
+    }
+    const f = this.stack.at(-1);
+    let upvalue;
+    if (stepsOut === 0) {
+      const enclosingFunction = this.stack[this.callFrames.at(-1).stackIndex];
+      const ref = enclosingFunction.closure[index];
+      upvalue = new Upvalue(ref);
+    } else {
+      const absoluteIndex = this.scopeFrames.at(-stepsOut).stackIndex + index;
 
       if (this.openUpvalues[absoluteIndex]) {
         upvalue = this.openUpvalues[absoluteIndex];
@@ -672,7 +883,7 @@ export class Vm {
       this.logInstruction("CALL");
     }
     const callee = this.stack.at(-3);
-    if (typeof callee === "object" && "target" in callee) {
+    if (callee !== null && typeof callee === "object" && "target" in callee) {
       this.callNaturalFunction(callee);
     } else if (isPlatformFunction(callee)) {
       this.callPlatformFunction(callee);
@@ -729,7 +940,37 @@ export class Vm {
   }
 
   runReadUpvalue() {
-    const upvalueIndex = this.next();
+    const upvalueIndex = this.readU8Arg();
+    if (this.trace) {
+      this.logInstruction(
+        `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
+      );
+    }
+    const f = this.stack[this.callFrames.at(-1).stackIndex];
+    let upvalue = f.closure[upvalueIndex];
+    while (typeof upvalue.ref === "object") {
+      upvalue = upvalue.ref;
+    }
+    let value;
+    if ("value" in upvalue) {
+      value = upvalue.value;
+    } else {
+      value = this.stack[upvalue.ref];
+      if (value === undefined) {
+        this.throw_(
+          kperror("nameUsedBeforeAssignment", [
+            "name",
+            this.getDiagnostic().name,
+          ])
+        );
+        return;
+      }
+    }
+    this.stack.push(value);
+  }
+
+  runReadUpvalueWide() {
+    const upvalueIndex = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(
         `READ_UPVALUE ${upvalueIndex} (${this.getDiagnostic().name})`
@@ -773,9 +1014,47 @@ export class Vm {
   }
 
   runCallPlatformFunction() {
-    const calleeName = this.next();
+    const constantIndex = this.readU8Arg();
+    const calleeName = this.constants[constantIndex];
     if (this.trace) {
-      this.logInstruction(`CALL_PLATFORM_FUNCTION ${calleeName}`);
+      this.logInstruction(
+        `CALL_PLATFORM_FUNCTION ${constantIndex} (${calleeName})`
+      );
+    }
+    const frameIndex = this.scopeFrames.at(-1).stackIndex;
+    const callee = this.stack[frameIndex];
+    this.pushCallFrame(calleeName, { isCompiledPlatformFunction: true });
+    const args = this.stack.slice(frameIndex + 1);
+    this.stack.length = frameIndex;
+    const kpcallback = this.kpcallback.bind(this);
+    const getMethod = this.getMethod.bind(this, calleeName);
+    try {
+      const result = callee(args, {
+        kpcallback,
+        debugLog: this.debugLog,
+        getMethod,
+      });
+      this.stack.push(result);
+      this.popCallFrame();
+      if (this.trace) {
+        console.log(`Return to ${this.cursor}`);
+      }
+    } catch (error) {
+      if (isError(error)) {
+        this.throw_(error);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  runCallPlatformFunctionWide() {
+    const constantIndex = this.readU32Arg();
+    const calleeName = this.constants[constantIndex];
+    if (this.trace) {
+      this.logInstruction(
+        `CALL_PLATFORM_FUNCTION ${constantIndex} (${calleeName})`
+      );
     }
     const frameIndex = this.scopeFrames.at(-1).stackIndex;
     const callee = this.stack[frameIndex];
@@ -858,7 +1137,11 @@ export class Vm {
     } else if (isObject(collection)) {
       this.indexObject(collection, index);
     } else if (isInstance(collection)) {
-      this.indexInstance(collection, index);
+      if (isSequence(collection) && isNumber(index)) {
+        this.indexSequenceInstance(collection, index);
+      } else {
+        this.indexInstance(collection, index);
+      }
     } else {
       this.throw_(
         wrongType(
@@ -909,7 +1192,7 @@ export class Vm {
       this.pushCallFrame("$indexStream");
       if (index < 0) {
         kptry(
-          () => indexArray(toArray(stream), index),
+          () => indexArray(toArray(stream, this.kpcallback.bind(this)), index),
           (error) => {
             this.throw_(error);
           },
@@ -955,6 +1238,32 @@ export class Vm {
       return this.indexInstance(stream, index);
     } else {
       this.throw_(wrongType(index, either(numberClass, stringClass)));
+    }
+  }
+
+  indexSequenceInstance(sequence, index) {
+    if (this.trace) {
+      console.log(`Indexing a sequence instance with ${index}`);
+    }
+    this.pushCallFrame("$indexSequenceInstance");
+    kptry(
+      () =>
+        indexSequenceInstance(
+          sequence,
+          index,
+          undefined,
+          this.kpcallback.bind(this)
+        ),
+      (error) => {
+        this.throw_(error);
+      },
+      (result) => {
+        this.stack.push(result);
+      }
+    );
+    this.popCallFrame();
+    if (this.trace) {
+      console.log(`Return to ${this.cursor} from sequence instance indexing`);
     }
   }
 
@@ -1007,7 +1316,7 @@ export class Vm {
   }
 
   runCatch() {
-    const recoveryOffset = this.next();
+    const recoveryOffset = this.readU32Arg();
     if (this.trace) {
       this.logInstruction(`CATCH ${recoveryOffset}`);
     }
@@ -1109,63 +1418,57 @@ export class Vm {
     this.stack.push(isProtocol(value));
   }
 
-  runIsSequence() {
+  runHasType() {
     if (this.trace) {
-      this.logInstruction("IS_SEQUENCE");
+      this.logInstruction("HAS_TYPE");
     }
+    const type = this.stack.pop();
     const value = this.stack.pop();
-    this.stack.push(isSequence(value));
+    this.stack.push(hasType(value, type));
   }
 
-  runIsType() {
-    if (this.trace) {
-      this.logInstruction("IS_TYPE");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isType(value));
-  }
-
-  runIsInstance() {
-    if (this.trace) {
-      this.logInstruction("IS_INSTANCE");
-    }
-    const value = this.stack.pop();
-    this.stack.push(isInstance(value));
-  }
-
-  runErrorIfInvalid() {
+  runValidationError() {
     if (this.trace) {
       this.logInstruction(
-        `ERROR_IF_INVALID isArgument=${this.getDiagnostic().isArgument}`
+        `VALIDATION_ERROR isArgument=${this.getDiagnostic().isArgument}`
       );
     }
     const schema = this.stack.pop();
-    const isValid = this.stack.pop();
     const value = this.stack.at(-1);
-    if (!isValid) {
-      const kpcallback = this.kpcallback.bind(this);
-      try {
-        if (this.getDiagnostic().isArgument) {
-          transformError(
-            () => validate(value, schema, kpcallback),
-            argumentError
-          );
-        } else if (this.getDiagnostic().isArgumentPattern) {
-          transformError(
-            () => validate(value, schema, kpcallback),
-            argumentPatternError
-          );
-        } else {
-          validate(value, schema, kpcallback);
-        }
-      } catch (error) {
-        if (isError(error)) {
-          this.throw_(error);
-        } else {
-          throw error;
-        }
+    const kpcallback = this.kpcallback.bind(this);
+    try {
+      if (this.getDiagnostic().isArgument) {
+        transformError(
+          () => validate(value, schema, kpcallback),
+          argumentError
+        );
+      } else if (this.getDiagnostic().isArgumentPattern) {
+        transformError(
+          () => validate(value, schema, kpcallback),
+          argumentPatternError
+        );
+      } else {
+        validate(value, schema, kpcallback);
+      }
+    } catch (error) {
+      if (isError(error)) {
+        this.throw_(error);
+      } else {
+        throw error;
       }
     }
+  }
+
+  readU8Arg() {
+    return this.next();
+  }
+
+  readU16Arg() {
+    return u16FromBytes([this.next(), this.next()]);
+  }
+
+  readU32Arg() {
+    return u32FromBytes([this.next(), this.next(), this.next(), this.next()]);
   }
 
   next() {

@@ -108,12 +108,12 @@ export function constantFunction(body) {
   return { type: "constantFunction", body };
 }
 
-export function pointFreePipeline(...steps) {
-  return { type: "pointFreePipeline", steps };
+export function pipelineCall(start, pipeline) {
+  return { type: "pipelineCall", start, pipeline };
 }
 
-export function pipeline(start, ...steps) {
-  return { type: "pipeline", start, steps };
+export function loosePipeline(...steps) {
+  return { type: "loosePipeline", steps };
 }
 
 export function mixedArgList(args) {
@@ -164,8 +164,8 @@ export function objectRest(name) {
   return { type: "objectRest", name };
 }
 
-export function tightPipeline(start, ...steps) {
-  return { type: "tightPipeline", start, steps };
+export function tightPipeline(...steps) {
+  return { type: "tightPipeline", steps };
 }
 
 export function args(args) {

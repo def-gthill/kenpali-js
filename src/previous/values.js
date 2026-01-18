@@ -13,11 +13,11 @@ export class Instance {
 }
 
 export class Protocol extends Instance {
-  constructor(name, supers = []) {
+  constructor(name, supers = [], accepts = () => false) {
     const display = () => {
       return `Protocol {name: "${name}"}`;
     };
-    super(undefined, { name, supers, display });
+    super(undefined, { name, supers, accepts, display });
     Object.defineProperty(this, "class_", {
       get() {
         return protocolClass;
@@ -40,29 +40,37 @@ export class Class extends Instance {
   }
 }
 
-export const sequenceProtocol = new Protocol("Sequence");
+export const collectionProtocol = new Protocol("Collection");
+export const sequenceProtocol = new Protocol("Sequence", [collectionProtocol]);
 export const typeProtocol = new Protocol("Type");
-export const instanceProtocol = new Protocol("Instance");
+export const instanceProtocol = new Protocol("Instance", [], (type) => {
+  return type instanceof Class && !nonInstanceClasses.includes(type);
+});
 export const displayProtocol = new Protocol("Display");
-export const anyProtocol = new Protocol("Any");
+export const anyProtocol = new Protocol("Any", [], () => true);
 
 export const nullClass = new Class("Null");
 export const booleanClass = new Class("Boolean");
 export const numberClass = new Class("Number");
 export const stringClass = new Class("String", [sequenceProtocol]);
 export const arrayClass = new Class("Array", [sequenceProtocol]);
-export const objectClass = new Class("Object");
+export const objectClass = new Class("Object", [collectionProtocol]);
 export const functionClass = new Class("Function");
-export const classClass = new Class("Class", [
-  typeProtocol,
-  instanceProtocol,
-  displayProtocol,
-]);
+export const classClass = new Class("Class", [typeProtocol, displayProtocol]);
 export const protocolClass = new Class("Protocol", [
   typeProtocol,
-  instanceProtocol,
   displayProtocol,
 ]);
+
+const nonInstanceClasses = [
+  nullClass,
+  booleanClass,
+  numberClass,
+  stringClass,
+  arrayClass,
+  objectClass,
+  functionClass,
+];
 
 //#endregion
 
@@ -86,7 +94,6 @@ export function classOf(value) {
   } else if (isInstance(value)) {
     return value.class_;
   } else {
-    console.log(value);
     throw new Error(`Not a valid Kenpali value: ${value}`);
   }
 }
@@ -138,6 +145,10 @@ export function isNaturalFunction(value) {
   return isJsObjectWithProperty(value, "target") && !value.isPlatform;
 }
 
+export function isCollection(value) {
+  return hasProtocol(classOf(value), collectionProtocol);
+}
+
 export function isSequence(value) {
   return hasProtocol(classOf(value), sequenceProtocol);
 }
@@ -154,13 +165,25 @@ function isJsObjectWithProperty(value, property) {
   return value !== null && typeof value === "object" && property in value;
 }
 
-function hasProtocol(type, protocol) {
-  if (protocol === anyProtocol) {
+export function hasType(value, type) {
+  if (type instanceof Class) {
+    return classOf(value) === type;
+  } else {
+    return hasProtocol(classOf(value), type);
+  }
+}
+
+export function hasProtocol(type, protocol) {
+  if (protocol.properties.accepts(type)) {
     return true;
   }
   return (type.properties.protocols ?? type.properties.supers).some(
-    (protocol_) => protocol_ === protocol || hasProtocol(protocol_, protocol)
+    (super_) => super_ === protocol || hasProtocol(super_, protocol)
   );
+}
+
+export function isPlatformValue(value) {
+  return typeof value === "function" || value instanceof Instance;
 }
 
 //#endregion

@@ -15,6 +15,7 @@ import {
   index,
   keyName,
   literal,
+  loosePipeline,
   name,
   objectRest,
   objectSpread,
@@ -23,8 +24,7 @@ import {
   pipe,
   pipeArgs,
   pipeDot,
-  pipeline,
-  pointFreePipeline,
+  pipelineCall,
   rest,
   restKey,
   spread,
@@ -164,10 +164,10 @@ class SugaredTreeTransformer extends TreeTransformer {
         return this.transformArrow(expression);
       case "constantFunction":
         return this.transformConstantFunction(expression);
-      case "pipeline":
-        return this.transformPipeline(expression);
-      case "pointFreePipeline":
-        return this.transformPointFreePipeline(expression);
+      case "pipelineCall":
+        return this.transformPipelineCall(expression);
+      case "loosePipeline":
+        return this.transformLoosePipeline(expression);
       case "tightPipeline":
         return this.transformTightPipeline(expression);
       default:
@@ -197,20 +197,20 @@ class SugaredTreeTransformer extends TreeTransformer {
     return constantFunction(this.transformExpression(expression.body));
   }
 
-  transformPipeline(expression) {
-    return pipeline(
+  transformPipelineCall(expression) {
+    return pipelineCall(
       this.transformExpression(expression.start),
-      ...expression.steps.map((step) => this.transformPipelineStep(step))
+      this.transformExpression(expression.pipeline)
     );
   }
 
-  transformPointFreePipeline(expression) {
-    return pointFreePipeline(
-      ...expression.steps.map((step) => this.transformPipelineStep(step))
+  transformLoosePipeline(expression) {
+    return loosePipeline(
+      ...expression.steps.map((step) => this.transformLoosePipelineStep(step))
     );
   }
 
-  transformPipelineStep(step) {
+  transformLoosePipelineStep(step) {
     switch (step.type) {
       case "pipeArgs":
         return this.transformPipeArgsStep(step);
@@ -256,7 +256,6 @@ class SugaredTreeTransformer extends TreeTransformer {
 
   transformTightPipeline(expression) {
     return tightPipeline(
-      this.transformExpression(expression.start),
       ...expression.steps.map((step) => this.transformTightPipelineStep(step))
     );
   }
@@ -434,14 +433,6 @@ class FunctionSyntaxConverter extends SugaredTreeTransformer {
   transformConstantFunction(expression) {
     return this.transformFunction(function_(expression.body));
   }
-
-  transformPointFreePipeline(expression) {
-    return this.transformFunction(
-      function_(pipeline(name("pipelineArg"), ...expression.steps), [
-        name("pipelineArg"),
-      ])
-    );
-  }
 }
 
 const functionSyntaxConverter = new FunctionSyntaxConverter();
@@ -454,22 +445,26 @@ class PipeArgsMaker extends SugaredTreeTransformer {
   transformPipeStep(step) {
     const callee = step.callee;
     if (
-      callee.type === "tightPipeline" &&
-      callee.steps.at(-1).type === "args"
+      callee.type === "pipelineCall" &&
+      callee.pipeline.type === "tightPipeline" &&
+      callee.pipeline.steps.at(-1).type === "args"
     ) {
-      const otherSteps = callee.steps.slice(0, -1);
-      const lastStep = callee.steps.at(-1);
+      const otherSteps = callee.pipeline.steps.slice(0, -1);
+      const lastStep = callee.pipeline.steps.at(-1);
       if (otherSteps.length === 0) {
         return this.transformPipeArgsStep(
           pipeArgs(callee.start, lastStep.args)
         );
       } else {
         return this.transformPipeArgsStep(
-          pipeArgs(tightPipeline(callee.start, ...otherSteps), lastStep.args)
+          pipeArgs(
+            pipelineCall(callee.start, tightPipeline(...otherSteps)),
+            lastStep.args
+          )
         );
       }
     } else {
-      return step;
+      return super.transformPipeStep(step);
     }
   }
 }
@@ -481,9 +476,32 @@ function makePipeArgs(expression) {
 }
 
 class PipelineTransformer extends SugaredTreeTransformer {
-  transformPipeline(pipeline) {
-    let axis = pipeline.start;
-    for (const step of pipeline.steps) {
+  transformPipelineCall(call) {
+    return this.transformPipelineSteps(call.start, call.pipeline);
+  }
+
+  transformLoosePipeline(pipeline) {
+    return this.transformFunction(
+      function_(
+        this.transformLoosePipelineSteps(name("pipelineArg"), pipeline.steps),
+        [name("pipelineArg")]
+      )
+    );
+  }
+
+  transformPipelineSteps(start, pipeline) {
+    if (pipeline.type === "loosePipeline") {
+      return this.transformLoosePipelineSteps(start, pipeline.steps);
+    } else if (pipeline.type === "tightPipeline") {
+      return this.transformTightPipelineSteps(start, pipeline.steps);
+    } else {
+      throw new Error(`Invalid pipeline type "${pipeline.type}"`);
+    }
+  }
+
+  transformLoosePipelineSteps(start, steps) {
+    let axis = start;
+    for (const step of steps) {
       switch (step.type) {
         case "pipeArgs":
           axis = call(
@@ -493,9 +511,10 @@ class PipelineTransformer extends SugaredTreeTransformer {
           );
           break;
         case "pipeDot":
-          axis = this.transformTightPipeline(
-            tightPipeline(axis, dot(step.index), ...step.steps)
-          );
+          axis = this.transformTightPipelineSteps(axis, [
+            dot(step.index),
+            ...step.steps,
+          ]);
           break;
         case "pipe":
           axis = call(step.callee, [axis]);
@@ -511,8 +530,12 @@ class PipelineTransformer extends SugaredTreeTransformer {
   }
 
   transformTightPipeline(pipeline) {
-    let axis = pipeline.start;
-    for (const step of pipeline.steps) {
+    return this.transformTightPipelineSteps(pipeline.start, pipeline.steps);
+  }
+
+  transformTightPipelineSteps(start, steps) {
+    let axis = start;
+    for (const step of steps) {
       switch (step.type) {
         case "args":
           axis = call(axis, step.args.posArgs, step.args.namedArgs);

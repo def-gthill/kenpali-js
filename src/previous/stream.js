@@ -3,14 +3,12 @@ import {
   display,
   displayProtocol,
   Instance,
-  instanceProtocol,
   sequenceProtocol,
 } from "./values.js";
 
 export const streamClass = new Class("Stream", [
   sequenceProtocol,
   displayProtocol,
-  instanceProtocol,
 ]);
 
 export class Stream extends Instance {

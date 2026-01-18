@@ -5,7 +5,7 @@ const r = String.raw;
 const tokenSpec = [
   // Literals
   ["NUMBER", r`-?(0|[1-9](\d*))(.\d+)?([Ee][+-]?\d+)?`],
-  ["STRING", r`"(\\"|[^"])*"`],
+  ["STRING", r`"(\\\\|\\"|[^"])*"`],
   ["RAW_STRING", "`[^`]*`"],
   // Groupers
   ["OPEN_PAREN", r`\(`],
@@ -30,6 +30,7 @@ const tokenSpec = [
   ["STAR", r`\*`],
   // Other
   ["NAME", "[A-Za-z][A-Za-z0-9]*"],
+  ["UNDERSCORE", "_"],
   ["NEWLINE", r`\r\n|\r|\n`],
   ["WHITESPACE", r`[ \t]+`],
   ["COMMENT", r`//[^\r\n]*(\r\n|\r|\n)?`],
@@ -94,12 +95,21 @@ export default function* kplex(code) {
     } else if (kind === "WHITESPACE") {
       continue;
     } else if (kind === "INVALID") {
-      throw kperror(
-        "invalidCharacter",
-        ["character", text],
-        ["line", lineNum],
-        ["column", column]
-      );
+      if (text === '"' || text === "`") {
+        throw kperror(
+          "unclosedStringLiteral",
+          ["value", code.slice(mo.index)],
+          ["line", lineNum],
+          ["column", column]
+        );
+      } else {
+        throw kperror(
+          "invalidCharacter",
+          ["character", text],
+          ["line", lineNum],
+          ["column", column]
+        );
+      }
     }
     yield { type: kind, value, text, line: lineNum, column };
   }

@@ -2,6 +2,15 @@ import { getParamPatterns, loadBuiltins } from "./builtins.js";
 import { core } from "./core.js";
 import * as op from "./instructions.js";
 import {
+  ARG_U16,
+  ARG_U32,
+  ARG_U8,
+  opInfo,
+  u16ToBytes,
+  u32ToBytes,
+  u8ToBytes,
+} from "./instructions.js";
+import {
   array,
   arrayPattern,
   object,
@@ -22,8 +31,11 @@ import {
   classClass,
   functionClass,
   instanceProtocol,
+  isArray,
   isObject,
   isPlatformFunction,
+  isPlatformValue,
+  isType,
   nullClass,
   numberClass,
   objectClass,
@@ -31,12 +43,11 @@ import {
   protocolClass,
   sequenceProtocol,
   stringClass,
-  typeProtocol,
 } from "./values.js";
 
 export function kpcompileJson(
   json,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
 ) {
   const expression = JSON.parse(json);
   return kpcompile(expression, { names, modules, trace });
@@ -44,16 +55,58 @@ export function kpcompileJson(
 
 export default function kpcompile(
   expression,
-  { names = kpobject(), modules = kpobject(), trace = false } = {}
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
 ) {
   const builtins = kpoMerge(loadBuiltins(), names);
   const library = new Map([...loadCore(), ...builtins]);
+  const fullLibrary = addModulesToLibrary(library, modules);
+  const filteredLibrary = new LibraryFilter(fullLibrary, [
+    ["<main>", "<main>", expression],
+  ]).filter();
+  if (trace && filteredLibrary.size > 0) {
+    console.log(
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`,
+    );
+  }
   try {
-    return new Compiler(expression, {
-      library,
-      modules,
+    const compiler = new Compiler(filteredLibrary, {
       trace,
-    }).compile();
+    });
+    compiler.compileLibrary();
+    compiler.compileMain(expression);
+    return compiler.finishProgram();
+  } catch (error) {
+    if (isError(error)) {
+      throw new KenpaliError(error, kpcallbackInNewSession);
+    } else {
+      throw error;
+    }
+  }
+}
+
+export function kpcompileModule(
+  module,
+  { names = kpobject(), modules = kpobject(), trace = false } = {},
+) {
+  const builtins = kpoMerge(loadBuiltins(), names, module);
+  const library = new Map([...loadCore(), ...builtins]);
+  const fullLibrary = addModulesToLibrary(library, modules);
+  const filteredLibrary = new LibraryFilter(
+    fullLibrary,
+    module.map(([name, value]) => ["<entry>", name, value]),
+  ).filter();
+  if (trace && filteredLibrary.size > 0) {
+    console.log(
+      `Including library functions: ${getFullNamesFromLibrary(filteredLibrary).join(", ")}`,
+    );
+  }
+  try {
+    const compiler = new Compiler(filteredLibrary, {
+      trace,
+    });
+    compiler.compileLibrary();
+    compiler.compileModule(module);
+    return compiler.finishProgram();
   } catch (error) {
     if (isError(error)) {
       throw new KenpaliError(error, kpcallbackInNewSession);
@@ -73,36 +126,41 @@ function loadCore() {
 }
 
 class Compiler {
-  constructor(
-    expression,
-    { library = new Map(), modules = new Map(), trace = false }
-  ) {
-    const fullLibrary = addModulesToLibrary(library, modules);
-    const filteredLibrary = new LibraryFilter(fullLibrary, expression).filter();
-    if (trace && filteredLibrary.size > 0) {
-      this.log(
-        `Including library functions: ${[...filteredLibrary.keys()].join(", ")}`
-      );
-    }
-    this.expression = expression;
-    this.library = filteredLibrary;
-    this.modules = modules;
+  constructor(library, { trace = false } = {}) {
+    this.library = library;
+    this.currentModuleName = "<main>";
     this.trace = trace;
     this.traceLevel = 0;
 
     this.activeFunctions = [];
     this.activeScopes = [];
     this.finishedFunctions = [];
+    this.functionNumbersByName = new Map();
+
+    this.constants = [];
+    this.constantIndices = new Map();
+    this.platformValues = [];
+    this.platformValueIndices = new Map();
   }
 
-  compile() {
-    this.beginFunction("$main");
-    this.compileExpression(this.expression);
+  compileMain(expression) {
+    this.beginFunction(this.createFunction("$main"));
+    this.compileExpression(expression);
     this.activeFunctions.pop();
-    this.compileLibrary();
+  }
+
+  compileModule(module) {
+    for (const [name, value] of module) {
+      this.beginFunction(this.createFunction(`$${name}`));
+      this.compileExpression(value);
+      this.activeFunctions.pop();
+    }
+  }
+
+  finishProgram() {
     const program = this.combineFunctions();
     if (this.trace) {
-      this.log("--- Instructions ---");
+      this.log("--------------------");
       this.log(op.disassemble(program));
       this.log("--------------------");
     }
@@ -124,32 +182,63 @@ class Compiler {
   }
 
   compileLibrary() {
-    for (const [name, value] of this.library) {
-      if (isPlatformFunction(value)) {
-        this.compileBuiltin(name, value);
-        if (value.methods) {
-          for (const method of value.methods) {
-            this.compileMethod(name, method);
+    // Create all the functions first so that earlier functions can reference later ones.
+    const functions = new Map();
+    for (const [moduleName, module] of this.library) {
+      this.currentModuleName = moduleName;
+      for (const [name, value] of module) {
+        const fullName = makeFullName(moduleName, name);
+        if (isPlatformFunction(value)) {
+          functions.set(fullName, this.createFunction(fullName));
+          if (value.methods) {
+            for (const method of value.methods) {
+              const methodFullName = `${fullName}/${method.methodName}`;
+              functions.set(
+                methodFullName,
+                this.createFunction(methodFullName),
+              );
+            }
           }
+        } else if (value.type === "function") {
+          functions.set(fullName, this.createFunction(fullName));
+        } else {
+          // Not a function, nothing to compile.
         }
-      } else if (value.type === "function") {
-        this.compileExpression(value, name);
-      } else {
-        // Not a function, nothing to compile.
+      }
+    }
+    // Now compile the functions.
+    for (const [moduleName, module] of this.library) {
+      this.currentModuleName = moduleName;
+      for (const [name, value] of module) {
+        const fullName = makeFullName(moduleName, name);
+        if (isPlatformFunction(value)) {
+          this.compilePlatformFunction(functions.get(fullName), value);
+          if (value.methods) {
+            for (const method of value.methods) {
+              const methodFullName = `${fullName}/${method.methodName}`;
+              this.compileMethod(functions.get(methodFullName), method);
+            }
+          }
+        } else if (value.type === "function") {
+          this.compileFunction(value, fullName, functions.get(fullName));
+        } else {
+          // Not a function, nothing to compile.
+        }
       }
     }
   }
 
-  compileBuiltin(name, expression) {
+  compilePlatformFunction(f, platformFunction) {
     if (this.trace) {
-      this.log(`Compiling builtin ${name}`);
+      this.log(`Compiling platform function ${f.name}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(name);
-    const { posParamPattern, namedParamPattern } = getParamPatterns(expression);
+    this.beginFunction(f);
+    const { posParamPattern, namedParamPattern } =
+      getParamPatterns(platformFunction);
     if (posParamPattern.names.length > 0) {
       this.declareNames(posParamPattern);
     }
@@ -159,22 +248,27 @@ class Compiler {
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
     if (posParamPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
-    this.addInstruction(op.VALUE, expression);
-    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.loadPlatformValue(platformFunction);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [2]);
     this.addDiagnostic({ name: "<builtin>" });
-    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, name);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames]);
+    const nameConstantIndex = this.getConstantIndex(f.name);
+    this.addInstructionWithArgs(
+      op.CALL_PLATFORM_FUNCTION,
+      [nameConstantIndex],
+      op.CALL_PLATFORM_FUNCTION_WIDE,
+    );
     this.addInstruction(op.POP_SCOPE);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.addInstruction(op.DISCARD); // The positional arguments handoff
     // (The named arguments slot already got trampled by the result)
@@ -182,16 +276,15 @@ class Compiler {
     this.activeFunctions.pop();
   }
 
-  compileMethod(constructorName, method) {
-    const fullName = `${constructorName}/${method.methodName}`;
+  compileMethod(f, method) {
     if (this.trace) {
-      this.log(`Compiling method ${fullName}`);
+      this.log(`Compiling method ${f.name}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(fullName);
+    this.beginFunction(f);
     const { posParamPattern, namedParamPattern } = getParamPatterns(method);
     if (posParamPattern.names.length > 0) {
       this.declareNames(posParamPattern);
@@ -202,27 +295,32 @@ class Compiler {
     const numDeclaredNames = this.activeScopes.at(-1).numDeclaredNames() - 2;
     this.reserveSlots(numDeclaredNames);
     if (posParamPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(posParamPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
-    this.addInstruction(op.VALUE, method);
-    this.addInstruction(op.WRITE_LOCAL, 1);
+    this.loadPlatformValue(method);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [1]);
     this.addDiagnostic({ name: "<method>" });
-    this.addInstruction(op.READ_LOCAL, 0, 0);
+    this.addInstructionWithArgs(op.READ_LOCAL, [0, 0]);
     this.addDiagnostic({ name: "<boundMethod>" });
     this.addInstruction(op.SELF);
-    this.addInstruction(op.WRITE_LOCAL, 2);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [2]);
     this.addDiagnostic({ name: "<self>" });
-    this.addInstruction(op.PUSH_SCOPE, -numDeclaredNames - 1);
-    this.addInstruction(op.CALL_PLATFORM_FUNCTION, fullName);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [numDeclaredNames + 1]);
+    const fullNameConstantIndex = this.getConstantIndex(f.name);
+    this.addInstructionWithArgs(
+      op.CALL_PLATFORM_FUNCTION,
+      [fullNameConstantIndex],
+      op.CALL_PLATFORM_FUNCTION_WIDE,
+    );
     this.addInstruction(op.POP_SCOPE);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.popScope();
     this.activeFunctions.pop();
@@ -231,7 +329,6 @@ class Compiler {
   combineFunctions() {
     for (const finishedFunction of this.finishedFunctions) {
       finishedFunction.instructions.push(op.RETURN);
-      finishedFunction.marks.length = finishedFunction.instructions.length;
       finishedFunction.diagnostics.length =
         finishedFunction.instructions.length;
     }
@@ -250,36 +347,18 @@ class Compiler {
     }
 
     const instructions = [].concat(
-      ...this.finishedFunctions.map((f) => f.instructions)
+      ...this.finishedFunctions.map((f) => f.instructions),
     );
-    const marks = [].concat(...this.finishedFunctions.map((f) => f.marks));
     const diagnostics = [].concat(
-      ...this.finishedFunctions.map((f) => f.diagnostics)
+      ...this.finishedFunctions.map((f) => f.diagnostics),
     );
-    for (let i = 0; i < instructions.length; i++) {
-      if (marks[i + 1] && "functionNumber" in marks[i + 1]) {
-        const functionNumber = marks[i + 1].functionNumber;
-        if (this.trace) {
-          this.log(
-            `Injecting offset ${functionOffsets[functionNumber]} for function ${functionNumber}`
-          );
-        }
-        instructions[i + 1] = functionOffsets[functionNumber];
-      }
-      if (marks[i + 1] && "functionName" in marks[i + 1]) {
-        const functionName = marks[i + 1].functionName;
-        const functionNumber = functionNumbersByName.get(functionName);
-        const functionOffset = functionOffsets[functionNumber];
-        if (this.trace) {
-          this.log(
-            `Injecting offset ${functionOffset} for function ${functionName}`
-          );
-        }
-        instructions[i + 1] = functionOffset;
-        diagnostics[i + 1].number = functionNumber;
-      }
-    }
-    return { instructions, diagnostics, functions: functionTable };
+    return {
+      instructions,
+      constants: this.constants,
+      platformValues: this.platformValues,
+      diagnostics,
+      functions: functionTable,
+    };
   }
 
   compileExpression(expression, name) {
@@ -288,7 +367,7 @@ class Compiler {
       typeof expression !== "object" ||
       !("type" in expression)
     ) {
-      throw kperror("notAnExpression", ["value", expression]);
+      throw kperror("notAnExpression", ["value", deepToKpobject(expression)]);
     } else {
       this.compileExpressionByType(expression, name);
     }
@@ -312,13 +391,7 @@ class Compiler {
         this.compileBlock(expression);
         break;
       case "function":
-        const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
-        let functionName =
-          name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
-        if (enclosingFunctionName) {
-          functionName = `${enclosingFunctionName}/${functionName}`;
-        }
-        this.compileFunction(expression, functionName);
+        this.compileFunction(expression, name);
         break;
       case "call":
         this.compileCall(expression);
@@ -330,12 +403,12 @@ class Compiler {
         this.compileValue(expression);
         break;
       default:
-        throw kperror("notAnExpression", ["value", expression]);
+        throw kperror("notAnExpression", ["value", deepToKpobject(expression)]);
     }
   }
 
   compileLiteral(expression) {
-    this.addInstruction(op.VALUE, expression.value);
+    this.loadValue(expression.value);
   }
 
   compileArray(expression) {
@@ -346,6 +419,7 @@ class Compiler {
     for (const element of expression.elements) {
       if (element.type === "spread") {
         this.compileExpression(element.value);
+        this.validate(sequenceProtocol);
         this.addInstruction(op.ARRAY_EXTEND);
       } else {
         this.compileExpression(element);
@@ -365,9 +439,11 @@ class Compiler {
     for (const [key, value] of expression.entries) {
       if (key.type === "spread") {
         this.compileExpression(value);
+        this.validate(objectClass);
         this.addInstruction(op.OBJECT_MERGE);
       } else {
         this.compileExpression(key);
+        this.validate(stringClass);
         this.compileExpression(value);
         this.addInstruction(op.OBJECT_PUSH);
       }
@@ -396,20 +472,20 @@ class Compiler {
 
   resolveInModule(expression) {
     if (expression.from) {
-      const fullName = `${expression.from}/${expression.name}`;
-      if (this.library.has(fullName)) {
-        this.addInstruction(op.FUNCTION, 0);
-        this.addMark({ functionName: fullName });
-        this.addDiagnostic({
-          name: fullName,
-          isPlatform: true,
-        });
+      if (libraryHas(this.library, expression.from, expression.name)) {
+        const value = libraryGet(
+          this.library,
+          expression.from,
+          expression.name,
+        );
+        const fullName = makeFullName(expression.from, expression.name);
+        this.loadLibraryValue(value, fullName);
         return true;
       } else {
         throw kperror(
           "nameNotDefined",
           ["name", expression.name],
-          ["from", expression.from]
+          ["from", expression.from],
         );
       }
     } else {
@@ -430,13 +506,13 @@ class Compiler {
           const outermostFunction = functionsTraversed.at(-1);
           let upvalueIndex = this.activeFunctions[
             outermostFunction.functionStackIndex
-          ].upvalue(outermostFunction.numLayers, slot);
+          ].upvalue(outermostFunction.numLayers + 1, slot);
           for (let i = functionsTraversed.length - 2; i >= 0; i--) {
             upvalueIndex = this.activeFunctions[
               functionsTraversed[i].functionStackIndex
-            ].upvalue(-1, upvalueIndex);
+            ].upvalue(0, upvalueIndex);
           }
-          this.addInstruction(op.READ_UPVALUE, upvalueIndex);
+          this.addInstructionWithArgs(op.READ_UPVALUE, [upvalueIndex]);
           scope.setNeedsClosing(slot);
         } else {
           if (this.trace) {
@@ -444,11 +520,11 @@ class Compiler {
               this.log(`Resolved "${expression.name}" in current scope`);
             } else {
               this.log(
-                `Resolved "${expression.name}" in scope ${numLayers} out`
+                `Resolved "${expression.name}" in scope ${numLayers} out`,
               );
             }
           }
-          this.addInstruction(op.READ_LOCAL, numLayers, slot);
+          this.addInstructionWithArgs(op.READ_LOCAL, [numLayers, slot]);
         }
         this.addDiagnostic({ name: expression.name });
         return true;
@@ -466,30 +542,47 @@ class Compiler {
   }
 
   resolveInLibrary(expression) {
-    const value = this.library.get(expression.name);
-    if (value === undefined) {
+    let value;
+    let fullName;
+    if (
+      this.currentModuleName !== "<main>" &&
+      libraryHas(this.library, this.currentModuleName, expression.name)
+    ) {
+      value = libraryGet(this.library, this.currentModuleName, expression.name);
+      fullName = makeFullName(this.currentModuleName, expression.name);
+    } else if (libraryHas(this.library, "<main>", expression.name)) {
+      value = libraryGet(this.library, "<main>", expression.name);
+      fullName = expression.name;
+    } else {
       return false;
     }
+    this.loadLibraryValue(value, fullName);
+    return true;
+  }
+
+  loadLibraryValue(value, fullName) {
     if (value.type === "value") {
-      this.addInstruction(op.VALUE, value.value);
+      this.loadValue(value.value);
     } else {
-      this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionName: expression.name });
+      this.addInstructionWithArgs(
+        op.FUNCTION,
+        [this.functionNumbersByName.get(fullName)],
+        op.FUNCTION_WIDE,
+      );
       this.addDiagnostic({
-        name: expression.name,
+        name: fullName,
         isPlatform: true,
       });
     }
-    return true;
   }
 
   compileBlock(expression) {
     this.reserveSlots(1); // For the result
     this.pushScope();
-    this.addInstruction(op.PUSH_SCOPE, 0);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [0]);
     this.defineNames(expression.defs);
     this.compileExpression(expression.result);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
     this.addInstruction(op.POP_SCOPE);
@@ -556,7 +649,9 @@ class Compiler {
         this.addInstruction(op.DISCARD);
         break;
       case "name":
-        this.addInstruction(op.WRITE_LOCAL, activeScope.getSlot(pattern.name));
+        this.addInstructionWithArgs(op.WRITE_LOCAL, [
+          activeScope.getSlot(pattern.name),
+        ]);
         this.addDiagnostic({ name: pattern.name });
         break;
       case "arrayPattern":
@@ -587,12 +682,14 @@ class Compiler {
           throw kperror("overlappingRestPatterns", [
             "names",
             [existingRest, element.name].map((x) =>
-              this.toNamePatternString(x)
+              this.toNamePatternString(x),
             ),
           ]);
         }
         existingRest = element.name;
-        this.addInstruction(op.ARRAY_CUT, pattern.names.length - i - 1);
+        this.addInstructionWithArgs(op.ARRAY_CUT, [
+          pattern.names.length - i - 1,
+        ]);
         this.addInstruction(op.ARRAY_REVERSE);
         this.assignNames(element.name, { isArgumentPattern });
       } else if (typeof element == "object" && element.type === "optional") {
@@ -661,7 +758,7 @@ class Compiler {
         const entryStrings = pattern.entries.map((entry) =>
           Array.isArray(entry)
             ? `${entry[0]}: ${this.toNamePatternString(entry[1])}`
-            : this.toNamePatternString(entry)
+            : this.toNamePatternString(entry),
         );
         return `{${entryStrings.join(", ")}}`;
       case "checked":
@@ -673,15 +770,21 @@ class Compiler {
     }
   }
 
-  compileFunction(expression, name) {
+  compileFunction(expression, name, f = null) {
+    const enclosingFunctionName = this.activeFunctions.at(-1)?.name;
+    let functionName =
+      name ?? this.activeFunctions.at(-1).nextAnonymousFunctionName();
+    if (enclosingFunctionName) {
+      functionName = `${enclosingFunctionName}/${functionName}`;
+    }
     if (this.trace) {
-      this.logNodeStart(`Starting function ${name}`);
+      this.logNodeStart(`Starting function ${functionName}`);
     }
     this.pushScope({
       reservedSlots: 3,
       functionStackIndex: this.activeFunctions.length,
     });
-    this.beginFunction(name);
+    this.beginFunction(f ?? this.createFunction(functionName));
     const paramPattern = arrayPattern(...(expression.posParams ?? []));
     const namedParamPattern = objectPattern(...(expression.namedParams ?? []));
     if (paramPattern.names.length > 0) {
@@ -692,17 +795,17 @@ class Compiler {
     }
     this.reserveSlots(this.activeScopes.at(-1).numDeclaredNames() - 2);
     if (paramPattern.names.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 1);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 1]);
       this.addDiagnostic({ name: "<posArgs>" });
       this.assignNames(paramPattern, { isArgumentPattern: true });
     }
     if (namedParamPattern.entries.length > 0) {
-      this.addInstruction(op.READ_LOCAL, 0, 2);
+      this.addInstructionWithArgs(op.READ_LOCAL, [0, 2]);
       this.addDiagnostic({ name: "<namedArgs>" });
       this.assignNames(namedParamPattern, { isArgumentPattern: true });
     }
     this.compileExpression(expression.body);
-    this.addInstruction(op.WRITE_LOCAL, 0);
+    this.addInstructionWithArgs(op.WRITE_LOCAL, [0]);
     this.addDiagnostic({ name: "<result>" });
     this.clearLocals();
     this.popScope();
@@ -713,15 +816,21 @@ class Compiler {
     if (this.activeFunctions.length > 0) {
       // This function is defined inside another function, so we need to
       // add it to the stack and deal with closures.
-      this.addInstruction(op.FUNCTION, 0);
-      this.addMark({ functionNumber: finishedFunction.number });
+      this.addInstructionWithArgs(
+        op.FUNCTION,
+        [finishedFunction.number],
+        op.FUNCTION_WIDE,
+      );
       this.addDiagnostic({
-        name,
+        name: functionName,
         number: finishedFunction.number,
         isPlatform: false,
       });
       for (const upvalue of finishedFunction.upvalues) {
-        this.addInstruction(op.CLOSURE, upvalue.numLayers, upvalue.slot);
+        this.addInstructionWithArgs(op.CLOSURE, [
+          upvalue.numLayers,
+          upvalue.slot,
+        ]);
       }
     }
   }
@@ -744,7 +853,7 @@ class Compiler {
     this.compileExpression(expression.callee);
     this.compileExpression(array(...(expression.posArgs ?? [])));
     this.compileExpression(object(...(expression.namedArgs ?? [])));
-    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [2]);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
     if (this.trace) {
@@ -774,14 +883,18 @@ class Compiler {
   }
 
   compileValue(expression) {
-    this.addInstruction(op.VALUE, expression.value);
+    this.loadValue(expression.value);
   }
 
   validate(schema, { isArgument = false, isArgumentPattern = false } = {}) {
-    this.validateRecursive(deepToKpobject(schema));
-    this.addInstruction(op.VALUE, schema);
-    this.addInstruction(op.ERROR_IF_INVALID);
+    const kpSchema = deepToKpobject(schema);
+    this.validateRecursive(kpSchema);
+    this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
+    const jumpIndex = this.nextInstructionIndex();
+    this.pushSchema(kpSchema);
+    this.addInstruction(op.VALIDATION_ERROR);
     this.addDiagnostic({ isArgument, isArgumentPattern });
+    this.setInstruction(jumpIndex - 1, this.nextInstructionIndex() - jumpIndex);
   }
 
   validateRecursive(schema) {
@@ -820,11 +933,14 @@ class Compiler {
 
   validateTypeSchema(schema) {
     if (schema === anyProtocol) {
-      this.addInstruction(op.VALUE, true);
+      this.loadValue(true);
       return;
     }
     this.addInstruction(op.ALIAS);
     const instruction = this.getTypeValidationInstruction(schema);
+    if (instruction === op.HAS_TYPE) {
+      this.loadPlatformValue(schema);
+    }
     this.addInstruction(instruction);
   }
 
@@ -851,12 +967,8 @@ class Compiler {
       return op.IS_CLASS;
     } else if (schema === protocolClass) {
       return op.IS_PROTOCOL;
-    } else if (schema === sequenceProtocol) {
-      return op.IS_SEQUENCE;
-    } else if (schema === typeProtocol) {
-      return op.IS_TYPE;
-    } else if (schema === instanceProtocol) {
-      return op.IS_INSTANCE;
+    } else if (isType(schema)) {
+      return op.HAS_TYPE;
     } else {
       this.invalidSchema(schema);
     }
@@ -866,9 +978,9 @@ class Compiler {
     this.validateAny(
       ...schema.get("values").map((option) => () => {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, option);
+        this.loadValue(option);
         this.addInstruction(op.EQUALS);
-      })
+      }),
     );
   }
 
@@ -876,24 +988,24 @@ class Compiler {
     this.validateAny(
       ...schema.get("options").map((option) => () => {
         this.validateRecursive(option);
-      })
+      }),
     );
   }
 
   validateConditionSchema(schema) {
     this.validateEach(
       () => this.validateRecursive(schema.get("schema")),
-      () => this.validateCondition(schema.get("condition"))
+      () => this.validateCondition(schema.get("condition")),
     );
   }
 
   validateCondition(condition) {
-    this.addInstruction(op.VALUE, condition);
+    this.loadPlatformValue(condition);
     this.addInstruction(op.EMPTY_ARRAY);
-    this.addInstruction(op.READ_RELATIVE, 2);
+    this.addInstructionWithArgs(op.READ_RELATIVE, [2]);
     this.addInstruction(op.ARRAY_PUSH);
     this.addInstruction(op.EMPTY_OBJECT);
-    this.addInstruction(op.PUSH_SCOPE, -2);
+    this.addInstructionWithArgs(op.PUSH_SCOPE, [2]);
     this.addInstruction(op.CALL);
     this.addInstruction(op.POP_SCOPE);
   }
@@ -901,7 +1013,7 @@ class Compiler {
   validateArraySchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(arrayClass),
-      () => this.validateArrayElements(schema.get("elements"))
+      () => this.validateArrayElements(schema.get("elements")),
     );
   }
 
@@ -914,7 +1026,7 @@ class Compiler {
   validateTupleSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(arrayClass),
-      () => this.validateTupleShape(schema.get("shape"))
+      () => this.validateTupleShape(schema.get("shape")),
     );
   }
 
@@ -927,7 +1039,7 @@ class Compiler {
     for (const element of shape) {
       this.addInstruction(op.ALIAS);
       this.addInstruction(op.ARRAY_IS_EMPTY);
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
       let subschema;
       if (isObject(element) && element.get("form") === "optional") {
         subschema = element.get("schema");
@@ -938,7 +1050,7 @@ class Compiler {
       }
       this.addInstruction(op.ARRAY_POP);
       this.validateRecursive(subschema);
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
       failJumpIndices.push(this.nextInstructionIndex());
       this.addInstruction(op.DISCARD);
     }
@@ -947,19 +1059,19 @@ class Compiler {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, true);
-    this.addInstruction(op.JUMP, 2);
+    this.loadValue(true);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateObjectSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(objectClass),
-      () => this.validateObjectValues(schema.get("values"))
+      () => this.validateObjectValues(schema.get("values")),
     );
   }
 
@@ -978,7 +1090,7 @@ class Compiler {
   validateRecordSchema(schema) {
     this.validateEach(
       () => this.validateTypeSchema(objectClass),
-      () => this.validateRecordShape(schema.get("shape"))
+      () => this.validateRecordShape(schema.get("shape")),
     );
   }
 
@@ -989,109 +1101,126 @@ class Compiler {
     for (const [key, valueSchema] of shape) {
       if (isObject(valueSchema) && valueSchema.get("form") === "optional") {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         const jumpIndex = this.nextInstructionIndex();
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema.get("schema"));
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
         this.setInstruction(
           jumpIndex - 1,
-          this.nextInstructionIndex() - jumpIndex
+          this.nextInstructionIndex() - jumpIndex,
         );
       } else {
         this.addInstruction(op.ALIAS);
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_HAS);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
-        this.addInstruction(op.VALUE, key);
+        this.loadValue(key);
         this.addInstruction(op.OBJECT_POP);
         this.validateRecursive(valueSchema);
-        this.addInstruction(op.JUMP_IF_FALSE, 0);
+        this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
         failJumpIndices.push(this.nextInstructionIndex());
       }
       this.addInstruction(op.DISCARD);
     }
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.VALUE, true);
-    this.addInstruction(op.JUMP, 2);
+    this.loadValue(true);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of failJumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateAny(...validators) {
     const jumpIndices = [];
     for (const validator of validators) {
       validator();
-      this.addInstruction(op.JUMP_IF_TRUE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
       jumpIndices.push(this.nextInstructionIndex());
     }
-    this.addInstruction(op.VALUE, false);
-    this.addInstruction(op.JUMP, 2);
+    this.loadValue(false);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, true);
+    this.loadValue(true);
   }
 
   validateEach(...validators) {
     const jumpIndices = [];
     for (const validator of validators) {
       validator();
-      this.addInstruction(op.JUMP_IF_FALSE, 0);
+      this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
       jumpIndices.push(this.nextInstructionIndex());
     }
-    this.addInstruction(op.VALUE, true);
-    this.addInstruction(op.JUMP, 2);
+    this.loadValue(true);
+    this.addInstructionWithArgs(op.JUMP, [2]);
     for (const jumpIndex of jumpIndices) {
       const toIndex = this.nextInstructionIndex();
       this.setInstruction(jumpIndex - 1, toIndex - jumpIndex);
     }
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   validateAll(schema) {
     const backwardLoopIndex = this.nextInstructionIndex();
     this.addInstruction(op.ALIAS);
     this.addInstruction(op.ARRAY_IS_EMPTY);
-    this.addInstruction(op.JUMP_IF_TRUE, 0);
+    this.addInstructionWithArgs(op.JUMP_IF_TRUE, [0]);
     const forwardLoopIndex = this.nextInstructionIndex();
     this.addInstruction(op.ARRAY_POP);
     this.validateRecursive(schema);
-    this.addInstruction(op.JUMP_IF_FALSE, 0);
+    this.addInstructionWithArgs(op.JUMP_IF_FALSE, [0]);
     const failJumpIndex = this.nextInstructionIndex();
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.JUMP, 0);
-    this.setInstruction(
-      this.nextInstructionIndex() - 1,
-      backwardLoopIndex - this.nextInstructionIndex()
-    );
+    this.addInstructionWithArgs(op.JUMP_BACK, [
+      this.nextInstructionIndex() - backwardLoopIndex + 5,
+    ]);
     this.setInstruction(
       forwardLoopIndex - 1,
-      this.nextInstructionIndex() - forwardLoopIndex
+      this.nextInstructionIndex() - forwardLoopIndex,
     );
     this.addInstruction(op.DISCARD);
-    this.addInstruction(op.VALUE, true);
-    this.addInstruction(op.JUMP, 4);
+    this.loadValue(true);
+    this.addInstructionWithArgs(op.JUMP, [4]);
     this.setInstruction(
       failJumpIndex - 1,
-      this.nextInstructionIndex() - failJumpIndex
+      this.nextInstructionIndex() - failJumpIndex,
     );
     this.addInstruction(op.DISCARD); // The value that failed
     this.addInstruction(op.DISCARD); // The working array
-    this.addInstruction(op.VALUE, false);
+    this.loadValue(false);
   }
 
   invalidSchema(schema) {
     throw kperror("invalidSchema", ["schema", schema]);
+  }
+
+  pushSchema(schema) {
+    if (isObject(schema)) {
+      this.addInstruction(op.EMPTY_OBJECT);
+      for (const [key, value] of schema) {
+        this.loadValue(key);
+        this.pushSchema(value);
+        this.addInstruction(op.OBJECT_PUSH);
+      }
+    } else if (isArray(schema)) {
+      this.addInstruction(op.EMPTY_ARRAY);
+      for (const element of schema) {
+        this.pushSchema(element);
+        this.addInstruction(op.ARRAY_PUSH);
+      }
+    } else {
+      this.loadValue(schema);
+    }
   }
 
   currentScope() {
@@ -1104,12 +1233,12 @@ class Compiler {
         this.logNodeStart(`Starting scope, reserving ${reservedSlots}`);
       } else {
         this.logNodeStart(
-          `Starting scope for function ${functionStackIndex}, reserving ${reservedSlots}`
+          `Starting scope for function ${functionStackIndex}, reserving ${reservedSlots}`,
         );
       }
     }
     this.activeScopes.push(
-      new CompiledScope({ firstSlot: reservedSlots, functionStackIndex })
+      new CompiledScope({ firstSlot: reservedSlots, functionStackIndex }),
     );
   }
 
@@ -1120,13 +1249,19 @@ class Compiler {
     this.activeScopes.pop();
   }
 
-  beginFunction(name) {
-    if (this.trace) {
-      this.log(`Starting function ${this.finishedFunctions.length} (${name})`);
-    }
-    const f = new CompiledFunction(this.finishedFunctions.length, name);
-    this.activeFunctions.push(f);
+  createFunction(name) {
+    const number = this.finishedFunctions.length;
+    const f = new CompiledFunction(number, name);
     this.finishedFunctions.push(f);
+    this.functionNumbersByName.set(name, number);
+    return f;
+  }
+
+  beginFunction(f) {
+    if (this.trace) {
+      this.log(`Starting function ${f.number} (${f.name})`);
+    }
+    this.activeFunctions.push(f);
   }
 
   currentFunction() {
@@ -1135,12 +1270,99 @@ class Compiler {
 
   reserveSlots(numSlots) {
     if (numSlots > 0) {
-      this.addInstruction(op.RESERVE, numSlots);
+      this.addInstructionWithArgs(op.RESERVE, [numSlots]);
+    }
+  }
+
+  loadValue(value) {
+    if (isPlatformValue(value)) {
+      this.loadPlatformValue(value);
+    } else {
+      const constantIndex = this.getConstantIndex(value);
+      this.addInstructionWithArgs(op.VALUE, [constantIndex], op.VALUE_WIDE);
+    }
+  }
+
+  loadPlatformValue(value) {
+    const index = this.getPlatformValueIndex(value);
+    this.addInstructionWithArgs(
+      op.PLATFORM_VALUE,
+      [index],
+      op.PLATFORM_VALUE_WIDE,
+    );
+  }
+
+  getPlatformValueIndex(value) {
+    if (this.platformValueIndices.has(value)) {
+      return this.platformValueIndices.get(value);
+    } else {
+      const index = this.platformValues.length;
+      this.platformValues.push(value);
+      this.platformValueIndices.set(value, index);
+      return index;
+    }
+  }
+
+  getConstantIndex(constant) {
+    if (this.constantIndices.has(constant)) {
+      return this.constantIndices.get(constant);
+    } else {
+      const index = this.constants.length;
+      this.constants.push(constant);
+      this.constantIndices.set(constant, index);
+      return index;
     }
   }
 
   addInstruction(...instruction) {
     this.currentFunction().instructions.push(...instruction);
+  }
+
+  addInstructionWithArgs(instruction, args, wideInstruction = null) {
+    const instructions = this.currentFunction().instructions;
+    const instructionInfo = opInfo[instruction];
+    if (args.length < instructionInfo.args.length) {
+      throw new Error(
+        `Not enough arguments for instruction ${instructionInfo.name}`,
+      );
+    }
+    let wide = false;
+    for (let i = 0; i < args.length; i++) {
+      const argType = instructionInfo.args[i];
+      if (
+        (argType === ARG_U8 && args[i] > op.MAX_U8_VALUE) ||
+        (argType === ARG_U16 && args[i] > op.MAX_U16_VALUE)
+      ) {
+        wide = true;
+        break;
+      }
+    }
+    if (wide) {
+      if (wideInstruction) {
+        instructions.push(wideInstruction);
+      } else {
+        instructions.push(op.WIDE);
+        instructions.push(instruction);
+      }
+      for (let i = 0; i < args.length; i++) {
+        instructions.push(...u32ToBytes(args[i]));
+      }
+    } else {
+      instructions.push(instruction);
+      for (let i = 0; i < args.length; i++) {
+        switch (instructionInfo.args[i]) {
+          case ARG_U8:
+            instructions.push(...u8ToBytes(args[i]));
+            break;
+          case ARG_U16:
+            instructions.push(...u16ToBytes(args[i]));
+            break;
+          case ARG_U32:
+            instructions.push(...u32ToBytes(args[i]));
+            break;
+        }
+      }
+    }
   }
 
   setInstruction(index, value) {
@@ -1149,14 +1371,6 @@ class Compiler {
 
   nextInstructionIndex() {
     return this.currentFunction().instructions.length;
-  }
-
-  addMark(mark) {
-    const f = this.currentFunction();
-    f.marks[f.instructions.length - 1] = {
-      ...f.marks[f.instructions.length - 1],
-      ...mark,
-    };
   }
 
   addDiagnostic(diagnostic) {
@@ -1173,7 +1387,6 @@ class CompiledFunction {
     this.number = number;
     this.name = name;
     this.instructions = [op.BEGIN];
-    this.marks = [];
     this.diagnostics = [{ name, number }];
     this.upvalues = [];
     this.anonymousFunctionCount = 0;
@@ -1186,7 +1399,7 @@ class CompiledFunction {
 
   upvalue(numLayers, slot) {
     const existing = this.upvalues.findIndex(
-      (uv) => uv.numLayers === numLayers && uv.slot === slot
+      (uv) => uv.numLayers === numLayers && uv.slot === slot,
     );
     if (existing >= 0) {
       return existing;
@@ -1237,45 +1450,109 @@ class CompiledScope {
 }
 
 function addModulesToLibrary(library, modules) {
-  const result = new Map(library);
-  for (const [moduleName, module] of modules) {
+  const result = new Map(modules);
+  result.set("<main>", library);
+  return result;
+}
+
+function flattenLibrary(library) {
+  const result = [];
+  for (const [moduleName, module] of library) {
     for (const [name, value] of module) {
-      result.set(`${moduleName}/${name}`, value);
+      result.push([moduleName, name, value]);
     }
   }
   return result;
 }
 
+function flattenedLibraryToIndexMap(flattened) {
+  const result = new Map();
+  flattened.forEach(([moduleName, name], i) => {
+    if (!result.has(moduleName)) {
+      result.set(moduleName, new Map());
+    }
+    result.get(moduleName).set(name, i);
+  });
+  return result;
+}
+
+function unflattenLibrary(flattened) {
+  const result = new Map();
+  for (const [moduleName, name, value] of flattened) {
+    if (!result.has(moduleName)) {
+      result.set(moduleName, new Map());
+    }
+    result.get(moduleName).set(name, value);
+  }
+  return result;
+}
+
+function getFullNamesFromLibrary(library) {
+  const result = [];
+  for (const [moduleName, module] of library) {
+    for (const [name] of module) {
+      if (moduleName === "<main>") {
+        result.push(name);
+      } else {
+        result.push(makeFullName(moduleName, name));
+      }
+    }
+  }
+  return result;
+}
+
+function makeFullName(moduleName, name) {
+  if (moduleName === "<main>") {
+    return name;
+  }
+  return `${moduleName}/${name}`;
+}
+
+function libraryHas(library, moduleName, name) {
+  return library.has(moduleName) && library.get(moduleName).has(name);
+}
+
+function libraryGet(library, moduleName, name) {
+  return library.get(moduleName).get(name);
+}
+
 class LibraryFilter extends TreeTransformer {
-  constructor(library, expression) {
+  constructor(library, rootExpressions) {
     super();
-    this.libraryExpressions = [...library];
-    this.allExpressions = [...library, ["<main>", expression]];
-    this.libraryByName = new Map(
-      this.libraryExpressions.map(([name, _], i) => [name, i])
-    );
+    this.libraryExpressions = flattenLibrary(library);
+    this.rootExpressions = rootExpressions;
+    this.allExpressions = [...this.libraryExpressions, ...this.rootExpressions];
+    this.libraryIndexMap = flattenedLibraryToIndexMap(this.libraryExpressions);
     this.activeScopes = [];
     this.usage = this.allExpressions.map(() => new Set());
   }
 
   filter() {
     for (let i = 0; i < this.allExpressions.length; i++) {
+      const [moduleName, _name, expression] = this.allExpressions[i];
       this.currentUsage = this.usage[i];
-      this.transformExpression(this.allExpressions[i][1]);
+      this.currentModuleName = moduleName;
+      this.transformExpression(expression);
     }
-    const grey = new Set([this.allExpressions.length - 1]);
+    const grey = new Set(
+      this.rootExpressions.map((_, i) => this.allExpressions.length - i - 1),
+    );
     const black = new Set();
     while (grey.size > 0) {
       for (const expression of grey) {
         for (const usage of this.usage[expression]) {
-          grey.add(usage);
+          if (!black.has(usage)) {
+            grey.add(usage);
+          }
         }
         grey.delete(expression);
         black.add(expression);
         break;
       }
     }
-    return new Map(this.libraryExpressions.filter((_, i) => black.has(i)));
+    return unflattenLibrary(
+      this.libraryExpressions.filter((_, i) => black.has(i)),
+    );
   }
 
   transformName(expression) {
@@ -1283,11 +1560,20 @@ class LibraryFilter extends TreeTransformer {
     return super.transformName(expression);
   }
 
+  hasInLibrary(moduleName, name) {
+    return libraryHas(this.libraryIndexMap, moduleName, name);
+  }
+
+  getLibraryIndex(moduleName, name) {
+    return libraryGet(this.libraryIndexMap, moduleName, name);
+  }
+
   resolveName(expression) {
     if (expression.from) {
-      const fullName = `${expression.from}/${expression.name}`;
-      if (this.libraryByName.has(fullName)) {
-        this.currentUsage.add(this.libraryByName.get(fullName));
+      if (this.hasInLibrary(expression.from, expression.name)) {
+        this.currentUsage.add(
+          this.getLibraryIndex(expression.from, expression.name),
+        );
       }
       return;
     }
@@ -1298,8 +1584,17 @@ class LibraryFilter extends TreeTransformer {
       }
     }
 
-    if (this.libraryByName.has(expression.name)) {
-      this.currentUsage.add(this.libraryByName.get(expression.name));
+    if (this.currentModuleName !== "<main>") {
+      if (this.hasInLibrary(this.currentModuleName, expression.name)) {
+        this.currentUsage.add(
+          this.getLibraryIndex(this.currentModuleName, expression.name),
+        );
+        return;
+      }
+    }
+
+    if (this.hasInLibrary("<main>", expression.name)) {
+      this.currentUsage.add(this.getLibraryIndex("<main>", expression.name));
     }
   }
 

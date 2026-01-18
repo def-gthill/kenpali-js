@@ -1,6 +1,0 @@
-parse = (code, trace: = "false") => (
-  ["Parsing expression: ", code, ", trace = ", trace] | join
-);
-parseModule = (code, trace: = "false") => (
-  ["Parsing module: ", code, ", trace = ", trace] | join
-);
