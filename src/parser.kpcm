@@ -49,7 +49,7 @@ statementToModuleDef = (statement) => (
     statement.name.type | eq("name") | not,
     then: $ errorAtNode("patternAsModuleDefName", statement.name),
   );
-  [statement.name, statement.defaultValue | validateExpression | desugarer/desugar]
+  [statement.name.name, statement.defaultValue | validateExpression | desugarer/desugar]
 );
 
 errorToLineColumn = (code, f) => (
@@ -170,6 +170,7 @@ expressionToNamePattern = (expression) => (
   expression.type | switch(
     ["array", $ expression | arrayToArrayPattern],
     ["object", $ expression | objectToObjectPattern],
+    ["entry", $ {**expression, value: expression.value | expressionToNamePattern}],
     ["arraySpread", $ expression | arraySpreadToArrayRest],
     ["objectSpread", $ expression | objectSpreadToObjectRest],
     else: $ expression,
@@ -182,7 +183,8 @@ arrayToArrayPattern = (array) => (
 );
 
 objectToObjectPattern = (object) => (
-  ast/objectPattern(*(object.entries))
+  ast/objectPattern(*(object.entries | transform(expressionToNamePattern)))
+  | withIndicesFrom(object)
 );
 
 arraySpreadToArrayRest = (arraySpread) => (

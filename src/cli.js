@@ -105,7 +105,7 @@ export function main(args, fs) {
       return dis(args, fs);
     default:
       throw new UsageError(
-        [`Unknown command: ${command}`, makeHelp()].join("\n\n")
+        [`Unknown command: ${command}`, makeHelp()].join("\n\n"),
       );
   }
 }
@@ -123,16 +123,16 @@ function compile(args, fs) {
   const outFileName =
     fileName.replace(
       path.extname(fileName),
-      settings.module ? ".kpbm" : ".kpb"
+      settings.module ? ".kpbm" : ".kpb",
     ) + (settings.javascript ? ".js" : "");
   const code = fs.readTextFile(fileName);
   const modules = loadModules(fs, settings.use);
   let program;
   if (settings.module) {
-    const ast = settings.selfhost.includes("parser")
+    const module = settings.selfhost.includes("parser")
       ? kpparseModuleBootstrap(code)
       : kpparseModule(code);
-    program = kpcompileModule(ast, {
+    program = kpcompileModule(module, {
       modules,
       trace: settings.trace,
     });
@@ -146,7 +146,7 @@ function compile(args, fs) {
   if (settings.javascript) {
     fs.writeTextFile(
       outFileName,
-      `export const kpBytecode = "${toBase64(binary)}"`
+      `export const kpBytecode = "${toBase64(binary)}"`,
     );
   } else {
     fs.writeBinaryFile(outFileName, binary);
@@ -252,18 +252,18 @@ function dis(args, fs) {
 function parseSettings(startIndex, args, command) {
   const settingSpec = command.options;
   const settings = Object.fromEntries(
-    settingSpec.map((spec) => [settingName(spec), settingDefault(spec)])
+    settingSpec.map((spec) => [settingName(spec), settingDefault(spec)]),
   );
   let i = startIndex;
   while (i < args.length && args[i].startsWith("-")) {
     const setting = settingSpec.find(
-      ({ short, long }) => args[i] === short || args[i] === long
+      ({ short, long }) => args[i] === short || args[i] === long,
     );
     if (setting) {
       i = parseSetting(i, args, setting, settings);
     } else {
       throw new Error(
-        [`Unknown setting: ${args[i]}`, makeUsageHelp(command)].join("\n\n")
+        [`Unknown setting: ${args[i]}`, makeUsageHelp(command)].join("\n\n"),
       );
     }
   }
@@ -308,7 +308,7 @@ function loadModules(fs, use) {
     use.map((module) => [
       module.split(".")[0],
       kpparseModule(fs.readTextFile(module)),
-    ])
+    ]),
   );
 }
 

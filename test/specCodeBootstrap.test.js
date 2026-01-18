@@ -16,9 +16,9 @@ runSpecFile(
       t,
       actualOutputValue,
       expectedErrorName,
-      JSON.parse(expectedErrorDetails)
+      JSON.parse(expectedErrorDetails),
     );
-  }
+  },
 );
 
 function stripIndices(node) {
@@ -30,7 +30,7 @@ function stripIndices(node) {
     return Object.fromEntries(
       Object.entries(node)
         .filter(([key]) => key !== "start" && key !== "end")
-        .map(([key, value]) => [key, stripIndices(value)])
+        .map(([key, value]) => [key, stripIndices(value)]),
     );
   } else {
     return node;
